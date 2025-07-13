@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import styles from "@plugins/streamerMode/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { injectStyles } from "@utils/dom";
 import { Logger } from "@utils/logger";
@@ -13,29 +12,49 @@ import { definePlugin, type IPluginContext } from "@utils/types";
 
 const logger = new Logger("StreamerMode", "#f2d5cf");
 
+const TEXT_BLUR_STYLE = "filter: blur(3px) !important; padding: 0 4px !important; margin: 0 -4px !important; display: inline-block !important; width: calc(100% + 8px) !important; position: relative !important;";
+const IMAGE_BLUR_STYLE = "filter: blur(8px) !important;";
+
 const settings = definePluginSettings({
-    emailOnly: {
+    blurFilePreviews: {
         type: "boolean",
-        displayName: "Blur Email Only",
-        description: "Only blur your email address, not other PII.",
-        default: false,
+        displayName: "Blur File Previews",
+        description: "Blur image previews in uploaded files.",
+        default: true,
+    },
+    blurEmail: {
+        type: "boolean",
+        displayName: "Blur Email",
+        description: "Blur email addresses in the interface.",
+        default: true,
+    },
+    blurProjectChatNames: {
+        type: "boolean",
+        displayName: "Blur Project and Chat Names",
+        description: "Blur project names, chat titles, and related text.",
+        default: true,
     },
 });
 
-function getDynamicStyles(emailOnly: boolean): string {
-    if (emailOnly) {
-        return `
-html.streamer-mode-active .p-1.min-w-0.text-sm .text-secondary.truncate {
-    filter: blur(3px) !important;
-    padding: 0 4px !important;
-    margin: 0 -4px !important;
-    display: inline-block !important;
-    width: calc(100% + 8px) !important;
-    position: relative !important;
-}
-        `;
+function generateStyles(config: typeof settings.store): string {
+    let css = "";
+
+    if (config.blurFilePreviews) {
+        css += `html.streamer-mode-active figure.relative.flex-shrink-0.aspect-square.overflow-hidden.rounded-md.w-6.h-6 img { ${IMAGE_BLUR_STYLE} }\n`;
     }
-    return styles.replace(/\.streamer-mode-active/g, "html.streamer-mode-active");
+
+    if (config.blurEmail) {
+        css += `html.streamer-mode-active .p-1.min-w-0.text-sm .text-secondary.truncate { ${TEXT_BLUR_STYLE} }\n`;
+    }
+
+    if (config.blurProjectChatNames) {
+        css += `html.streamer-mode-active .sidebar-user-info .display-name,
+html.streamer-mode-active [data-sidebar="menu"] .group\\/conversation-item span.flex-1.select-none,
+html.streamer-mode-active span.flex-1.select-none.text-nowrap.max-w-full.overflow-hidden.inline-block { ${TEXT_BLUR_STYLE} }\n`;
+        css += `html.streamer-mode-active .p-1.min-w-0.text-sm .text-sm.font-medium { ${TEXT_BLUR_STYLE} }\n`;
+    }
+
+    return css;
 }
 
 let styleManager: { cleanup: () => void; } | null = null;
@@ -50,8 +69,10 @@ function updateStylesheetAndClass(context: IPluginContext) {
         styleManager = null;
 
         if (!isDisabled) {
-            const dynamicStyles = getDynamicStyles(settings.store.emailOnly);
-            styleManager = injectStyles(dynamicStyles, "streamer-mode-styles");
+            const dynamicStyles = generateStyles(settings.store);
+            if (dynamicStyles) {
+                styleManager = injectStyles(dynamicStyles, "streamer-mode-styles");
+            }
         }
     } catch (error) {
         logger.error("Failed to update stylesheet or class:", error);

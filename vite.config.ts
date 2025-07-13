@@ -41,6 +41,8 @@ export default defineConfig({
             "@components": path.resolve(__dirname, "src/components"),
             "@webpack": path.resolve(__dirname, "src/webpack"),
             "@api": path.resolve(__dirname, "src/api"),
+            "@hooks": path.resolve(__dirname, "src/utils/hooks"),
+            "@types": path.resolve(__dirname, "src/types"),
         },
     },
     optimizeDeps: {

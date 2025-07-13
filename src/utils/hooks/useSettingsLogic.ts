@@ -64,7 +64,7 @@ export const useSettingsLogic = () => {
     const filteredPlugins = useMemo(() => {
         const lowerSearch = filterSearchText.toLowerCase();
         const searchFiltered = visiblePluginsList.filter(p =>
-            p.name.toLowerCase().includes(lowerSearch)
+            p.name.toLowerCase().includes(lowerSearch) || p.description.toLowerCase().includes(lowerSearch)
         );
 
         if (filterDisplayOption === "show_all") {
@@ -77,20 +77,16 @@ export const useSettingsLogic = () => {
         });
     }, [filterSearchText, visiblePluginsList, filterDisplayOption, disabledPluginsState]);
 
-    const regularPlugins = useMemo(
-        () => filteredPlugins.filter(p => !p.required),
-        [filteredPlugins]
-    );
-    const requiredPlugins = useMemo(
-        () => filteredPlugins.filter(p => p.required),
-        [filteredPlugins]
-    );
+    const sections = useMemo(() => {
+        const nonRequiredPlugins = filteredPlugins.filter(p => !p.required).sort((a, b) => a.name.localeCompare(b.name));
+        const requiredPlugins = filteredPlugins.filter(p => p.required).sort((a, b) => a.name.localeCompare(b.name));
 
-    const pluginSections: { title: string; items: IPlugin[]; }[] = [
-        { title: "Filters", items: [] },
-        { title: "Plugins", items: regularPlugins },
-        { title: "Required Plugins", items: requiredPlugins },
-    ];
+        return [
+            { title: "Filters", items: [] as IPlugin[] },
+            { title: "Plugins", items: nonRequiredPlugins },
+            { title: "Required Plugins", items: requiredPlugins },
+        ].filter(section => section.title === "Filters" || section.items.length > 0);
+    }, [filteredPlugins]);
 
     return {
         filterText: filterSearchText,
@@ -98,7 +94,7 @@ export const useSettingsLogic = () => {
         filterOption: filterDisplayOption,
         setFilterOption: handleFilterOptionUpdate,
         pendingChanges: pendingRestartChanges,
-        sections: pluginSections,
+        sections,
         handleRestartChange: handleRestartUpdate,
         handlePluginToggle: handlePluginToggleUpdate,
     };
