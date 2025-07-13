@@ -10,11 +10,39 @@ import { IconButton } from "@components/IconButton";
 import { Devs } from "@utils/constants";
 import { commonFinderConfigs, commonSelectors, findElement, MutationObserverManager, querySelector, waitForElementByConfig } from "@utils/dom";
 import { Logger } from "@utils/logger";
+import { definePluginSettings } from "@utils/settings";
 import { definePlugin, type IPatch } from "@utils/types";
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 const logger = new Logger("RateLimitDisplay", "#a6d189");
+
+const settings = definePluginSettings({
+    autoRefresh: {
+        type: "boolean",
+        displayName: "Auto Refresh",
+        description: "Automatically refresh rate limit display periodically.",
+        default: true,
+    },
+    refreshInterval: {
+        type: "number",
+        displayName: "Refresh Interval (seconds)",
+        description: "Time between automatic refreshes (minimum 30 seconds).",
+        default: 60,
+        min: 30,
+    },
+    displayFormat: {
+        type: "select",
+        displayName: "Display Format",
+        description: "How to display the rate limit information.",
+        options: [
+            { label: "Remaining/Total", value: "remaining_total" },
+            { label: "Remaining Only", value: "remaining" },
+            { label: "Percentage", value: "percentage" },
+        ],
+        default: "remaining_total",
+    },
+});
 
 const MODEL_MAP: Record<string, string> = {
     "Grok 4": "grok-4",
@@ -24,7 +52,7 @@ const MODEL_MAP: Record<string, string> = {
 
 const DEFAULT_MODEL = "grok-4";
 const DEFAULT_KIND = "DEFAULT";
-const POLL_INTERVAL_MS = 60000;
+const MIN_REFRESH_INTERVAL_MS = 30000;
 const DEBOUNCE_DELAY_MS = 100;
 const BODY_OBSERVER_DEBOUNCE_MS = 200;
 const POST_SUBMIT_UPDATE_DELAY_MS = 5000;
@@ -166,14 +194,24 @@ function RateLimitComponent() {
     useEffect(() => {
         updateRateLimit();
 
-        let intervalId = setInterval(updateRateLimit, POLL_INTERVAL_MS);
+        let intervalId: ReturnType<typeof setInterval> | null = null;
+        if (settings.store.autoRefresh) {
+            const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
+            intervalId = setInterval(updateRateLimit, intervalMs);
+        }
 
         const handleVisibilityChange = () => {
             if (document.visibilityState === "visible") {
                 updateRateLimit();
-                intervalId = setInterval(updateRateLimit, POLL_INTERVAL_MS);
+                if (settings.store.autoRefresh && !intervalId) {
+                    const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
+                    intervalId = setInterval(updateRateLimit, intervalMs);
+                }
             } else {
-                clearInterval(intervalId);
+                if (intervalId) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
             }
         };
 
@@ -181,9 +219,11 @@ function RateLimitComponent() {
 
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
-            clearInterval(intervalId);
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
         };
-    }, [currentModel, currentRequestKind]);
+    }, [currentModel, currentRequestKind, settings.store.autoRefresh, settings.store.refreshInterval]);
 
     useEffect(() => {
         (async () => {
@@ -195,13 +235,7 @@ function RateLimitComponent() {
             }
 
             const handleSubmit = () => {
-                const kindAtSubmit = currentRequestKind;
-                setTimeout(async () => {
-                    setIsLoading(true);
-                    const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
-                    setRateLimit(data);
-                    setIsLoading(false);
-                }, POST_SUBMIT_UPDATE_DELAY_MS);
+                setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
             };
 
             textarea.addEventListener("keydown", (e: KeyboardEvent) => {
@@ -219,6 +253,21 @@ function RateLimitComponent() {
         })();
     }, [currentModel, currentRequestKind]);
 
+    let content = "Unavailable";
+    if (rateLimit) {
+        switch (settings.store.displayFormat) {
+            case "remaining_total":
+                content = `${rateLimit.remainingQueries}/${rateLimit.totalQueries}`;
+                break;
+            case "remaining":
+                content = `${rateLimit.remainingQueries}`;
+                break;
+            case "percentage":
+                content = `${Math.round((rateLimit.remainingQueries / rateLimit.totalQueries) * 100)}%`;
+                break;
+        }
+    }
+
     return (
         <IconButton
             id="grok-rate-limit"
@@ -231,7 +280,7 @@ function RateLimitComponent() {
             aria-label="Rate Limit"
             tooltipContent="Rate Limit"
         >
-            {rateLimit ? `${rateLimit.remainingQueries}/${rateLimit.totalQueries}` : "Unavailable"}
+            {content}
         </IconButton>
     );
 }
@@ -320,10 +369,11 @@ const rateLimitPatch: IPatch = (() => {
 })();
 
 export default definePlugin({
-    name: "RateLimitDisplay",
+    name: "Rate Limit Display",
     description: "Displays the remaining queries for the current model in the chat bar.",
     authors: [Devs.blankspeaker, Devs.CursedAtom, Devs.Prism],
     category: "chat",
     tags: ["rate-limit", "queries"],
+    settings,
     patches: [rateLimitPatch],
 });
