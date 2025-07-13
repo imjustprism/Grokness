@@ -10,7 +10,7 @@ import { Grid } from "@components/Grid";
 import { NotificationBanner } from "@components/NotificationBanner";
 import { SearchInput } from "@components/SearchInput";
 import { SectionTitle } from "@components/SectionTitle";
-import { PluginCard } from "@plugins/_core/settingsUI/ui/components/PluginCard";
+import { PluginCard } from "@plugins/_core/settingsUI/components/PluginCard";
 import { type IPlugin } from "@utils/types";
 import React from "react";
 

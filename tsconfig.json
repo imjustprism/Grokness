@@ -22,7 +22,9 @@
             "@_core/*": ["plugins/_core/*"],
             "@components/*": ["components/*"],
             "@webpack/*": ["webpack/*"],
-            "@api/*": ["api/*"]
+            "@api/*": ["api/*"],
+            "@hooks/*": ["utils/hooks/*"],
+            "@types/*": ["types/*"],
         },
         "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,

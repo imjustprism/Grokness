@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { SettingsPanel } from "@plugins/_core/settingsUI/ui/components/SettingsPanel";
-import { SettingsTab } from "@plugins/_core/settingsUI/ui/components/SettingsTab";
-import { useSettingsLogic } from "@plugins/_core/settingsUI/ui/hooks/useSettingsLogic";
-import { useTabLogic } from "@plugins/_core/settingsUI/ui/hooks/useTabLogic";
-import styles from "@plugins/_core/settingsUI/ui/SettingsUI.css?raw";
+import { SettingsPanel } from "@plugins/_core/settingsUI/components/SettingsPanel";
+import { SettingsTab } from "@plugins/_core/settingsUI/components/SettingsTab";
+import styles from "@plugins/_core/settingsUI/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { injectStyles } from "@utils/dom";
+import { useSettingsLogic } from "@utils/hooks/useSettingsLogic";
+import { useTabLogic } from "@utils/hooks/useTabLogic";
 import { definePlugin, type IPatch } from "@utils/types";
 import React from "react";
 import { createPortal } from "react-dom";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 
 const SettingsUIComponent: React.FC<{ dialogElement: HTMLElement; }> = ({ dialogElement }) => {
     const {
@@ -56,6 +56,8 @@ const SettingsUIComponent: React.FC<{ dialogElement: HTMLElement; }> = ({ dialog
 };
 
 let styleManager: { styleElement: HTMLStyleElement; cleanup: () => void; } | null = null;
+let mutationObserver: MutationObserver | null = null;
+const rootsMap = new Map<HTMLElement, Root>();
 
 const settingsPatch: IPatch = {
     apply() {
@@ -69,14 +71,28 @@ const settingsPatch: IPatch = {
             rootContainer.id = "grokness-root";
             dialog.appendChild(rootContainer);
             try {
-                createRoot(rootContainer).render(<SettingsUIComponent dialogElement={dialog} />);
+                const root = createRoot(rootContainer);
+                root.render(<SettingsUIComponent dialogElement={dialog} />);
+                rootsMap.set(dialog, root);
             } catch (err) {
                 console.warn("[SettingsUI] mount failed:", err);
             }
         };
 
-        const mutationObserver = new MutationObserver(records =>
-            records.forEach(record =>
+        const detachFromDialog = (dialog: HTMLElement) => {
+            const root = rootsMap.get(dialog);
+            if (root) {
+                root.unmount();
+                rootsMap.delete(dialog);
+            }
+            const rootContainer = dialog.querySelector("#grokness-root");
+            if (rootContainer) {
+                dialog.removeChild(rootContainer);
+            }
+        };
+
+        mutationObserver = new MutationObserver(records => {
+            records.forEach(record => {
                 Array.from(record.addedNodes).forEach(node => {
                     if (
                         node instanceof HTMLElement &&
@@ -84,9 +100,17 @@ const settingsPatch: IPatch = {
                     ) {
                         attachToDialog(node);
                     }
-                })
-            )
-        );
+                });
+                Array.from(record.removedNodes).forEach(node => {
+                    if (
+                        node instanceof HTMLElement &&
+                        node.matches('div[role="dialog"][data-state="open"]')
+                    ) {
+                        detachFromDialog(node);
+                    }
+                });
+            });
+        });
 
         mutationObserver.observe(document.body, {
             childList: true,
@@ -102,7 +126,9 @@ const settingsPatch: IPatch = {
         window.addEventListener(
             "unload",
             () => {
-                mutationObserver.disconnect();
+                mutationObserver?.disconnect();
+                rootsMap.forEach(root => root.unmount());
+                rootsMap.clear();
             },
             { once: true }
         );
@@ -110,6 +136,10 @@ const settingsPatch: IPatch = {
     remove() {
         styleManager?.cleanup();
         styleManager = null;
+        mutationObserver?.disconnect();
+        mutationObserver = null;
+        rootsMap.forEach(root => root.unmount());
+        rootsMap.clear();
     }
 };
 
