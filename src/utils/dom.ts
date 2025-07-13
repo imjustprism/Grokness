@@ -4,73 +4,100 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// --- Types ---
-
-/**
- * Configuration for selecting DOM elements.
- */
 export interface ElementSelectorConfig {
-    /** CSS selector string. */
     selector: string;
-    /** Optional root element to scope the query (defaults to document). */
     root?: Document | Element;
-    /** If true, throws an error if the element is not found. */
     required?: boolean;
 }
 
-/**
- * Configuration for mutation observers.
- */
 export interface MutationObserverConfig {
-    /** The target element to observe. */
     target: Element;
-    /** MutationObserver initialization options. */
     options: MutationObserverInit;
-    /** Callback function for observed mutations. */
     callback: (mutations: MutationRecord[], observer: MutationObserver) => void;
-    /** Optional debounce delay in milliseconds. */
     debounceDelay?: number;
-    /** Use requestAnimationFrame for debouncing. */
     useRaf?: boolean;
 }
 
-/**
- * Configuration for hiding elements.
- */
 export interface ElementHideConfig {
-    /** CSS selector to target elements. */
     selector: string;
-    /** Description for logging purposes. */
     description: string;
-    /** Optional condition to check before hiding (supports regex if needed). */
     condition?: (element: HTMLElement) => boolean;
-    /** If true, removes the element from the DOM instead of hiding it. */
     removeFromDom?: boolean;
-    /** Custom attribute to mark hidden elements (defaults to 'data-hidden'). */
     markerAttribute?: string;
-    /** Optional regex pattern for matching textContent or attributes. */
     regexPattern?: RegExp;
-    /** Attribute to apply regex to (e.g., 'textContent', 'class'). */
     regexTarget?: "textContent" | "class" | "id" | string;
 }
 
-/**
- * Options for element hider observer.
- */
 export interface ElementHiderOptions {
-    /** Debounce delay in milliseconds. */
     debounce?: number;
-    /** Use requestAnimationFrame for debouncing instead of setTimeout. */
     useRequestAnimationFrame?: boolean;
-    /** Automatically inject CSS to hide elements preemptively. */
     injectCss?: boolean;
 }
 
-// --- Selection Utilities ---
+export interface ElementFinderConfig {
+    selector: string;
+    root?: Document | Element;
+    filter?: (el: HTMLElement) => boolean;
+    textRegex?: RegExp;
+    attrRegex?: { attr: string; regex: RegExp; };
+    svgPartialD?: string;
+    ariaLabel?: string;
+    ariaLabelRegex?: RegExp;
+    classContains?: string[];
+    idContains?: string;
+    matchDescendants?: boolean;
+    xpath?: string;
+}
+
+export interface EventDelegationConfig {
+    root: HTMLElement | Document;
+    selector: string;
+    eventType: string;
+    handler: (event: Event, matchedElement: HTMLElement) => void;
+    options?: AddEventListenerOptions;
+}
+
+export const commonSelectors = {
+    queryBar: ".query-bar",
+    modelButton: ".query-bar button:has(span.inline-block.text-primary)",
+    modelSpan: ".query-bar button span.inline-block.text-primary",
+    textarea: ".query-bar textarea",
+    submitButton: '.query-bar button[type="submit"], .query-bar button svg path[d*="M5 11L12 4"]',
+    attachButton: '.query-bar button.group\\/attach-button, .query-bar button svg path[d*="M10 9V15"]',
+} as const;
+
+export const commonFinderConfigs = {
+    thinkButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        ariaLabel: "Think",
+        svgPartialD: "M19 9C19 12.866",
+    } as ElementFinderConfig,
+    deepSearchButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        ariaLabelRegex: /Deep(er)?Search/i,
+        svgPartialD: "M19.2987 8.84667",
+    } as ElementFinderConfig,
+    submitButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        attrRegex: { attr: "type", regex: /submit/ },
+        svgPartialD: "M5 11L12 4",
+    } as ElementFinderConfig,
+    attachButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        classContains: ["group/attach-button"],
+        svgPartialD: "M10 9V15",
+    } as ElementFinderConfig,
+    modelSelectorButton: {
+        selector: commonSelectors.modelButton,
+        attrRegex: { attr: "aria-haspopup", regex: /menu/ },
+    } as ElementFinderConfig,
+} as const;
 
 /**
  * Selects the first element matching the selector.
- * @returns The matching HTMLElement or null if not found.
+ * @param selector CSS selector string.
+ * @param root Optional root element (defaults to document).
+ * @returns Matching HTMLElement or null.
  */
 export function querySelector(
     selector: string,
@@ -93,7 +120,9 @@ export function querySelector(
 
 /**
  * Selects the first element matching the selector, throwing if not found.
- * @returns The matching HTMLElement.
+ * @param selector CSS selector string.
+ * @param root Optional root element (defaults to document).
+ * @returns Matching HTMLElement.
  */
 export function querySelectorRequired(
     selector: string,
@@ -108,7 +137,9 @@ export function querySelectorRequired(
 
 /**
  * Selects all elements matching the selector.
- * @returns An array of matching HTMLElements.
+ * @param selector CSS selector string.
+ * @param root Optional root element (defaults to document).
+ * @returns Array of matching HTMLElements.
  */
 export function querySelectorAll(
     selector: string,
@@ -129,13 +160,154 @@ export function querySelectorAll(
     }
 }
 
-// --- Injection Utilities ---
+/**
+ * Finds an element using advanced multi-criteria configuration.
+ * @param config Finder configuration.
+ * @returns First matching HTMLElement or null.
+ */
+export function findElement(config: ElementFinderConfig): HTMLElement | null {
+    const root = config.root ?? document;
+    let candidates: HTMLElement[] = [];
+    if (config.xpath) {
+        const result = document.evaluate(config.xpath, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        for (let i = 0; i < result.snapshotLength; i++) {
+            const node = result.snapshotItem(i);
+            if (node instanceof HTMLElement) {
+                candidates.push(node);
+            }
+        }
+    } else {
+        candidates = querySelectorAll(config.selector, root);
+    }
+
+    for (const el of candidates) {
+        let match = true;
+
+        if (config.filter && !config.filter(el)) {
+            match = false;
+        }
+
+        if (match && config.textRegex) {
+            const text = (config.matchDescendants ? el.innerText : el.textContent)?.trim() ?? "";
+            if (!config.textRegex.test(text)) {
+                match = false;
+            }
+        }
+
+        if (match && config.attrRegex) {
+            const attrValue = el.getAttribute(config.attrRegex.attr) ?? "";
+            if (!config.attrRegex.regex.test(attrValue)) {
+                match = false;
+            }
+        }
+
+        if (match && config.svgPartialD) {
+            const paths = (config.matchDescendants ? el : el).querySelectorAll("svg path");
+            let hasMatch = false;
+            for (const path of paths) {
+                const d = path.getAttribute("d") ?? "";
+                if (d.includes(config.svgPartialD)) {
+                    hasMatch = true;
+                    break;
+                }
+            }
+            if (!hasMatch) {
+                match = false;
+            }
+        }
+
+        if (match && config.ariaLabel) {
+            const aria = el.getAttribute("aria-label") ?? "";
+            if (aria !== config.ariaLabel) {
+                match = false;
+            }
+        }
+
+        if (match && config.ariaLabelRegex) {
+            const aria = el.getAttribute("aria-label") ?? "";
+            if (!config.ariaLabelRegex.test(aria)) {
+                match = false;
+            }
+        }
+
+        if (match && config.classContains) {
+            const classes = el.classList;
+            if (!config.classContains.every(cls => classes.contains(cls))) {
+                match = false;
+            }
+        }
+
+        if (match && config.idContains) {
+            const id = el.id ?? "";
+            if (!id.includes(config.idContains)) {
+                match = false;
+            }
+        }
+
+        if (match) {
+            return el;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Waits for an element matching the advanced config to appear in the DOM.
+ * @param config Finder configuration.
+ * @param timeoutMs Timeout in milliseconds (default: 10000).
+ * @returns Promise resolving to the element or rejecting on timeout.
+ */
+export async function waitForElementByConfig(
+    config: ElementFinderConfig,
+    timeoutMs = 10000
+): Promise<HTMLElement> {
+    return new Promise((resolve, reject) => {
+        let element = findElement(config);
+        if (element) {
+            return resolve(element);
+        }
+
+        const root = config.root ?? document;
+        const observer = new MutationObserver(() => {
+            element = findElement(config);
+            if (element) {
+                observer.disconnect();
+                resolve(element);
+            }
+        });
+
+        observer.observe(root, { childList: true, subtree: true, attributes: true });
+
+        setTimeout(() => {
+            observer.disconnect();
+            reject(new Error(`Element not found within ${timeoutMs}ms using config: ${JSON.stringify(config)}`));
+        }, timeoutMs);
+    });
+}
+
+/**
+ * Finds the closest ancestor matching the condition.
+ * @param element Starting element.
+ * @param condition Condition function.
+ * @returns Matching ancestor or null.
+ */
+export function findAncestor(element: HTMLElement, condition: (el: HTMLElement) => boolean): HTMLElement | null {
+    let current = element.parentElement;
+    while (current) {
+        if (condition(current)) {
+            return current;
+        }
+        current = current.parentElement;
+    }
+    return null;
+}
 
 /**
  * Injects CSS styles into the document head.
- * @param cssContent The raw CSS string to inject.
- * @param styleId Optional ID for the style element (replaces existing if present).
- * @returns An object with the style element and a cleanup function.
+ * @param cssContent Raw CSS string to inject.
+ * @param styleId Optional ID for the style element.
+ * @returns Object with style element and cleanup function.
  */
 export function injectStyles(
     cssContent: string,
@@ -163,9 +335,9 @@ export function injectStyles(
 
 /**
  * Injects a script into the page.
- * @param scriptContent The script code or source URL.
+ * @param scriptContent Script code or source URL.
  * @param scriptId Optional ID for the script element.
- * @param options Additional script attributes (e.g., async, defer).
+ * @param options Additional script attributes.
  * @returns The script element.
  */
 export function injectScript(
@@ -188,18 +360,10 @@ export function injectScript(
     return scriptElement;
 }
 
-// --- Observer Management ---
-
-/**
- * Manager for handling multiple MutationObservers.
- */
 export class MutationObserverManager {
     private observersMap: Map<MutationObserver, string> = new Map();
     private nextObserverId = 0;
 
-    /**
-     * Creates a standard mutation observer.
-     */
     public createObserver(config: MutationObserverConfig): { observe: () => void; disconnect: () => void; } {
         if (!config.target) {
             throw new Error("Target element is null or undefined");
@@ -218,9 +382,6 @@ export class MutationObserverManager {
         return { observe, disconnect };
     }
 
-    /**
-     * Creates a debounced mutation observer.
-     */
     public createDebouncedObserver(config: MutationObserverConfig): { observe: () => void; disconnect: () => void; } {
         let debounceTimer: ReturnType<typeof setTimeout> | number | null = null;
 
@@ -230,7 +391,7 @@ export class MutationObserverManager {
                 if (config.useRaf) {
                     cancelAnimationFrame(debounceTimer);
                 } else {
-                    clearTimeout(debounceTimer);
+                    clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
                 }
             }
             const schedule = config.useRaf ? requestAnimationFrame : (cb: TimerHandler) => setTimeout(cb, delay);
@@ -240,9 +401,6 @@ export class MutationObserverManager {
         return this.createObserver({ ...config, callback: debouncedCallback });
     }
 
-    /**
-     * Disconnects all active observers.
-     */
     public disconnectAll(): void {
         for (const observer of this.observersMap.keys()) {
             observer.disconnect();
@@ -250,19 +408,11 @@ export class MutationObserverManager {
         this.observersMap.clear();
     }
 
-    /**
-     * Gets the count of active observers.
-     */
     public getActiveCount(): number {
         return this.observersMap.size;
     }
 }
 
-// --- Visibility and Scrolling ---
-
-/**
- * Checks if an element is visible in the viewport.
- */
 export function isElementVisible(element: HTMLElement): boolean {
     if (!element) {
         return false;
@@ -276,9 +426,6 @@ export function isElementVisible(element: HTMLElement): boolean {
     );
 }
 
-/**
- * Smoothly scrolls an element into view if it's not visible.
- */
 export function scrollToElementIfNeeded(
     element: HTMLElement,
     scrollOptions: ScrollIntoViewOptions = { behavior: "smooth", block: "center" }
@@ -295,12 +442,6 @@ export function scrollToElementIfNeeded(
     }
 }
 
-// --- Waiting and Events ---
-
-/**
- * Waits for an element to appear in the DOM.
- * @returns A promise resolving to the element or rejecting on timeout.
- */
 export async function waitForElementAppearance(
     selector: string,
     timeoutMs = 10000,
@@ -329,16 +470,8 @@ export async function waitForElementAppearance(
     });
 }
 
-/**
- * Adds a delegated event listener to a root element.
- * @param options Optional event listener options.
- */
 export function addDelegatedListener(
-    root: HTMLElement | Document,
-    selector: string,
-    eventType: string,
-    handler: (event: Event, matchedElement: HTMLElement) => void,
-    options?: AddEventListenerOptions
+    { root, selector, eventType, handler, options }: EventDelegationConfig
 ): () => void {
     const listener = (event: Event) => {
         const targetElement = (event.target as HTMLElement)?.closest(selector);
@@ -350,9 +483,6 @@ export function addDelegatedListener(
     return () => root.removeEventListener(eventType, listener);
 }
 
-/**
- * Adds a one-time event listener that auto-removes after firing.
- */
 export function addOneTimeListener(
     element: Element,
     eventType: string,
@@ -370,12 +500,6 @@ export function addOneTimeListener(
     return () => element.removeEventListener(eventType, wrappedHandler as EventListener);
 }
 
-// --- Clipboard and Accessibility ---
-
-/**
- * Copies text to the clipboard.
- * @throws Error if clipboard access fails.
- */
 export async function copyTextToClipboard(text: string): Promise<void> {
     try {
         await navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("Clipboard not supported"));
@@ -397,10 +521,6 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     }
 }
 
-/**
- * Traps focus within a container element (e.g., for modals).
- * @returns A cleanup function to remove the trap.
- */
 export function createFocusTrap(container: HTMLElement): () => void {
     const focusableSelector =
         'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -436,9 +556,6 @@ export function createFocusTrap(container: HTMLElement): () => void {
     return () => container.removeEventListener("keydown", handleKeyDown);
 }
 
-/**
- * Announces a message to screen readers via an ARIA live region.
- */
 export function announceToScreenReader(
     message: string,
     politenessLevel: "polite" | "assertive" = "polite"
@@ -462,18 +579,12 @@ export function announceToScreenReader(
     requestAnimationFrame(() => liveRegion!.textContent = message);
 }
 
-// --- Styles and Themes ---
-
-/**
- * Retrieves a computed style value, resolving CSS variables recursively.
- */
 export function getResolvedComputedStyle(
     element: HTMLElement,
     propertyName: string
 ): string {
     let styleValue = getComputedStyle(element).getPropertyValue(propertyName).trim();
 
-    // Recursively resolve CSS variables
     const varRegex = /var\((--[^)]+)\)/;
     while (varRegex.test(styleValue)) {
         const variableName = styleValue.match(varRegex)?.[1];
@@ -486,10 +597,6 @@ export function getResolvedComputedStyle(
     return styleValue;
 }
 
-/**
- * Toggles dark mode on the document root.
- * @param force Optional boolean to force enable/disable.
- */
 export function toggleDarkTheme(force?: boolean): void {
     const rootElement = document.documentElement;
 
@@ -498,16 +605,8 @@ export function toggleDarkTheme(force?: boolean): void {
     } else {
         rootElement.classList.toggle("dark", force);
     }
-
-    // Optional: Sync with system preference if needed
-    // if (matchMedia("(prefers-color-scheme: dark)").matches) { ... }
 }
 
-// --- Element Manipulation ---
-
-/**
- * Creates an HTMLElement from an HTML string.
- */
 export function createElementFromHtml(htmlString: string): HTMLElement {
     const templateElement = document.createElement("template");
     templateElement.innerHTML = htmlString.trim();
@@ -518,26 +617,14 @@ export function createElementFromHtml(htmlString: string): HTMLElement {
     return childElement;
 }
 
-/**
- * Removes an element from the DOM if it exists.
- */
 export function removeDomElement(element: Element | null): void {
     element?.remove();
 }
 
-/**
- * Replaces one DOM node with another.
- */
 export function replaceDomNode(oldNode: Node | null, newNode: Node): void {
     oldNode?.parentNode?.replaceChild(newNode, oldNode);
 }
 
-// --- Hiding Utilities ---
-
-/**
- * Hides or removes elements matching the configuration.
- * @returns The number of elements hidden or removed.
- */
 export function hideDomElements(config: ElementHideConfig): number {
     let countHidden = 0;
     const markerAttr = config.markerAttribute || "data-hidden";
@@ -580,9 +667,6 @@ export function hideDomElements(config: ElementHideConfig): number {
     return countHidden;
 }
 
-/**
- * Creates an observer that automatically hides elements on DOM changes.
- */
 export function createDomElementHider(
     targetElement: Element = document.body,
     hideConfigs: ElementHideConfig[],
@@ -615,7 +699,7 @@ export function createDomElementHider(
             if (hiderOptions.useRequestAnimationFrame) {
                 cancelAnimationFrame(debounceTimer);
             } else {
-                clearTimeout(debounceTimer);
+                clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
             }
         }
         const delay = hiderOptions.debounce ?? 0;
@@ -631,12 +715,7 @@ export function createDomElementHider(
                     continue;
                 }
                 const element = node as HTMLElement;
-                if (hideConfigs.some(config => {
-                    if (element.matches(config.selector)) {
-                        return true;
-                    }
-                    return !!element.querySelector(config.selector);
-                })) {
+                if (hideConfigs.some(config => element.matches(config.selector) || !!element.querySelector(config.selector))) {
                     hasChanges = true;
                     break;
                 }
@@ -658,7 +737,7 @@ export function createDomElementHider(
                 if (hiderOptions.useRequestAnimationFrame) {
                     cancelAnimationFrame(debounceTimer);
                 } else {
-                    clearTimeout(debounceTimer);
+                    clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
                 }
             }
             styleManager?.cleanup();

@@ -8,7 +8,7 @@ import { grokAPI } from "@api/api";
 import { getBestSubscriptionTier, getFriendlyPlanName } from "@api/interfaces";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { waitForElementAppearance } from "@utils/dom";
+import { injectStyles, MutationObserverManager, querySelector, waitForElementByConfig } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
 import { useEffect, useState } from "react";
@@ -16,21 +16,22 @@ import { createRoot, type Root } from "react-dom/client";
 
 const logger = new Logger("BetterSidebar", "#f2d5cf");
 
-interface UserPlanData {
-    name: string;
-    plan: string;
-}
+const SIDEBAR_FOOTER_SELECTOR = '[data-sidebar="footer"]';
+const AVATAR_BUTTON_SELECTOR = `${SIDEBAR_FOOTER_SELECTOR} .absolute button[aria-haspopup="menu"]`;
+const TOGGLE_ICON_SELECTOR = '[data-sidebar="trigger"] svg';
 
-let cachedUserPlanData: UserPlanData | null = null;
+const USER_CONTAINER_CLASS = "sidebar-user-info";
 
-async function fetchUserPlanData(): Promise<UserPlanData | null> {
+let cachedUserPlanData: { name: string; plan: string; } | null = null;
+
+async function fetchUserPlanData(): Promise<{ name: string; plan: string; } | null> {
     if (cachedUserPlanData) {
         return cachedUserPlanData;
     }
 
     try {
         const user = await grokAPI.auth.getUser();
-        const name = formatUserName(user);
+        const name = (`${user.givenName ?? ""} ${user.familyName ?? ""}`.trim() || (user.email?.split("@")[0] ?? "Unknown User"));
         const subscriptions = await grokAPI.subscriptions.getSubscriptions();
         const tier = getBestSubscriptionTier(subscriptions);
         const plan = getFriendlyPlanName(tier);
@@ -42,74 +43,37 @@ async function fetchUserPlanData(): Promise<UserPlanData | null> {
     }
 }
 
-function formatUserName(user: {
-    givenName?: string;
-    familyName?: string;
-    email?: string;
-}): string {
-    if (user.givenName && user.familyName) {
-        return `${user.givenName} ${user.familyName}`;
-    }
-    if (user.givenName) {
-        return user.givenName;
-    }
-    if (user.familyName) {
-        return user.familyName;
-    }
-    return user.email?.split("@")[0] ?? "Unknown User";
-}
-
 function useIsSidebarCollapsed(): boolean {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        const checkSidebarState = () => {
-            const toggleIcon = document.querySelector(
-                '[data-sidebar="trigger"] svg'
-            );
-            if (!toggleIcon) {
-                logger.warn("Sidebar toggle icon not found");
-                return;
-            }
-            const isExpanded = toggleIcon.classList.contains("rotate-180");
-            const collapsed = !isExpanded;
-            setIsCollapsed(collapsed);
-        };
-
-        checkSidebarState();
-
-        const toggleIcon = document.querySelector(
-            '[data-sidebar="trigger"] svg'
-        );
+        const toggleIcon = querySelector(TOGGLE_ICON_SELECTOR);
         if (!toggleIcon) {
-            logger.warn("Sidebar toggle icon not found for observer");
             return;
         }
 
-        const observer = new MutationObserver(checkSidebarState);
+        const updateState = () => setIsCollapsed(!toggleIcon.classList.contains("rotate-180"));
+
+        updateState();
+
+        const observer = new MutationObserver(updateState);
         observer.observe(toggleIcon, { attributes: true, attributeFilter: ["class"] });
 
-        return () => {
-            observer.disconnect();
-        };
+        return () => observer.disconnect();
     }, []);
 
     return isCollapsed;
 }
 
 function SidebarUserInfo() {
-    const [userPlanData, setUserPlanData] = useState<UserPlanData | null>(null);
-    const isSidebarCollapsed = useIsSidebarCollapsed();
+    const [userPlanData, setUserPlanData] = useState<{ name: string; plan: string; } | null>(null);
+    const isCollapsed = useIsSidebarCollapsed();
 
     useEffect(() => {
-        fetchUserPlanData()
-            .then(data => {
-                setUserPlanData(data);
-            })
-            .catch(err => logger.error("Failed to fetch user plan data in component:", err));
+        fetchUserPlanData().then(setUserPlanData);
     }, []);
 
-    if (!userPlanData || isSidebarCollapsed) {
+    if (!userPlanData || isCollapsed) {
         return null;
     }
 
@@ -121,110 +85,60 @@ function SidebarUserInfo() {
     );
 }
 
-const USER_CONTAINER_CLASS = "sidebar-user-info";
-
 const betterSidebarPatch: IPatch = (() => {
-    let sidebarObserver: MutationObserver | null = null;
     let userInfoRoot: Root | null = null;
     let userInfoContainer: HTMLDivElement | null = null;
-    let styleElement: HTMLStyleElement | null = null;
-    let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
-    let isUserInfoMounted = false;
+    let footerObserverDisconnect: (() => void) | null = null;
+    let styleManager: { cleanup: () => void; } | null = null;
 
-    function mountUserInfo() {
-        try {
-            const avatarButton = document.querySelector<HTMLElement>(
-                '[data-sidebar="footer"] .absolute button[aria-haspopup="menu"]'
-            );
-            if (!avatarButton) {
-                logger.warn("Avatar button not found in sidebar footer");
-                return;
-            }
-            if (userInfoContainer && avatarButton.parentElement?.contains(userInfoContainer)) {
-                return;
-            }
-            unmountUserInfo();
-            userInfoContainer = document.createElement("div");
-            userInfoContainer.className = USER_CONTAINER_CLASS;
-            avatarButton.parentElement?.insertBefore(
-                userInfoContainer,
-                avatarButton.nextSibling
-            );
-            userInfoRoot = createRoot(userInfoContainer);
-            userInfoRoot.render(<SidebarUserInfo />);
-        } catch (err) {
-            logger.error("Failed to mount sidebar user info:", err);
+    function mountUserInfo(footer: HTMLElement) {
+        const avatarButton = querySelector(AVATAR_BUTTON_SELECTOR, footer);
+        if (!avatarButton) {
+            return;
         }
+
+        if (userInfoContainer && avatarButton.parentElement?.contains(userInfoContainer)) {
+            return;
+        }
+
+        unmountUserInfo();
+        userInfoContainer = document.createElement("div");
+        userInfoContainer.className = USER_CONTAINER_CLASS;
+        avatarButton.parentElement?.insertBefore(userInfoContainer, avatarButton.nextSibling);
+        userInfoRoot = createRoot(userInfoContainer);
+        userInfoRoot.render(<SidebarUserInfo />);
     }
 
     function unmountUserInfo() {
-        try {
-            if (userInfoRoot) {
-                userInfoRoot.unmount();
-                userInfoRoot = null;
-            }
-            if (userInfoContainer) {
-                userInfoContainer.remove();
-                userInfoContainer = null;
-            }
-        } catch (err) {
-            logger.error("Failed to unmount sidebar user info:", err);
-        }
-    }
-
-    function debouncedMount() {
-        if (debounceTimeout) {
-            clearTimeout(debounceTimeout);
-        }
-        debounceTimeout = setTimeout(() => {
-            updateMounts();
-        }, 100);
-    }
-
-    function updateMounts() {
-        if (!isUserInfoMounted) {
-            mountUserInfo();
-            isUserInfoMounted = true;
-        }
+        userInfoRoot?.unmount();
+        userInfoContainer?.remove();
+        userInfoRoot = null;
+        userInfoContainer = null;
     }
 
     return {
         apply() {
-            try {
-                styleElement = document.createElement("style");
-                styleElement.textContent = styles;
-                document.head.appendChild(styleElement);
+            styleManager = injectStyles(styles, "better-sidebar-styles");
 
-                waitForElementAppearance('[data-sidebar="footer"]').then((footer: HTMLElement) => {
-                    updateMounts();
+            (async () => {
+                const footer = await waitForElementByConfig({ selector: SIDEBAR_FOOTER_SELECTOR });
+                mountUserInfo(footer);
 
-                    sidebarObserver = new MutationObserver(debouncedMount);
-                    sidebarObserver.observe(footer, { childList: true, subtree: true });
-                }).catch((err: unknown) => {
-                    logger.error("Failed to find or observe sidebar footer:", err);
+                const observerManager = new MutationObserverManager();
+                const { observe, disconnect } = observerManager.createDebouncedObserver({
+                    target: footer,
+                    options: { childList: true, subtree: true },
+                    callback: () => mountUserInfo(footer),
+                    debounceDelay: 100,
                 });
-            } catch (err) {
-                logger.error("Failed to apply better sidebar patch:", err);
-            }
+                observe();
+                footerObserverDisconnect = disconnect;
+            })();
         },
         remove() {
-            try {
-                sidebarObserver?.disconnect();
-                sidebarObserver = null;
-
-                if (debounceTimeout) {
-                    clearTimeout(debounceTimeout);
-                    debounceTimeout = null;
-                }
-
-                unmountUserInfo();
-                isUserInfoMounted = false;
-
-                styleElement?.remove();
-                styleElement = null;
-            } catch (err) {
-                logger.error("Failed to remove better sidebar patch:", err);
-            }
+            footerObserverDisconnect?.();
+            unmountUserInfo();
+            styleManager?.cleanup();
         },
     };
 })();
