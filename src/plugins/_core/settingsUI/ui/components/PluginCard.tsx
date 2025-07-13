@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Badge } from "@components/Badge";
 import { IconButton } from "@components/IconButton";
+import { InputField } from "@components/InputField";
 import { LucideIcon } from "@components/LucideIcon";
 import { Modal } from "@components/Modal";
 import { Switch } from "@components/Switch";
@@ -131,35 +131,38 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                 );
             case "string":
                 return (
-                    <input
+                    <InputField
                         type="text"
                         value={currentValue as string}
-                        onChange={e => handleSettingChangeWithRestart(key, e.target.value)}
-                        className="w-full px-3 py-2 bg-surface-l2 border border-border-l1 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        onChange={(value: string | number) => handleSettingChangeWithRestart(key, value as string)}
                     />
                 );
             case "number":
                 return (
-                    <input
+                    <InputField
                         type="number"
                         value={currentValue as number}
-                        onChange={e => handleSettingChangeWithRestart(key, parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 bg-surface-l2 border border-border-l1 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        onChange={(value: string | number) => {
+                            let newValue = value as number;
+                            if (option.min !== undefined && typeof option.min === "number" && newValue < option.min) {
+                                newValue = option.min;
+                            }
+                            if (option.max !== undefined && typeof option.max === "number" && newValue > option.max) {
+                                newValue = option.max;
+                            }
+                            handleSettingChangeWithRestart(key, newValue);
+                        }}
+                        min={option.min !== undefined && typeof option.min === "number" ? option.min : undefined}
                     />
                 );
             case "select":
                 return (
-                    <select
+                    <InputField
+                        type="select"
                         value={currentValue as string}
-                        onChange={e => handleSettingChangeWithRestart(key, e.target.value)}
-                        className="w-full px-3 py-2 bg-surface-l2 border border-border-l1 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    >
-                        {option.options?.map(opt => (
-                            <option key={opt.value as string} value={opt.value as string}>
-                                {opt.label}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(value: string | number) => handleSettingChangeWithRestart(key, value as string)}
+                        options={option.options?.map(opt => ({ label: opt.label, value: opt.value as string })) ?? []}
+                    />
                 );
             // Add cases for other types as needed
             default:
@@ -171,9 +174,9 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         <>
             <div
                 className={clsx(
-                    "relative p-3 bg-surface-l1 dark:bg-surface-l1 flex flex-col transition-all duration-300 ease-in-out hover:shadow-md",
+                    "relative p-4 bg-surface-l1 dark:bg-surface-l1 flex flex-col transition-all duration-300 ease-in-out hover:shadow-md",
                     cardWidth,
-                    "h-[90px]",
+                    "min-h-[120px]",
                     borderRadius
                 )}
                 style={{
@@ -188,7 +191,7 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                     (e.currentTarget.style.transform = "translateY(0)")
                 }
             >
-                <div className="absolute top-2 right-2 flex gap-2 items-center">
+                <div className="absolute top-3 right-3 flex gap-2 items-center">
                     <IconButton
                         icon={hasSettings ? SettingsIcon : InfoIcon}
                         size="sm"
@@ -206,11 +209,11 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                         aria-label={`Toggle ${plugin.name} (${plugin.required ? "required" : "optional"})`}
                     />
                 </div>
-                <div className="flex flex-col h-[52px] pr-20">
-                    <p id={switchLabelId} className="text-sm font-medium mb-3">
+                <div className="flex flex-col pr-20">
+                    <p id={switchLabelId} className="text-sm font-medium mb-2">
                         {plugin.name}
                     </p>
-                    <div className="text-xs text-secondary text-pretty leading-4 h-8 overflow-hidden line-clamp-2">
+                    <div className="text-xs text-secondary text-pretty leading-4 overflow-hidden line-clamp-3">
                         {plugin.description}
                     </div>
                 </div>
@@ -226,8 +229,8 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                 maxWidth="max-w-2xl"
                 className="max-h-[80vh]"
             >
-                <div className="space-y-6">
-                    <p className="text-sm text-secondary">
+                <div className="space-y-4">
+                    <p className="text-sm text-secondary mt-1">
                         {plugin.description}
                     </p>
 
@@ -235,11 +238,9 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                         <h3 className="text-sm font-medium text-primary mb-1">
                             Authors
                         </h3>
-                        <div className="flex flex-wrap gap-1">
-                            {plugin.authors.map((author, index) => (
-                                <Badge key={index}>{author.name}</Badge>
-                            ))}
-                        </div>
+                        <p className="text-sm text-secondary">
+                            {plugin.authors.map(author => author.name).join(", ")}
+                        </p>
                     </div>
 
                     {plugin.requiresRestart && (
