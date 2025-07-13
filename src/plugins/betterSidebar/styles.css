@@ -1,0 +1,23 @@
+.sidebar-user-info {
+    position: absolute;
+    bottom: 3px;
+    left: 2.95rem;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 40px;
+    pointer-events: none;
+}
+
+.sidebar-user-info .display-name {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+}
+
+.sidebar-user-info .plan {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    opacity: 0.8;
+}

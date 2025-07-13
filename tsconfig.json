@@ -1,0 +1,33 @@
+{
+    "compilerOptions": {
+        "types": ["vite/client"],
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "jsx": "react-jsx",
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
+        "allowJs": true,
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedIndexedAccess": true,
+        "baseUrl": "src",
+        "paths": {
+            "@utils/*": ["utils/*"],
+            "@plugins/*": ["plugins/*"],
+            "@_core/*": ["plugins/_core/*"],
+            "@components/*": ["components/*"],
+            "@webpack/*": ["webpack/*"],
+            "@api/*": ["api/*"]
+        },
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "noEmit": true
+    },
+    "include": ["src/**/*", "eslint.config.mjs"],
+    "exclude": ["node_modules", "dist"]
+}

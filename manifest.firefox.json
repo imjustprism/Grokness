@@ -1,0 +1,31 @@
+{
+    "manifest_version": 3,
+    "name": "Grokness",
+    "version": "1.0.0",
+    "description": "A cute Grok extension",
+    "content_scripts": [
+        {
+            "matches": [
+                "*://grok.com/*",
+                "*://*.grok.com/*"
+            ],
+            "js": [
+                "PluginManager.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "permissions": [
+        "storage",
+        "cookies"
+    ],
+    "host_permissions": [
+        "*://grok.com/*",
+        "*://*.grok.com/*"
+    ],
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "{d3b8e8f4-1e1a-4b7b-9c2d-6e7f8a9b0c1d}"
+        }
+    }
+}
