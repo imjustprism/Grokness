@@ -294,6 +294,8 @@ const rateLimitPatch: IPatch = (() => {
     let rateLimitContainer: HTMLDivElement | null = null;
     let queryBarObserverDisconnect: (() => void) | null = null;
     let bodyObserverDisconnect: (() => void) | null = null;
+    let hasCheckedInitial = false;
+    let hasWarned = false;
 
     function mountRateLimit() {
         const attachButton = querySelector(ATTACH_BUTTON_SELECTOR);
@@ -355,8 +357,9 @@ const rateLimitPatch: IPatch = (() => {
                 if (queryBar) {
                     mountRateLimit();
                     setupQueryBarObserver(queryBar);
-                } else {
+                } else if (hasCheckedInitial && !hasWarned) {
                     logger.warn("Query bar not found during body mutation check");
+                    hasWarned = true;
                 }
             };
 
@@ -371,6 +374,7 @@ const rateLimitPatch: IPatch = (() => {
             bodyObserverDisconnect = bodyDisconnect;
 
             mutationCallback();
+            hasCheckedInitial = true;
 
             document.addEventListener("visibilitychange", mutationCallback);
         },
