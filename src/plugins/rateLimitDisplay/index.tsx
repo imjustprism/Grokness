@@ -229,12 +229,28 @@ function RateLimitComponent() {
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Enter" && !e.shiftKey) {
-                setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
+                const kindAtSubmit = currentRequestKind;
+                setTimeout(async () => {
+                    setIsLoading(true);
+                    const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
+                    if (data) {
+                        setRateLimit(data);
+                    }
+                    setIsLoading(false);
+                }, POST_SUBMIT_UPDATE_DELAY_MS);
             }
         };
 
         const handleClick = () => {
-            setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
+            const kindAtSubmit = currentRequestKind;
+            setTimeout(async () => {
+                setIsLoading(true);
+                const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
+                if (data) {
+                    setRateLimit(data);
+                }
+                setIsLoading(false);
+            }, POST_SUBMIT_UPDATE_DELAY_MS);
         };
 
         textarea.addEventListener("keydown", handleKeyDown as EventListener);
@@ -244,7 +260,7 @@ function RateLimitComponent() {
             textarea.removeEventListener("keydown", handleKeyDown as EventListener);
             sendButton.removeEventListener("click", handleClick);
         };
-    }, []);
+    }, [currentModel, currentRequestKind]);
 
     const handleClick = () => {
         updateRateLimit(true);
