@@ -8,7 +8,7 @@ import { grokAPI } from "@api/api";
 import type { RateLimitData } from "@api/interfaces";
 import { IconButton } from "@components/IconButton";
 import { Devs } from "@utils/constants";
-import { MutationObserverManager, querySelector } from "@utils/dom";
+import { MutationObserverManager, querySelector, querySelectorAll, waitForElementAppearance } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
 import { useEffect, useState } from "react";
@@ -26,11 +26,16 @@ const DEFAULT_MODEL = "grok-4";
 const DEFAULT_KIND = "DEFAULT";
 const POLL_INTERVAL_MS = 60000;
 const MODEL_SELECTOR = ".query-bar button span.inline-block.text-primary";
-const ATTACH_BUTTON_SELECTOR = '.query-bar button[aria-label="Attach"]';
 const QUERY_BAR_SELECTOR = ".query-bar";
 const DEBOUNCE_DELAY_MS = 100;
 const BODY_OBSERVER_DEBOUNCE_MS = 200;
 const POST_SUBMIT_UPDATE_DELAY_MS = 5000;
+const ELEMENT_WAIT_TIMEOUT_MS = 5000;
+
+const ATTACH_SVG_PATH = "M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8";
+const SUBMIT_SVG_PATH = "M5 11L12 4M12 4L19 11M12 4V21";
+
+const RATE_LIMIT_CONTAINER_ID = "grok-rate-limit-container";
 
 const cachedRateLimits: Record<string, Record<string, RateLimitData | undefined>> = {};
 const observerManager = new MutationObserverManager();
@@ -41,8 +46,7 @@ function normalizeModelName(rawName: string): string {
         logger.warn("Empty model name provided for normalization, using default");
         return DEFAULT_MODEL;
     }
-    const normalized = MODEL_MAP[trimmed] || trimmed.toLowerCase().replace(/\s+/g, "-");
-    return normalized;
+    return MODEL_MAP[trimmed] || trimmed.toLowerCase().replace(/\s+/g, "-");
 }
 
 async function fetchRateLimit(modelName: string, requestKind: string, force: boolean = false): Promise<RateLimitData | null> {
@@ -74,32 +78,39 @@ function useCurrentModel(): string {
     const [model, setModel] = useState<string>(DEFAULT_MODEL);
 
     useEffect(() => {
-        const modelSpan = querySelector(MODEL_SELECTOR);
-        if (modelSpan) {
-            const updateModel = () => {
-                const rawName = modelSpan.textContent?.trim() ?? DEFAULT_MODEL;
-                const newModel = normalizeModelName(rawName);
-                if (newModel !== model) {
-                    setModel(newModel);
-                }
-            };
+        let disconnect: (() => void) | undefined;
 
-            const { observe, disconnect } = observerManager.createObserver({
-                target: modelSpan,
-                options: { childList: true, subtree: true, characterData: true },
-                callback: updateModel,
-            });
+        const setup = async () => {
+            try {
+                const modelSpan = await waitForElementAppearance(MODEL_SELECTOR, ELEMENT_WAIT_TIMEOUT_MS);
+                const updateModel = () => {
+                    const rawName = modelSpan.textContent?.trim() ?? DEFAULT_MODEL;
+                    const newModel = normalizeModelName(rawName);
+                    if (newModel !== model) {
+                        setModel(newModel);
+                    }
+                };
 
-            updateModel();
-            observe();
+                const { observe, disconnect: obsDisconnect } = observerManager.createObserver({
+                    target: modelSpan,
+                    options: { childList: true, subtree: true, characterData: true },
+                    callback: updateModel,
+                });
 
-            return () => {
-                disconnect();
-            };
-        } else {
-            logger.warn("Model span not found, using default model");
-        }
-    }, [model]);
+                updateModel();
+                observe();
+                disconnect = obsDisconnect;
+            } catch {
+                logger.warn("Model span not found after waiting, using default model");
+            }
+        };
+
+        setup();
+
+        return () => {
+            disconnect?.();
+        };
+    }, []);
 
     return model;
 }
@@ -108,61 +119,115 @@ function useCurrentRequestKind(currentModel: string): string {
     const [requestKind, setRequestKind] = useState<string>(DEFAULT_KIND);
 
     useEffect(() => {
-        if (currentModel !== "grok-3") {
-            setRequestKind(DEFAULT_KIND);
-            return;
-        }
+        let thinkObserverDisconnect: (() => void) | undefined;
+        let searchObserverDisconnect: (() => void) | undefined;
 
-        const thinkButton = querySelector('button[aria-label="Think"]');
-        const searchButton = querySelector('button[aria-label^="Deep"]');
+        const setup = async () => {
+            if (currentModel !== "grok-3") {
+                setRequestKind(DEFAULT_KIND);
+                return;
+            }
 
-        if (!thinkButton || !searchButton) {
-            logger.warn("Think or DeepSearch button not found for Grok-3, using default request kind");
-            setRequestKind(DEFAULT_KIND);
-            return;
-        }
+            const thinkButton = await findButtonByTextAsync("Think");
+            const searchButton = await findButtonByTextAsync("Deep", true);
 
-        const updateKind = () => {
-            if (thinkButton.getAttribute("aria-pressed") === "true") {
-                setRequestKind("REASONING");
-            } else if (searchButton.getAttribute("aria-pressed") === "true") {
-                const modeSpan = searchButton.querySelector("span");
-                const modeText = modeSpan?.textContent?.trim();
-                if (modeText === "DeepSearch") {
-                    setRequestKind("DEEPSEARCH");
-                } else if (modeText === "DeeperSearch") {
-                    setRequestKind("DEEPERSEARCH");
+            if (!thinkButton || !searchButton) {
+                logger.warn("Think or DeepSearch button not found for Grok-3 after waiting, using default request kind");
+                setRequestKind(DEFAULT_KIND);
+                return;
+            }
+
+            const updateKind = () => {
+                if (thinkButton.getAttribute("aria-pressed") === "true") {
+                    setRequestKind("REASONING");
+                } else if (searchButton.getAttribute("aria-pressed") === "true") {
+                    const modeSpan = querySelector("span", searchButton);
+                    const modeText = modeSpan?.textContent?.trim();
+                    if (modeText === "DeepSearch") {
+                        setRequestKind("DEEPSEARCH");
+                    } else if (modeText === "DeeperSearch") {
+                        setRequestKind("DEEPERSEARCH");
+                    } else {
+                        setRequestKind(DEFAULT_KIND);
+                    }
                 } else {
                     setRequestKind(DEFAULT_KIND);
                 }
-            } else {
-                setRequestKind(DEFAULT_KIND);
-            }
+            };
+
+            updateKind();
+
+            const thinkObs = observerManager.createObserver({
+                target: thinkButton,
+                options: { attributes: true, attributeFilter: ["aria-pressed", "class"] },
+                callback: updateKind,
+            });
+            thinkObs.observe();
+            thinkObserverDisconnect = thinkObs.disconnect;
+
+            const searchObs = observerManager.createObserver({
+                target: searchButton,
+                options: { attributes: true, attributeFilter: ["aria-pressed", "class"], childList: true, subtree: true, characterData: true },
+                callback: updateKind,
+            });
+            searchObs.observe();
+            searchObserverDisconnect = searchObs.disconnect;
         };
 
-        updateKind();
-
-        const thinkObserver = observerManager.createObserver({
-            target: thinkButton,
-            options: { attributes: true, attributeFilter: ["aria-pressed", "class"] },
-            callback: updateKind,
-        });
-        thinkObserver.observe();
-
-        const searchObserver = observerManager.createObserver({
-            target: searchButton,
-            options: { attributes: true, attributeFilter: ["aria-pressed", "class"], childList: true, subtree: true, characterData: true },
-            callback: updateKind,
-        });
-        searchObserver.observe();
+        setup();
 
         return () => {
-            thinkObserver.disconnect();
-            searchObserver.disconnect();
+            thinkObserverDisconnect?.();
+            searchObserverDisconnect?.();
         };
     }, [currentModel]);
 
     return requestKind;
+}
+
+function findButtonByText(text: string, startsWith: boolean = false): HTMLElement | null {
+    const buttons = querySelectorAll(`${QUERY_BAR_SELECTOR} button`);
+    for (const btn of buttons) {
+        const btnText = btn.textContent?.trim();
+        const matchesBtn = startsWith ? btnText?.startsWith(text) : btnText === text;
+        if (matchesBtn) {
+            return btn;
+        }
+
+        const span = querySelector("span", btn);
+        const spanText = span?.textContent?.trim();
+        const matchesSpan = startsWith ? spanText?.startsWith(text) : spanText === text;
+        if (matchesSpan) {
+            return btn;
+        }
+    }
+    return null;
+}
+
+async function findButtonByTextAsync(text: string, startsWith: boolean = false, timeout: number = ELEMENT_WAIT_TIMEOUT_MS): Promise<HTMLElement | null> {
+    return new Promise(resolve => {
+        let found = findButtonByText(text, startsWith);
+        if (found) {
+            resolve(found);
+            return;
+        }
+
+        const queryBar = querySelector(QUERY_BAR_SELECTOR) || document.body;
+        const observer = new MutationObserver(() => {
+            found = findButtonByText(text, startsWith);
+            if (found) {
+                observer.disconnect();
+                resolve(found);
+            }
+        });
+
+        observer.observe(queryBar, { childList: true, subtree: true });
+
+        setTimeout(() => {
+            observer.disconnect();
+            resolve(null);
+        }, timeout);
+    });
 }
 
 function RateLimitComponent() {
@@ -219,46 +284,55 @@ function RateLimitComponent() {
             return;
         }
 
-        const textarea = queryBar.querySelector("textarea");
-        const sendButton = queryBar.querySelector("div.h-10.relative.aspect-square");
+        let removeKeyDown: (() => void) | undefined;
+        let removeClick: (() => void) | undefined;
 
-        if (!textarea || !sendButton) {
-            logger.warn("Textarea or send button not found for post-submit update");
-            return;
-        }
+        const setupListeners = async () => {
+            try {
+                const textarea = await waitForElementAppearance("textarea", ELEMENT_WAIT_TIMEOUT_MS, queryBar);
+                const sendButton = await waitForElementAppearance(`button svg path[d="${SUBMIT_SVG_PATH}"]`, ELEMENT_WAIT_TIMEOUT_MS, queryBar) || await waitForElementAppearance('button[type="submit"]', ELEMENT_WAIT_TIMEOUT_MS, queryBar);
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-                const kindAtSubmit = currentRequestKind;
-                setTimeout(async () => {
-                    setIsLoading(true);
-                    const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
-                    if (data) {
-                        setRateLimit(data);
+                const handleKeyDown = (e: KeyboardEvent) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                        const kindAtSubmit = currentRequestKind;
+                        setTimeout(async () => {
+                            setIsLoading(true);
+                            const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
+                            if (data) {
+                                setRateLimit(data);
+                            }
+                            setIsLoading(false);
+                        }, POST_SUBMIT_UPDATE_DELAY_MS);
                     }
-                    setIsLoading(false);
-                }, POST_SUBMIT_UPDATE_DELAY_MS);
+                };
+
+                const handleClick = () => {
+                    const kindAtSubmit = currentRequestKind;
+                    setTimeout(async () => {
+                        setIsLoading(true);
+                        const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
+                        if (data) {
+                            setRateLimit(data);
+                        }
+                        setIsLoading(false);
+                    }, POST_SUBMIT_UPDATE_DELAY_MS);
+                };
+
+                textarea.addEventListener("keydown", handleKeyDown as EventListener);
+                sendButton.closest("button")?.addEventListener("click", handleClick);
+
+                removeKeyDown = () => textarea.removeEventListener("keydown", handleKeyDown as EventListener);
+                removeClick = () => sendButton.closest("button")?.removeEventListener("click", handleClick);
+            } catch {
+                logger.warn("Textarea or send button not found after waiting for post-submit update");
             }
         };
 
-        const handleClick = () => {
-            const kindAtSubmit = currentRequestKind;
-            setTimeout(async () => {
-                setIsLoading(true);
-                const data = await fetchRateLimit(currentModel, kindAtSubmit, true);
-                if (data) {
-                    setRateLimit(data);
-                }
-                setIsLoading(false);
-            }, POST_SUBMIT_UPDATE_DELAY_MS);
-        };
-
-        textarea.addEventListener("keydown", handleKeyDown as EventListener);
-        sendButton.addEventListener("click", handleClick);
+        setupListeners();
 
         return () => {
-            textarea.removeEventListener("keydown", handleKeyDown as EventListener);
-            sendButton.removeEventListener("click", handleClick);
+            removeKeyDown?.();
+            removeClick?.();
         };
     }, [currentModel, currentRequestKind]);
 
@@ -287,8 +361,6 @@ function RateLimitComponent() {
     );
 }
 
-const RATE_LIMIT_CONTAINER_ID = "grok-rate-limit-container";
-
 const rateLimitPatch: IPatch = (() => {
     let rateLimitRoot: Root | null = null;
     let rateLimitContainer: HTMLDivElement | null = null;
@@ -297,8 +369,28 @@ const rateLimitPatch: IPatch = (() => {
     let hasCheckedInitial = false;
     let hasWarned = false;
 
+    function findAttachButton(queryBar: HTMLElement): HTMLElement | null {
+        const attachButton = querySelector("button.group\\/attach-button", queryBar);
+        if (attachButton) {
+            return attachButton;
+        }
+
+        const pathElement = querySelector(`svg path[d="${ATTACH_SVG_PATH}"]`, queryBar);
+        if (pathElement) {
+            return pathElement.closest("button") as HTMLElement | null;
+        }
+
+        logger.warn("Attach button not found using class or SVG path");
+        return null;
+    }
+
     function mountRateLimit() {
-        const attachButton = querySelector(ATTACH_BUTTON_SELECTOR);
+        const queryBar = querySelector(QUERY_BAR_SELECTOR);
+        if (!queryBar) {
+            return;
+        }
+
+        const attachButton = findAttachButton(queryBar);
         if (!attachButton) {
             logger.warn("Attach button not found, cannot mount rate limit display");
             return;
