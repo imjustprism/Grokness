@@ -13,9 +13,6 @@ import { definePlugin, type IPluginContext } from "@utils/types";
 
 const logger = new Logger("StreamerMode", "#f2d5cf");
 
-let styleManager: { styleElement: HTMLStyleElement; cleanup: () => void; } | null = null;
-let settingsListener: ((e: Event) => void) | null = null;
-
 const settings = definePluginSettings({
     emailOnly: {
         type: "boolean",
@@ -25,11 +22,6 @@ const settings = definePluginSettings({
     },
 });
 
-/**
- * Generates dynamic CSS based on settings.
- * @param emailOnly Whether to blur only email or all PII.
- * @returns The CSS string.
- */
 function getDynamicStyles(emailOnly: boolean): string {
     if (emailOnly) {
         return `
@@ -46,30 +38,23 @@ html.streamer-mode-active .p-1.min-w-0.text-sm .text-secondary.truncate {
     return styles.replace(/\.streamer-mode-active/g, "html.streamer-mode-active");
 }
 
-/**
- * Updates the stylesheet and class based on plugin state and settings.
- * @param storageKey The localStorage key for enabled state.
- */
-function updateStylesheetAndClass(storageKey: string) {
-    try {
-        const isDisabled = Boolean(localStorage.getItem(storageKey));
+let styleManager: { cleanup: () => void; } | null = null;
+let settingsListener: ((e: Event) => void) | null = null;
 
+function updateStylesheetAndClass(context: IPluginContext) {
+    try {
+        const isDisabled = Boolean(localStorage.getItem(context.storageKey));
         document.documentElement.classList.toggle("streamer-mode-active", !isDisabled);
 
-        if (styleManager) {
-            styleManager.cleanup();
-            styleManager = null;
-        }
+        styleManager?.cleanup();
+        styleManager = null;
 
-        if (isDisabled) {
-            return;
+        if (!isDisabled) {
+            const dynamicStyles = getDynamicStyles(settings.store.emailOnly);
+            styleManager = injectStyles(dynamicStyles, "streamer-mode-styles");
         }
-
-        const { emailOnly } = settings.store;
-        const dynamicStyles = getDynamicStyles(emailOnly);
-        styleManager = injectStyles(dynamicStyles, "streamer-mode-styles");
-    } catch (err) {
-        logger.error("Failed to update stylesheet or class:", err);
+    } catch (error) {
+        logger.error("Failed to update stylesheet or class:", error);
     }
 }
 
@@ -82,47 +67,37 @@ export default definePlugin({
     settings,
     patches: [],
 
-    onLoad(context: IPluginContext) {
-        updateStylesheetAndClass(context.storageKey);
-    },
-
     start(context: IPluginContext) {
         try {
             if (document.readyState === "loading") {
-                document.addEventListener("DOMContentLoaded", () => updateStylesheetAndClass(context.storageKey), { once: true });
+                document.addEventListener("DOMContentLoaded", () => updateStylesheetAndClass(context), { once: true });
             } else {
-                updateStylesheetAndClass(context.storageKey);
+                updateStylesheetAndClass(context);
             }
 
             settingsListener = (e: Event) => {
                 const event = e as CustomEvent;
                 if (event.detail.pluginId === "streamer-mode") {
-                    updateStylesheetAndClass(context.storageKey);
+                    updateStylesheetAndClass(context);
                 }
             };
             window.addEventListener("grok-settings-updated", settingsListener);
-        } catch (err) {
-            logger.error("Failed to start Streamer Mode:", err);
+        } catch (error) {
+            logger.error("Failed to start Streamer Mode:", error);
         }
     },
 
     stop() {
         try {
             document.documentElement.classList.remove("streamer-mode-active");
-
-            if (styleManager) {
-                styleManager.cleanup();
-                styleManager = null;
-            }
+            styleManager?.cleanup();
+            styleManager = null;
             if (settingsListener) {
                 window.removeEventListener("grok-settings-updated", settingsListener);
                 settingsListener = null;
             }
-        } catch (err) {
-            logger.error("Failed to stop Streamer Mode:", err);
+        } catch (error) {
+            logger.error("Failed to stop Streamer Mode:", error);
         }
-    },
-
-    onUnload() {
     },
 });
