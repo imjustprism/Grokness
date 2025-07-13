@@ -23,15 +23,16 @@ const MODEL_MAP: Record<string, string> = {
 };
 
 const DEFAULT_MODEL = "grok-4";
+const DEFAULT_KIND = "DEFAULT";
 const POLL_INTERVAL_MS = 60000;
 const MODEL_SELECTOR = ".query-bar button span.inline-block.text-primary";
 const ATTACH_BUTTON_SELECTOR = '.query-bar button[aria-label="Attach"]';
 const QUERY_BAR_SELECTOR = ".query-bar";
-const REQUEST_KIND = "DEFAULT";
 const DEBOUNCE_DELAY_MS = 100;
 const BODY_OBSERVER_DEBOUNCE_MS = 200;
+const POST_SUBMIT_UPDATE_DELAY_MS = 5000;
 
-const cachedRateLimits: Record<string, RateLimitData | undefined> = {};
+const cachedRateLimits: Record<string, Record<string, RateLimitData | undefined>> = {};
 const observerManager = new MutationObserverManager();
 
 function normalizeModelName(rawName: string): string {
@@ -44,21 +45,27 @@ function normalizeModelName(rawName: string): string {
     return normalized;
 }
 
-async function fetchRateLimit(modelName: string, force: boolean = false): Promise<RateLimitData | null> {
+async function fetchRateLimit(modelName: string, requestKind: string, force: boolean = false): Promise<RateLimitData | null> {
     if (!force) {
-        const cached = cachedRateLimits[modelName];
+        const cached = cachedRateLimits[modelName]?.[requestKind];
         if (cached !== undefined) {
             return cached;
         }
     }
 
     try {
-        const data = await grokAPI.rateLimits.get({ requestKind: REQUEST_KIND, modelName });
-        cachedRateLimits[modelName] = data;
+        const data = await grokAPI.rateLimits.get({ requestKind, modelName });
+        if (!cachedRateLimits[modelName]) {
+            cachedRateLimits[modelName] = {};
+        }
+        cachedRateLimits[modelName][requestKind] = data;
         return data;
     } catch (error) {
-        logger.error(`Failed to fetch rate limit for ${modelName}:`, error);
-        cachedRateLimits[modelName] = undefined;
+        logger.error(`Failed to fetch rate limit for ${modelName} (${requestKind}):`, error);
+        if (!cachedRateLimits[modelName]) {
+            cachedRateLimits[modelName] = {};
+        }
+        cachedRateLimits[modelName][requestKind] = undefined;
         return null;
     }
 }
@@ -97,20 +104,82 @@ function useCurrentModel(): string {
     return model;
 }
 
+function useCurrentRequestKind(currentModel: string): string {
+    const [requestKind, setRequestKind] = useState<string>(DEFAULT_KIND);
+
+    useEffect(() => {
+        if (currentModel !== "grok-3") {
+            setRequestKind(DEFAULT_KIND);
+            return;
+        }
+
+        const thinkButton = querySelector('button[aria-label="Think"]');
+        const searchButton = querySelector('button[aria-label^="Deep"]');
+
+        if (!thinkButton || !searchButton) {
+            logger.warn("Think or DeepSearch button not found for Grok-3, using default request kind");
+            setRequestKind(DEFAULT_KIND);
+            return;
+        }
+
+        const updateKind = () => {
+            if (thinkButton.getAttribute("aria-pressed") === "true") {
+                setRequestKind("REASONING");
+            } else if (searchButton.getAttribute("aria-pressed") === "true") {
+                const modeSpan = searchButton.querySelector("span");
+                const modeText = modeSpan?.textContent?.trim();
+                if (modeText === "DeepSearch") {
+                    setRequestKind("DEEPSEARCH");
+                } else if (modeText === "DeeperSearch") {
+                    setRequestKind("DEEPERSEARCH");
+                } else {
+                    setRequestKind(DEFAULT_KIND);
+                }
+            } else {
+                setRequestKind(DEFAULT_KIND);
+            }
+        };
+
+        updateKind();
+
+        const thinkObserver = observerManager.createObserver({
+            target: thinkButton,
+            options: { attributes: true, attributeFilter: ["aria-pressed", "class"] },
+            callback: updateKind,
+        });
+        thinkObserver.observe();
+
+        const searchObserver = observerManager.createObserver({
+            target: searchButton,
+            options: { attributes: true, attributeFilter: ["aria-pressed", "class"], childList: true, subtree: true, characterData: true },
+            callback: updateKind,
+        });
+        searchObserver.observe();
+
+        return () => {
+            thinkObserver.disconnect();
+            searchObserver.disconnect();
+        };
+    }, [currentModel]);
+
+    return requestKind;
+}
+
 function RateLimitComponent() {
     const currentModel = useCurrentModel();
+    const currentRequestKind = useCurrentRequestKind(currentModel);
     const [rateLimit, setRateLimit] = useState<RateLimitData | null>(null);
-    const [hasError, setHasError] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
     const updateRateLimit = async (force: boolean = false) => {
         setIsLoading(true);
-        const data = await fetchRateLimit(currentModel, force);
-        setRateLimit(data);
-        setHasError(!data);
+        const data = await fetchRateLimit(currentModel, currentRequestKind, force);
+        if (data) {
+            setRateLimit(data);
+        }
         setIsLoading(false);
         if (!data) {
-            logger.warn(`Rate limit data unavailable for model "${currentModel}" after update attempt`);
+            logger.warn(`Rate limit data unavailable for model "${currentModel}" (${currentRequestKind}) after update attempt`);
         }
     };
 
@@ -142,13 +211,46 @@ function RateLimitComponent() {
                 clearInterval(intervalId);
             }
         };
-    }, [currentModel]);
+    }, [currentModel, currentRequestKind]);
+
+    useEffect(() => {
+        const queryBar = querySelector(QUERY_BAR_SELECTOR);
+        if (!queryBar) {
+            return;
+        }
+
+        const textarea = queryBar.querySelector("textarea");
+        const sendButton = queryBar.querySelector("div.h-10.relative.aspect-square");
+
+        if (!textarea || !sendButton) {
+            logger.warn("Textarea or send button not found for post-submit update");
+            return;
+        }
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
+            }
+        };
+
+        const handleClick = () => {
+            setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
+        };
+
+        textarea.addEventListener("keydown", handleKeyDown as EventListener);
+        sendButton.addEventListener("click", handleClick);
+
+        return () => {
+            textarea.removeEventListener("keydown", handleKeyDown as EventListener);
+            sendButton.removeEventListener("click", handleClick);
+        };
+    }, []);
 
     const handleClick = () => {
         updateRateLimit(true);
     };
 
-    const content = hasError || !rateLimit ? "Unavailable" : `${rateLimit.remainingQueries}/${rateLimit.totalQueries}`;
+    const content = rateLimit ? `${rateLimit.remainingQueries}/${rateLimit.totalQueries}` : "Unavailable";
 
     return (
         <IconButton
