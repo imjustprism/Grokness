@@ -6,11 +6,14 @@
 
 import { grokAPI } from "@api/api";
 import type { Asset } from "@api/interfaces";
-import { IconButton } from "@components/IconButton";
+import { Button } from "@components/Button";
+import { LucideIcon } from "@components/LucideIcon";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Devs } from "@utils/constants";
 import { type ElementFinderConfig, findElement, MutationObserverManager } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
+import { clsx } from "clsx";
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -87,28 +90,53 @@ function DeleteAllButton() {
         }
     };
 
+    const icon = isLoading ? (
+        <LucideIcon name="Loader2" size={16} className="animate-spin text-fg-secondary" />
+    ) : (
+        <LucideIcon
+            name="Trash2"
+            size={16}
+            className={clsx(
+                "transition-colors duration-100",
+                isConfirming ? "text-fg-danger group-hover:text-fg-danger" : "text-fg-secondary group-hover:text-fg-primary"
+            )}
+        />
+    );
+
     return (
-        <div className={`flex items-center rounded-full border gap-0.5 border-border-l2 h-8 overflow-hidden flex-shrink-0 focus-visible:bg-button-ghost-hover hover:bg-button-ghost-hover ${isConfirming ? "border-[hsl(var(--fg-danger))] bg-[hsl(var(--fg-danger))/0.1] hover:bg-[hsl(var(--fg-danger))/0.2]" : ""}`}>
-            <IconButton
-                id="grok-delete-all"
-                as="button"
-                variant="ghost"
-                size="sm"
-                icon="Trash2"
-                loading={isLoading}
-                onClick={handleClick}
-                aria-label="Delete All Assets"
-                tooltipContent={isConfirming ? "Are you sure? Click again to confirm" : "Delete All Assets"}
-                className={"h-8 rounded-xl px-3 text-xs border-transparent hover:bg-transparent flex-shrink-0"}
-                style={{ boxShadow: "none" }}
-                rounded={false}
-                iconSize={16}
-                confirm={isConfirming}
-            >
-                <span className="sr-only">Delete All Assets</span>
-                <span className="hidden @[160px]:inline-block">{isConfirming ? "Confirm" : "Delete All"}</span>
-            </IconButton>
-        </div>
+        <Tooltip.Provider>
+            <Tooltip.Root delayDuration={600} disableHoverableContent={true}>
+                <Tooltip.Trigger asChild>
+                    <Button
+                        id="grok-delete-all"
+                        as="button"
+                        variant="outline"
+                        size="sm"
+                        icon={icon}
+                        iconPosition="left"
+                        disabled={isLoading}
+                        onClick={handleClick}
+                        aria-label="Delete All Assets"
+                        className="h-8 px-3 text-xs flex-shrink-0"
+                        style={{ boxShadow: "none" }}
+                        rounded={true}
+                        color={isConfirming ? "danger" : "default"}
+                    >
+                        <span className="sr-only">Delete All Assets</span>
+                        <span className="hidden @[160px]:inline-block">{isConfirming ? "Confirm" : "Delete All"}</span>
+                    </Button>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                    <Tooltip.Content
+                        side="bottom"
+                        sideOffset={8}
+                        className="z-50 overflow-hidden rounded-md shadow-sm dark:shadow-none px-3 py-1.5 text-xs pointer-events-none animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 bg-primary text-background"
+                    >
+                        {isConfirming ? "Are you sure? Click again to confirm" : "Delete All Assets"}
+                    </Tooltip.Content>
+                </Tooltip.Portal>
+            </Tooltip.Root>
+        </Tooltip.Provider>
     );
 }
 
@@ -132,17 +160,30 @@ const deleteAllPatch: IPatch = (() => {
 
         unmountDeleteButton();
 
+        const sortButton = toolbar.querySelector('button[aria-haspopup="menu"]:has(svg.lucide-arrow-down-narrow-wide)') as HTMLElement | null;
+        if (!sortButton) {
+            return;
+        }
+
         deleteContainer = document.createElement("div");
         deleteContainer.id = DELETE_CONTAINER_ID;
-        toolbar.appendChild(deleteContainer);
+        deleteContainer.style.display = "none";
+        sortButton.after(deleteContainer);
         deleteRoot = createRoot(deleteContainer);
         deleteRoot.render(<DeleteAllButton />);
+
+        requestAnimationFrame(() => {
+            if (deleteContainer) {
+                deleteContainer.style.display = "";
+            }
+        });
 
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: toolbar,
             options: { childList: true, subtree: true, attributes: true },
             callback: () => mountDeleteButton(),
-            debounceDelay: 100,
+            debounceDelay: 50,
+            useRaf: true,
         });
         observe();
         toolbarObserverDisconnect = disconnect;
@@ -165,7 +206,8 @@ const deleteAllPatch: IPatch = (() => {
                 target: document.body,
                 options: { childList: true, subtree: true },
                 callback: mutationCallback,
-                debounceDelay: 200,
+                debounceDelay: 50,
+                useRaf: true,
             });
 
             bodyObserve();

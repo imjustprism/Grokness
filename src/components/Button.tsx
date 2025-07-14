@@ -9,6 +9,7 @@ import React, { type ElementType } from "react";
 
 export type ButtonVariant = "outline" | "solid" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
+export type ButtonColor = "default" | "danger";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: ButtonVariant;
@@ -19,6 +20,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
     as?: ElementType;
     className?: string;
     children: React.ReactNode;
+    color?: ButtonColor;
 }
 
 export const Button = React.forwardRef<HTMLElement, ButtonProps>(
@@ -32,6 +34,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             as: Component = "button",
             children,
             className,
+            color = "default",
             ...props
         },
         ref
@@ -44,6 +47,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             "transition-colors duration-100",
             "[&_svg]:shrink-0 select-none border",
             rounded ? "rounded-full" : "rounded-md",
+            "group"
         ];
 
         const sizeClasses: Record<ButtonSize, string> = {
@@ -54,17 +58,26 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
 
         const variantClasses = {
             outline:
-                "border-border-l2 text-fg-primary hover:bg-button-ghost-hover [&_svg]:hover:text-fg-primary disabled:hover:bg-transparent",
+                "border-border-l2 text-fg-primary hover:bg-button-ghost-hover disabled:hover:bg-transparent",
             solid:
                 "border-transparent bg-blue-600 text-white hover:bg-blue-700 disabled:hover:bg-blue-600",
             ghost:
                 "border-transparent text-fg-primary hover:bg-button-ghost-hover disabled:hover:bg-transparent",
         };
 
+        const colorClasses = {
+            default: "",
+            danger: "text-fg-danger border-[hsl(var(--fg-danger))] bg-[hsl(var(--fg-danger))/0.1] hover:bg-[hsl(var(--fg-danger))/0.2] [&_svg]:text-fg-danger [&_svg]:hover:text-fg-danger",
+        };
+
+        const iconHoverClass = color === "default" && variant === "outline" ? "[&_svg]:hover:text-fg-primary" : "";
+
         const allClasses = clsx(
             ...baseClasses,
             sizeClasses[size],
             variantClasses[variant],
+            iconHoverClass,
+            colorClasses[color],
             className
         );
 
