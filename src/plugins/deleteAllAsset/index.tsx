@@ -88,7 +88,7 @@ function DeleteAllButton() {
     };
 
     return (
-        <div className={`flex items-center rounded-full border gap-0.5 border-border-l2 h-8 overflow-hidden flex-shrink-0 focus-visible:bg-button-ghost-hover hover:bg-button-ghost-hover ${isConfirming ? "border-[hsl(var(--fg-danger))] bg-[hsl(var(--fg-danger))/0.1] hover:bg-[hsl(var(--fg-danger))/0.2]" : ""}`}>
+        <div className={`flex items-center rounded-full border gap-0.5 border-border-l2 h-8 overflow-hidden flex-shrink-0 focus-visible:bg-button-ghost-hover hover:bg-button-ghost-hover group ${isConfirming ? "border-[hsl(var(--fg-danger))] bg-[hsl(var(--fg-danger))/0.1] hover:bg-[hsl(var(--fg-danger))/0.2]" : ""}`}>
             <IconButton
                 id="grok-delete-all"
                 as="button"
@@ -132,17 +132,30 @@ const deleteAllPatch: IPatch = (() => {
 
         unmountDeleteButton();
 
+        const sortButton = toolbar.querySelector('button[aria-haspopup="menu"]:has(svg.lucide-arrow-down-narrow-wide)') as HTMLElement | null;
+        if (!sortButton) {
+            return;
+        }
+
         deleteContainer = document.createElement("div");
         deleteContainer.id = DELETE_CONTAINER_ID;
-        toolbar.appendChild(deleteContainer);
+        deleteContainer.style.display = "none";
+        sortButton.after(deleteContainer);
         deleteRoot = createRoot(deleteContainer);
         deleteRoot.render(<DeleteAllButton />);
+
+        requestAnimationFrame(() => {
+            if (deleteContainer) {
+                deleteContainer.style.display = "";
+            }
+        });
 
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: toolbar,
             options: { childList: true, subtree: true, attributes: true },
             callback: () => mountDeleteButton(),
-            debounceDelay: 100,
+            debounceDelay: 50,
+            useRaf: true,
         });
         observe();
         toolbarObserverDisconnect = disconnect;
@@ -165,7 +178,8 @@ const deleteAllPatch: IPatch = (() => {
                 target: document.body,
                 options: { childList: true, subtree: true },
                 callback: mutationCallback,
-                debounceDelay: 200,
+                debounceDelay: 50,
+                useRaf: true,
             });
 
             bodyObserve();
