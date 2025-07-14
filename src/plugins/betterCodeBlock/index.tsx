@@ -8,7 +8,7 @@ import { CodeSearchField } from "@components/CodeSearchField";
 import { Devs } from "@utils/constants";
 import { injectStyles, MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
-import { definePlugin, type IPatch } from "@utils/types";
+import { definePlugin } from "@utils/types";
 import { createRoot, type Root } from "react-dom/client";
 
 const logger = new Logger("BetterCodeBlock", "#a6d189");
@@ -29,130 +29,140 @@ const HIGHLIGHT_STYLE = `
 }
 `;
 
-let styleCleanup: (() => void) | null = null;
-
-const betterCodeBlockPatch: IPatch = (() => {
-    const reactRoots: Map<HTMLElement, Root> = new Map();
-    let bodyObserverDisconnect: (() => void) | null = null;
-    const localObservers: Map<HTMLElement, () => void> = new Map();
-    const observerManager = new MutationObserverManager();
-
-    function injectSearchField(codeBlockElement: HTMLElement, codeContainer: HTMLElement) {
-        const searchContainer = document.createElement("div");
-        searchContainer.id = SEARCH_CONTAINER_ID;
-        searchContainer.style.display = "none";
-
-        const buttonsContainer = querySelector(BUTTONS_CONTAINER_SELECTOR, codeBlockElement);
-        if (!buttonsContainer) {
-            logger.warn("Buttons container not found in code block");
-            return;
-        }
-
-        const copyButton = buttonsContainer.lastElementChild;
-        if (copyButton) {
-            buttonsContainer.insertBefore(searchContainer, copyButton);
-        } else {
-            buttonsContainer.appendChild(searchContainer);
-        }
-
-        const reactRoot = createRoot(searchContainer);
-        reactRoot.render(<CodeSearchField codeElement={codeContainer} />);
-        reactRoots.set(codeBlockElement, reactRoot);
-
-        requestAnimationFrame(() => {
-            searchContainer.style.display = "";
-        });
-    }
-
-    function addSearchToCodeBlock(codeBlockElement: HTMLElement) {
-        if (codeBlockElement.querySelector(`#${SEARCH_CONTAINER_ID}`)) {
-            return;
-        }
-
-        const codeContainer = querySelector(CODE_CONTAINER_SELECTOR, codeBlockElement);
-        if (codeContainer) {
-            injectSearchField(codeBlockElement, codeContainer as HTMLElement);
-        } else {
-            const { observe, disconnect } = observerManager.createObserver({
-                target: codeBlockElement,
-                options: { childList: true, subtree: true },
-                callback: () => {
-                    const codeContainerLocal = querySelector(CODE_CONTAINER_SELECTOR, codeBlockElement);
-                    if (codeContainerLocal) {
-                        injectSearchField(codeBlockElement, codeContainerLocal as HTMLElement);
-                        disconnect();
-                        localObservers.delete(codeBlockElement);
-                    }
-                },
-            });
-            observe();
-            localObservers.set(codeBlockElement, disconnect);
-        }
-    }
-
-    return {
-        apply() {
-            const { cleanup } = injectStyles(HIGHLIGHT_STYLE, "better-codeblock-highlight");
-            styleCleanup = cleanup;
-
-            const mutationCallback = (mutations: MutationRecord[]) => {
-                for (const mutation of mutations) {
-                    if (mutation.type === "childList") {
-                        mutation.addedNodes.forEach(node => {
-                            if (node instanceof HTMLElement) {
-                                if (node.matches(CODE_BLOCK_SELECTOR)) {
-                                    addSearchToCodeBlock(node);
-                                }
-                                const codeBlocks = querySelectorAll(CODE_BLOCK_SELECTOR, node);
-                                codeBlocks.forEach(addSearchToCodeBlock);
-                            }
-                        });
-                    } else if (mutation.type === "attributes") {
-                        const target = mutation.target as HTMLElement;
-                        if (target.matches(CODE_BLOCK_SELECTOR)) {
-                            addSearchToCodeBlock(target);
-                        }
-                    }
-                }
-            };
-
-            const { observe, disconnect } = observerManager.createObserver({
-                target: document.body,
-                options: { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] },
-                callback: mutationCallback,
-            });
-
-            observe();
-            bodyObserverDisconnect = disconnect;
-
-            const initialCodeBlocks = querySelectorAll(CODE_BLOCK_SELECTOR);
-            initialCodeBlocks.forEach(addSearchToCodeBlock);
-
-            document.addEventListener("visibilitychange", () => {
-                const codeBlocks = querySelectorAll(CODE_BLOCK_SELECTOR);
-                codeBlocks.forEach(addSearchToCodeBlock);
-            });
-        },
-        remove() {
-            bodyObserverDisconnect?.();
-            localObservers.forEach(disconnect => disconnect());
-            localObservers.clear();
-            reactRoots.forEach(root => root.unmount());
-            reactRoots.clear();
-            if (styleCleanup) {
-                styleCleanup();
-            }
-            document.removeEventListener("visibilitychange", () => { });
-            observerManager.disconnectAll();
-        },
-    };
-})();
-
 export default definePlugin({
-    name: "Better Code Block",
+    name: "BetterCodeBlock",
     description: "Adds a search field to the top of code blocks, allowing easy searching within the code.",
     authors: [Devs.Prism],
     category: "chat",
     tags: ["code", "search", "highlight"],
-    patches: [betterCodeBlockPatch],
+    patches: [
+        {
+            apply() {
+                const styleInjection = injectStyles(HIGHLIGHT_STYLE, "better-codeblock-highlight");
+
+                const reactRoots: Map<HTMLElement, Root> = new Map();
+                const localObservers: Map<HTMLElement, MutationObserver> = new Map();
+                const observerManager = new MutationObserverManager();
+
+                const processCodeBlock = (codeBlock: HTMLElement) => {
+                    if (codeBlock.querySelector(`#${SEARCH_CONTAINER_ID}`)) {
+                        logger.debug("Search container already exists, skipping");
+                        return;
+                    }
+
+                    const buttonsContainer = querySelector(BUTTONS_CONTAINER_SELECTOR, codeBlock);
+                    if (!buttonsContainer) {
+                        logger.warn("Buttons container not found in code block");
+                        return;
+                    }
+
+                    const codeContainer = querySelector(CODE_CONTAINER_SELECTOR, codeBlock);
+                    if (codeContainer) {
+                        const searchContainer = document.createElement("div");
+                        searchContainer.id = SEARCH_CONTAINER_ID;
+                        searchContainer.dataset.injectedBy = "better-code-block";
+
+                        const copyButton = buttonsContainer.lastElementChild;
+                        if (copyButton) {
+                            buttonsContainer.insertBefore(searchContainer, copyButton);
+                        } else {
+                            buttonsContainer.appendChild(searchContainer);
+                        }
+
+                        try {
+                            const root = createRoot(searchContainer);
+                            root.render(<CodeSearchField codeElement={codeContainer as HTMLElement} />);
+                            reactRoots.set(codeBlock, root);
+                            logger.debug("Successfully injected search field");
+                        } catch (error) {
+                            logger.error("Failed to render search field", error);
+                            searchContainer.remove();
+                        }
+                    } else {
+                        const localObserver = new MutationObserver(mutations => {
+                            for (const mutation of mutations) {
+                                if (mutation.type === "childList") {
+                                    const addedCodeContainer = querySelector(CODE_CONTAINER_SELECTOR, codeBlock);
+                                    if (addedCodeContainer) {
+                                        processCodeBlock(codeBlock);
+                                        localObserver.disconnect();
+                                        localObservers.delete(codeBlock);
+                                        break;
+                                    }
+                                }
+                            }
+                        });
+                        try {
+                            localObserver.observe(codeBlock, { childList: true, subtree: true });
+                            localObservers.set(codeBlock, localObserver);
+                            logger.debug("Started local observer for code container");
+                        } catch (error) {
+                            logger.error("Failed to start local observer", error);
+                        }
+                    }
+                };
+
+                const globalObserver = new MutationObserver(mutations => {
+                    for (const mutation of mutations) {
+                        if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+                            mutation.addedNodes.forEach(node => {
+                                if (node instanceof HTMLElement) {
+                                    if (node.matches(CODE_BLOCK_SELECTOR)) {
+                                        processCodeBlock(node);
+                                    } else {
+                                        querySelectorAll(CODE_BLOCK_SELECTOR, node).forEach(processCodeBlock);
+                                    }
+                                }
+                            });
+                        } else if (mutation.type === "attributes" && mutation.target instanceof HTMLElement) {
+                            if (mutation.target.matches(CODE_BLOCK_SELECTOR)) {
+                                processCodeBlock(mutation.target);
+                            }
+                        }
+                    }
+                });
+
+                try {
+                    globalObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ["class", "style"],
+                    });
+                    logger.debug("Global observer started");
+                } catch (error) {
+                    logger.error("Failed to start global observer", error);
+                }
+
+                try {
+                    querySelectorAll(CODE_BLOCK_SELECTOR).forEach(processCodeBlock);
+                    logger.debug("Initial code blocks processed");
+                } catch (error) {
+                    logger.error("Failed to process initial code blocks", error);
+                }
+
+                return () => {
+                    try {
+                        globalObserver.disconnect();
+                        localObservers.forEach(obs => obs.disconnect());
+                        localObservers.clear();
+                        reactRoots.forEach(root => root.unmount());
+                        reactRoots.clear();
+
+                        const allSearchContainers = querySelectorAll(`#${SEARCH_CONTAINER_ID}[data-injected-by="better-code-block"]`);
+                        allSearchContainers.forEach(container => {
+                            container.remove();
+                        });
+                        logger.debug(`Removed ${allSearchContainers.length} search containers`);
+
+                        styleInjection.cleanup();
+                        observerManager.disconnectAll();
+                        logger.info("Plugin cleanup completed successfully");
+                    } catch (error) {
+                        logger.error("Error during plugin cleanup", error);
+                    }
+                };
+            },
+        },
+    ],
 });
