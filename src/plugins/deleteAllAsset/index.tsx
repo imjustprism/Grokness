@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// TODO: Fix the IconButton to chnage the icon color on hover to red when its in confirmation state //
-
 import { grokAPI } from "@api/api";
 import type { Asset } from "@api/interfaces";
 import { IconButton } from "@components/IconButton";
@@ -101,10 +99,11 @@ function DeleteAllButton() {
                 onClick={handleClick}
                 aria-label="Delete All Assets"
                 tooltipContent={isConfirming ? "Are you sure? Click again to confirm" : "Delete All Assets"}
-                className={`h-8 rounded-xl px-3 text-xs border-transparent hover:bg-transparent flex-shrink-0 ${isConfirming ? "text-[hsl(var(--fg-danger))] hover:text-white [&_svg]:text-[hsl(var(--fg-danger))] [&_svg]:hover:text-white" : ""}`}
+                className={"h-8 rounded-xl px-3 text-xs border-transparent hover:bg-transparent flex-shrink-0"}
                 style={{ boxShadow: "none" }}
                 rounded={false}
                 iconSize={16}
+                confirm={isConfirming}
             >
                 <span className="sr-only">Delete All Assets</span>
                 <span className="hidden @[160px]:inline-block">{isConfirming ? "Confirm" : "Delete All"}</span>
