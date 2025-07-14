@@ -7,11 +7,27 @@
 import { Devs } from "@utils/constants";
 import { createDomElementHider, type ElementHideConfig } from "@utils/dom";
 import { Logger } from "@utils/logger";
+import { definePluginSettings } from "@utils/settings";
 import { definePlugin } from "@utils/types";
 
 const logger = new Logger("ScreenCleaner", "#e78284");
 
-const HIDE_CONFIGS: ElementHideConfig[] = [
+const settings = definePluginSettings({
+    hideNewsletterBanner: {
+        type: "boolean",
+        displayName: "Hide Schedule Banner",
+        description: "Hide the newsletter and schedule task banner.",
+        default: false,
+    },
+    hideScreensaver: {
+        type: "boolean",
+        displayName: "Hide Screensaver and Sparkle Effects",
+        description: "Hide the idle screensaver and sparkle effects.",
+        default: false,
+    },
+});
+
+const BASE_HIDE_CONFIGS: ElementHideConfig[] = [
     {
         selector: 'div[role="button"].fixed.bottom-2.right-2',
         description: "Main upsell banner",
@@ -54,40 +70,75 @@ const HIDE_CONFIGS: ElementHideConfig[] = [
         regexPattern: /Upgrade\s+plan/i,
         regexTarget: "textContent",
     },
-    {
-        selector: 'div[style*="opacity:"] > div.absolute.top-0.left-0.w-full.h-full',
-        description: "Idle screensaver and sparkle effects",
-        condition: (element: HTMLElement) => {
-            const canvas = element.querySelector("canvas.w-full.h-full");
-            return !!canvas;
-        },
-        removeFromDom: false,
-        markerAttribute: "data-grokness-hidden-screensaver",
-    },
 ];
+
+const NEWSLETTER_HIDE_CONFIG: ElementHideConfig = {
+    selector: 'div.w-full.flex.justify-center[style*="opacity:"]',
+    description: "Dynamic Newsletter/Schedule Task banner",
+    condition: (element: HTMLElement) => {
+        const textContent = element.textContent?.trim() ?? "";
+        const hasScheduleTask = textContent.includes("Schedule Task");
+        const hasChevronDown = !!element.querySelector('svg path[d="m6 9 6 6 6-6"]');
+        const hasAlarmClock = !!element.querySelector('svg path[d="m9 13 2 2 4-4"]');
+        return hasScheduleTask && hasChevronDown && hasAlarmClock;
+    },
+    removeFromDom: false,
+    markerAttribute: "data-grokness-hidden-dynamic-banner",
+    regexPattern: /Schedule\sTask/i,
+    regexTarget: "textContent",
+};
+
+const SCREENSAVER_HIDE_CONFIG: ElementHideConfig = {
+    selector: 'div[style*="opacity:"] > div.absolute.top-0.left-0.w-full.h-full',
+    description: "Idle screensaver and sparkle effects",
+    condition: (element: HTMLElement) => {
+        const canvas = element.querySelector("canvas.w-full.h-full");
+        return !!canvas;
+    },
+    removeFromDom: false,
+    markerAttribute: "data-grokness-hidden-screensaver",
+};
 
 const screenCleanerPatch = (() => {
     let hider: ReturnType<typeof createDomElementHider> | null = null;
     let modalObserver: MutationObserver | null = null;
+    let settingsListener: ((e: Event) => void) | null = null;
+
+    function getActiveConfigs(): ElementHideConfig[] {
+        const activeConfigs = [...BASE_HIDE_CONFIGS];
+        if (settings.store.hideNewsletterBanner) {
+            activeConfigs.push(NEWSLETTER_HIDE_CONFIG);
+        }
+        if (settings.store.hideScreensaver) {
+            activeConfigs.push(SCREENSAVER_HIDE_CONFIG);
+        }
+        return activeConfigs;
+    }
+
+    function setupHider() {
+        hider?.stopObserving();
+        hider = null;
+
+        try {
+            hider = createDomElementHider(document.body, getActiveConfigs(), {
+                debounce: 0,
+                useRequestAnimationFrame: true,
+                injectCss: true,
+            });
+            hider.startObserving();
+            if (document.readyState === "complete") {
+                hider.hideImmediately();
+            } else {
+                document.addEventListener("DOMContentLoaded", () => hider?.hideImmediately(), { once: true });
+            }
+        } catch (error) {
+            logger.error("Failed to initialize element hider:", error);
+        }
+    }
 
     return {
         apply() {
-            try {
-                hider = createDomElementHider(document.body, HIDE_CONFIGS, {
-                    debounce: 0,
-                    useRequestAnimationFrame: true,
-                    injectCss: true,
-                });
-                hider.startObserving();
-                if (document.readyState === "complete") {
-                    hider.hideImmediately();
-                } else {
-                    document.addEventListener("DOMContentLoaded", () => hider?.hideImmediately(), { once: true });
-                }
-            } catch (error) {
-                logger.error("Failed to initialize element hider:", error);
-                return;
-            }
+            setupHider();
 
             try {
                 const modalObserverConfig: MutationObserverInit = {
@@ -112,6 +163,14 @@ const screenCleanerPatch = (() => {
             } catch (error) {
                 logger.error("Failed to initialize modal observer:", error);
             }
+
+            settingsListener = (e: Event) => {
+                const event = e as CustomEvent;
+                if (event.detail.pluginId === "screen-cleaner") {
+                    setupHider();
+                }
+            };
+            window.addEventListener("grok-settings-updated", settingsListener);
         },
         remove() {
             try {
@@ -120,6 +179,10 @@ const screenCleanerPatch = (() => {
                 hider?.hideImmediately();
                 hider = null;
                 modalObserver = null;
+                if (settingsListener) {
+                    window.removeEventListener("grok-settings-updated", settingsListener);
+                    settingsListener = null;
+                }
             } catch (error) {
                 logger.error("Failed to clean up screen cleaner:", error);
             }
@@ -134,5 +197,6 @@ export default definePlugin({
     category: "appearance",
     tags: ["hide", "cleaner", "upsell", "banner", "upgrade", "screensaver", "sparkle"],
     enabledByDefault: true,
+    settings,
     patches: [screenCleanerPatch],
 });
