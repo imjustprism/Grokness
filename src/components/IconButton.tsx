@@ -68,7 +68,7 @@ export const IconButton = React.forwardRef<HTMLElement, IconButtonProps>(
             solid:
                 "border-transparent bg-blue-600 text-white hover:bg-blue-700 disabled:hover:bg-blue-600",
             ghost:
-                "border-transparent text-fg-primary hover:bg-button-ghost-hover disabled:hover:bg-transparent",
+                "border-transparent text-fg-primary hover:bg-button-ghost-hover [&_svg]:hover:text-fg-primary disabled:hover:bg-transparent",
         };
 
         const sizeKey = size as "sm" | "md" | "lg";
@@ -87,7 +87,7 @@ export const IconButton = React.forwardRef<HTMLElement, IconButtonProps>(
             sizeClasses[sizeKey],
             variantClasses[variantKey],
             toggleGroup ? `group/${toggleGroup}` : "",
-            confirm ? "text-fg-danger [&_svg]:text-fg-danger" : "",
+            confirm ? "text-fg-danger [&_svg]:text-fg-danger [&_svg]:hover:text-fg-danger" : "",
             className
         );
 
