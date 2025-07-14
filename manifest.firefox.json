@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Grokness",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "description": "A cute Grok extension",
     "content_scripts": [
         {
@@ -25,7 +25,7 @@
     ],
     "browser_specific_settings": {
         "gecko": {
-            "id": "{d3b8e8f4-1e1a-4b7b-9c2d-6e7f8a9b0c1d}"
+            "id": "grokness@prism.dev"
         }
     }
 }
