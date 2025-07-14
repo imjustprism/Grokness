@@ -271,7 +271,7 @@ function RateLimitComponent() {
     return (
         <IconButton
             id="grok-rate-limit"
-            as="div"
+            as="button"
             variant="outline"
             size="md"
             icon="Gauge"
