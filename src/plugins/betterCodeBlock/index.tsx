@@ -46,7 +46,6 @@ export default definePlugin({
 
                 const processCodeBlock = (codeBlock: HTMLElement) => {
                     if (codeBlock.querySelector(`#${SEARCH_CONTAINER_ID}`)) {
-                        logger.debug("Search container already exists, skipping");
                         return;
                     }
 
@@ -73,7 +72,6 @@ export default definePlugin({
                             const root = createRoot(searchContainer);
                             root.render(<CodeSearchField codeElement={codeContainer as HTMLElement} />);
                             reactRoots.set(codeBlock, root);
-                            logger.debug("Successfully injected search field");
                         } catch (error) {
                             logger.error("Failed to render search field", error);
                             searchContainer.remove();
@@ -95,7 +93,6 @@ export default definePlugin({
                         try {
                             localObserver.observe(codeBlock, { childList: true, subtree: true });
                             localObservers.set(codeBlock, localObserver);
-                            logger.debug("Started local observer for code container");
                         } catch (error) {
                             logger.error("Failed to start local observer", error);
                         }
@@ -129,14 +126,12 @@ export default definePlugin({
                         attributes: true,
                         attributeFilter: ["class", "style"],
                     });
-                    logger.debug("Global observer started");
                 } catch (error) {
                     logger.error("Failed to start global observer", error);
                 }
 
                 try {
                     querySelectorAll(CODE_BLOCK_SELECTOR).forEach(processCodeBlock);
-                    logger.debug("Initial code blocks processed");
                 } catch (error) {
                     logger.error("Failed to process initial code blocks", error);
                 }
@@ -153,11 +148,9 @@ export default definePlugin({
                         allSearchContainers.forEach(container => {
                             container.remove();
                         });
-                        logger.debug(`Removed ${allSearchContainers.length} search containers`);
 
                         styleInjection.cleanup();
                         observerManager.disconnectAll();
-                        logger.info("Plugin cleanup completed successfully");
                     } catch (error) {
                         logger.error("Error during plugin cleanup", error);
                     }
