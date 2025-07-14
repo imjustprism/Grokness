@@ -5,6 +5,11 @@
  */
 
 import type {
+    AssetMetadata,
+    DeleteAssetRequest,
+    GetAssetMetadataRequest,
+    ListAssetsRequest,
+    ListAssetsResponse,
     ModelsResponse,
     RateLimitData,
     RateLimitRequest,
@@ -71,6 +76,10 @@ export class GrokAPI {
                 throw new Error(`API request failed: ${response.status} - ${errorText}`);
             }
 
+            if (response.status === 204) {
+                return undefined as T;
+            }
+
             return response.json() as Promise<T>;
         } catch (error) {
             if (error instanceof Error) {
@@ -135,7 +144,61 @@ export class GrokAPI {
         getModels: async (signal?: AbortSignal): Promise<ModelsResponse> => this.request<ModelsResponse>("/models", { method: "POST" }, signal),
     } as const;
 
-    // Add more sections for future endpoints as needed
+    /**
+     * Asset repository API methods.
+     */
+    public readonly assetRepository = {
+        /**
+         * Deletes an asset by its ID.
+         * @param params Request parameters including assetId.
+         * @param signal Optional AbortSignal for cancellation.
+         * @returns Promise resolving to void.
+         */
+        deleteAsset: async (params: DeleteAssetRequest, signal?: AbortSignal): Promise<void> => {
+            if (params.assetId == null) {
+                throw new Error('Required parameter "assetId" was null or undefined when calling assetRepositoryDeleteAsset().');
+            }
+            await this.request<void>(`/assets/${encodeURIComponent(String(params.assetId))}`, { method: "DELETE" }, signal);
+        },
+        /**
+         * Gets metadata for an asset by its ID.
+         * @param params Request parameters including assetId.
+         * @param signal Optional AbortSignal for cancellation.
+         * @returns Promise resolving to AssetMetadata.
+         */
+        getAssetMetadata: async (params: GetAssetMetadataRequest, signal?: AbortSignal): Promise<AssetMetadata> => {
+            if (params.assetId == null) {
+                throw new Error('Required parameter "assetId" was null or undefined when calling assetRepositoryGetAssetMetadata().');
+            }
+            return this.request<AssetMetadata>(`/assets/${encodeURIComponent(String(params.assetId))}`, { method: "GET" }, signal);
+        },
+        /**
+         * Lists assets with pagination and filters.
+         * @param params Request parameters for listing.
+         * @param signal Optional AbortSignal for cancellation.
+         * @returns Promise resolving to ListAssetsResponse.
+         */
+        listAssets: async (params: ListAssetsRequest = {}, signal?: AbortSignal): Promise<ListAssetsResponse> => {
+            const query = new URLSearchParams();
+            if (params.pageSize !== undefined) {
+                query.append("pageSize", params.pageSize.toString());
+            }
+            if (params.orderBy) {
+                query.append("orderBy", params.orderBy);
+            }
+            if (params.source) {
+                query.append("source", params.source);
+            }
+            if (params.isLatest !== undefined) {
+                query.append("isLatest", params.isLatest.toString());
+            }
+            if (params.pageToken) {
+                query.append("pageToken", params.pageToken);
+            }
+            const path = `/assets${query.toString() ? `?${query.toString()}` : ""}`;
+            return this.request<ListAssetsResponse>(path, { method: "GET" }, signal);
+        },
+    } as const;
 }
 
 /**

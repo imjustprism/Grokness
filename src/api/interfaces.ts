@@ -214,3 +214,79 @@ export interface ModelsResponse {
     /** Default heavy model. */
     defaultHeavyModel: string;
 }
+
+/**
+ * Request parameters for deleting an asset.
+ */
+export interface DeleteAssetRequest {
+    /** The ID of the asset to delete. */
+    assetId: string;
+}
+
+/**
+ * Request parameters for getting asset metadata.
+ */
+export interface GetAssetMetadataRequest {
+    /** The ID of the asset to get metadata for. */
+    assetId: string;
+}
+
+/**
+ * Response data for asset metadata.
+ * Note: Structure assumed as a generic object since exact fields are not specified.
+ */
+export interface AssetMetadata {
+    [key: string]: any;
+}
+
+/**
+ * Asset information for list response.
+ */
+export interface Asset {
+    assetId: string;
+    mimeType?: string;
+    name?: string;
+    sizeBytes?: number;
+    createTime?: string;
+    lastUseTime?: string;
+    summary?: string;
+    previewImageKey?: string;
+    key?: string;
+    auxKeys?: Record<string, string>;
+    source?: string;
+    isDeleted?: boolean;
+    fileSource?: string;
+    rootAssetId?: string;
+    isModelGenerated?: boolean;
+    isLatest?: boolean;
+    inlineStatus?: string;
+    isRootAssetCreatedByModel?: boolean;
+    responseId?: string;
+    sourceConversationId?: string;
+    rootAssetSourceConversationId?: string;
+    [key: string]: any;
+}
+
+/**
+ * Request parameters for listing assets.
+ */
+export interface ListAssetsRequest {
+    /** Number of assets per page. */
+    pageSize?: number;
+    /** Order by field (e.g., 'ORDER_BY_LAST_USE_TIME'). */
+    orderBy?: string;
+    /** Source filter (e.g., 'SOURCE_ANY'). */
+    source?: string;
+    /** Whether to get latest versions. */
+    isLatest?: boolean;
+    /** Token for next page. */
+    pageToken?: string;
+}
+
+/**
+ * Response from listing assets endpoint.
+ */
+export interface ListAssetsResponse {
+    assets: Asset[];
+    nextPageToken?: string;
+}

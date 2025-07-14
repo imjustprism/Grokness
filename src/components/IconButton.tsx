@@ -30,6 +30,7 @@ export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
     children?: React.ReactNode;
     rounded?: boolean;
     toggleGroup?: string;
+    confirm?: boolean;
 }
 
 export const IconButton = React.forwardRef<HTMLElement, IconButtonProps>(
@@ -50,6 +51,7 @@ export const IconButton = React.forwardRef<HTMLElement, IconButtonProps>(
             children,
             rounded = true,
             toggleGroup,
+            confirm = false,
             ...props
         },
         ref
@@ -85,12 +87,13 @@ export const IconButton = React.forwardRef<HTMLElement, IconButtonProps>(
             sizeClasses[sizeKey],
             variantClasses[variantKey],
             toggleGroup ? `group/${toggleGroup}` : "",
+            confirm ? "text-fg-danger [&_svg]:text-fg-danger" : "",
             className
         );
 
         const iconClasses = clsx(
             "stroke-[2]",
-            "text-fg-secondary",
+            confirm ? "text-fg-danger" : "text-fg-secondary",
             "transition-colors duration-100"
         );
 
@@ -126,7 +129,7 @@ export const IconButton = React.forwardRef<HTMLElement, IconButtonProps>(
         const buttonContent = (
             <>
                 {iconContent}
-                {children && <span className="text-fg-primary">{children}</span>}
+                {children && <span>{children}</span>}
             </>
         );
 
