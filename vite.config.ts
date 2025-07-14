@@ -7,7 +7,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const targetBrowser = process.env.BROWSER || "firefox";
-const isSourcemap = process.env.SOURCEMAP === "true";
 const manifestFile =
     targetBrowser === "chrome"
         ? path.resolve(__dirname, "manifest.chrome.json")
@@ -19,14 +18,15 @@ export default defineConfig({
         outDir: path.resolve(__dirname, `dist/${targetBrowser}`),
         emptyOutDir: true,
         target: "esnext",
-        sourcemap: isSourcemap || process.env.NODE_ENV === "development",
-        minify: process.env.NODE_ENV === "production" && targetBrowser !== "firefox",
+        sourcemap: process.env.NODE_ENV === "development",
+        minify: process.env.NODE_ENV === "production" ? "esbuild" : false,
         rollupOptions: {
             output: {
                 chunkFileNames: "assets/[name]-[hash].js",
             },
         },
     },
+    publicDir: path.resolve(__dirname, "public"),
     plugins: [
         webExtension({
             browser: targetBrowser === "chrome" ? "chrome" : "firefox",
