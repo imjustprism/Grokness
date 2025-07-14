@@ -1,83 +1,130 @@
+![Banner](https://media.discordapp.net/attachments/1392621222944047267/1394396712034107574/grokness-banner.png?ex=6876a8a2&is=68755722&hm=00170fd731f419127ce036ae85f7cf392330589a2862fd2898593f0b8c8bc3ec&=&width=1525&height=858)
+
 # Grokness
 
-**Grokness** is a minimalist browser extension for [grok.com](https://grok.com), inspired by Vencord. It adds a powerful **Plugins** section to your settings, letting you easily enable, disable, and manage custom plugins to supercharge your Grok experience.
+[![License](https://img.shields.io/github/license/imjustprism/grokness?style=for-the-badge)](LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/imjustprism/grokness?style=for-the-badge)](https://github.com/imjustprism/grokness/blob/main/package.json)
+[![Maintenance](https://img.shields.io/maintenance/yes/2025?style=for-the-badge)]()
 
-⚠️ **Note**: This project is still in development. There are some issues and some parts are hardcoded, making it not very easy to manage yet.
+**Grokness** is a minimalist browser extension for [grok.com](https://grok.com), inspired by Vencord. It adds a powerful **Plugins** section to your settings, letting you seamlessly enable, disable, and manage custom plugins to supercharge your Grok experience.
+
+> ⚠️ **Note**: This project is in active development. Some features are still hard‑coded and may change.
+
+---
+
+## 🔧 Features
+
+- **Plugin Management**
+  Enable, disable, and reorder your plugins with a single click.
+- **Custom Plugins**
+  Drop your own scripts into `src/plugins/` and manage them from the UI.
+- **Lightweight & Fast**
+  Minimal overhead to keep your browsing swift.
+- **Cross‑Browser**
+  Builds available for Chrome, Firefox (and any Chromium‑based browser).
 
 ---
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- **Git**
+- **Bun** (or **Node.js** if you prefer)
+
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/imjustprism/grok.git
+git clone https://github.com/imjustprism/grokness.git
 cd grokness
 bun install
 ```
 
-### 2. Build the Extension
+### 2. Build
 
-Choose the build for your browser:
+Choose your target:
 
 ```bash
-bun run build:chrome   # For Chrome, Edge, Brave, etc.
-bun run build:firefox  # For Firefox
-bun run build          # For Both
+bun run build:chrome   # Chrome, Edge, Brave, etc.
+bun run build:firefox  # Firefox
+bun run build          # Both
 ```
 
-### 3. Load the Extension
+### 3. Load in Your Browser
 
-**For Chromium Browsers:**
-    Go to `chrome://extensions/`
-    Enable **Developer mode**
-    Click **Load unpacked** and select the `dist/chrome` folder
+<details>
+<summary><strong>Chromium (Chrome/Edge/Brave)</strong></summary>
 
-**For Firefox:**
-    Go to `about:debugging#/runtime/this-firefox`
-    Click **Load Temporary Add-on…** and select `dist/firefox/manifest.json`
+1. Go to `chrome://extensions/`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select `dist/chrome`
+</details>
+
+<details>
+<summary><strong>Firefox</strong></summary>
+
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on…**
+3. Select `dist/firefox/manifest.json`
+</details>
 
 ---
 
-## 🧩 Using Plugins
+## 🧩 Usage
 
-1. Visit [grok.com](https://grok.com)
-2. Open **Settings** and navigate to the **Grokness** tab
-3. Toggle your custom plugins on or off as you wish
+1. Open [grok.com](https://grok.com)
+2. Click **Settings** → **Grokness**
+3. Toggle plugins on/off as needed
+
+---
+
+## 🛠 Development
+
+```bash
+# Fork & clone
+git clone https://github.com/your-username/grokness.git
+cd grokness
+
+# Create your feature branch
+git checkout -b feature/awesome-feature
+
+# After coding...
+git add .
+git commit -m "feat: add awesome feature"
+git push origin feature/awesome-feature
+
+# Open a PR against imjustprism/grokness
+```
 
 ---
 
 ## 🤝 Contributing
 
-We love community contributions! To get started:
+We ❤️ community contributions! Please:
 
 - Read our [Contributing Guide](CONTRIBUTING.md)
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
-- Fork the repo, create a feature branch, and submit a pull request
-
-All ideas, bug fixes, and improvements are welcome!
+- Open issues or pull requests!
 
 ---
 
 ## 📄 License
 
-Grokness is licensed under the [GNU GPL v3 License](LICENSE).
+Distributed under the [GNU GPL v3 License](LICENSE).
 
 ---
 
-## 🙋 FAQ
+## ❓ FAQ
 
 **Q: What is Grokness?**
-A: A browser extension that lets you manage and run custom plugins on grok.com.
+A: A browser extension that adds a plugin system to grok.com.
 
 **Q: Is it safe?**
-A: Grokness is open source—review the code, suggest improvements, and help keep it secure!
+A: Absolutely. Grokness is 100% open source.
 
-**Q: How do I make my own plugin?**
-A: Check the `src/plugins/` directory for examples and start building your own!
+**Q: How do I create my own plugin?**
+A: See `src/plugins/` for templates and examples.
 
 ---
 
-## 🌟 Star This Project!
-
-If you find Grokness useful, please consider starring the repo and sharing it with others!
+🌟 If you find Grokness useful, please **star** the repo and share it with your friends!
