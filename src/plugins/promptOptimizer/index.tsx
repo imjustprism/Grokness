@@ -17,7 +17,7 @@ const USER_PROMPT_SELECTOR = "div.message-bubble.bg-surface-l2.border.border-bor
 const PROMPT_CONTENT_SELECTOR = "span.whitespace-pre-wrap";
 const COLLAPSE_CONTAINER_ID = "grok-prompt-collapse-container";
 
-const CHARACTER_LIMIT = 500;
+const CHARACTER_LIMIT = 3500;
 
 const promptOptimizerPatch: IPatch = (() => {
     const reactRoots: Map<HTMLElement, Root> = new Map();
@@ -163,8 +163,8 @@ const promptOptimizerPatch: IPatch = (() => {
 })();
 
 export default definePlugin({
-    name: "PromptOptimizer",
-    description: "Automatically collapses long user prompts in chat for better performance and expands them on demand.",
+    name: "Prompt Optimizer",
+    description: "Automatically collapses long user prompts in chat for better performance.",
     authors: [Devs.Prism],
     category: "chat",
     tags: ["prompt", "optimize", "collapse"],
