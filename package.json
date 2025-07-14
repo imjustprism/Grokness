@@ -30,12 +30,10 @@
     },
     "scripts": {
         "clean": "rimraf dist",
-        "build:chrome": "BROWSER=chrome SOURCEMAP=false vite build",
-        "build:firefox": "BROWSER=firefox SOURCEMAP=true vite build",
-        "build:chrome:sourcemap": "BROWSER=chrome SOURCEMAP=true vite build",
-        "build:firefox:sourcemap": "BROWSER=firefox SOURCEMAP=true vite build",
-        "build": "bun run build:chrome && bun run build:firefox",
         "build:sourcemap": "bun run build:chrome:sourcemap && bun run build:firefox:sourcemap",
+        "build:chrome": "BROWSER=chrome SOURCEMAP=false vite build",
+        "build:firefox": "BROWSER=firefox SOURCEMAP=false vite build",
+        "build": "bun run build:chrome && bun run build:firefox",
         "lint": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\"",
         "lint:fix": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\" --fix"
     },
