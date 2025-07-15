@@ -52,6 +52,7 @@ function generateStyles(config: typeof settings.store): string {
 html.streamer-mode-active [data-sidebar="menu"] .group\\/conversation-item span.flex-1.select-none,
 html.streamer-mode-active span.flex-1.select-none.text-nowrap.max-w-full.overflow-hidden.inline-block { ${TEXT_BLUR_STYLE} }\n`;
         css += `html.streamer-mode-active .p-1.min-w-0.text-sm .text-sm.font-medium { ${TEXT_BLUR_STYLE} }\n`;
+        css += `html.streamer-mode-active div.absolute.start-1 div.flex.flex-row.items-center a.overflow-hidden div.border.border-border-l2.px-3.py-1.rounded-full.text-sm.text-secondary.flex.flex-row.items-center.gap-1 span.truncate { ${TEXT_BLUR_STYLE} }\n`;
     }
 
     return css;
