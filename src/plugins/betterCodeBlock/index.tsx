@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { CodeSearchField } from "@components/CodeSearchField";
+import { CodeSearchField, DEFAULT_HIGHLIGHT_CLASS, DEFAULT_HIGHLIGHT_CURRENT_CLASS } from "@plugins/betterCodeBlock/components/CodeSearchField";
 import { Devs } from "@utils/constants";
 import { injectStyles, MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
@@ -19,18 +19,36 @@ const CODE_CONTAINER_SELECTOR = 'div[style*="display: block; overflow: auto; pad
 const SEARCH_CONTAINER_ID = "grok-code-search-container";
 
 const HIGHLIGHT_STYLE = `
-.grok-code-highlight {
-    background-color: yellow;
-    color: black;
+:root {
+    --highlight-bg: rgba(255, 255, 0, 0.3);
+    --highlight-text: inherit;
+    --current-highlight-bg: rgba(255, 165, 0, 0.5);
+    --current-highlight-shadow: 0 0 4px rgba(255, 165, 0, 0.7);
+    --highlight-radius: 2px;
+    --highlight-padding: 0 2px;
+    --highlight-transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
-.grok-code-highlight-current {
-    background-color: orange;
-    color: black;
+
+.${DEFAULT_HIGHLIGHT_CLASS} {
+    background-color: var(--highlight-bg);
+    color: var(--highlight-text);
+    border-radius: var(--highlight-radius);
+    padding: var(--highlight-padding);
+    transition: var(--highlight-transition);
+}
+
+.${DEFAULT_HIGHLIGHT_CURRENT_CLASS} {
+    background-color: var(--current-highlight-bg);
+    color: var(--highlight-text);
+    border-radius: var(--highlight-radius);
+    padding: var(--highlight-padding);
+    box-shadow: var(--current-highlight-shadow);
+    transition: var(--highlight-transition);
 }
 `;
 
 export default definePlugin({
-    name: "BetterCodeBlock",
+    name: "Better Code Block",
     description: "Adds a search field to the top of code blocks, allowing easy searching within the code.",
     authors: [Devs.Prism],
     category: "chat",
@@ -55,47 +73,68 @@ export default definePlugin({
                         return;
                     }
 
-                    const codeContainer = querySelector(CODE_CONTAINER_SELECTOR, codeBlock);
-                    if (codeContainer) {
-                        const searchContainer = document.createElement("div");
-                        searchContainer.id = SEARCH_CONTAINER_ID;
-                        searchContainer.dataset.injectedBy = "better-code-block";
+                    const searchContainer = document.createElement("div");
+                    searchContainer.id = SEARCH_CONTAINER_ID;
+                    searchContainer.dataset.injectedBy = "better-code-block";
 
-                        const copyButton = buttonsContainer.lastElementChild;
-                        if (copyButton) {
-                            buttonsContainer.insertBefore(searchContainer, copyButton);
-                        } else {
-                            buttonsContainer.appendChild(searchContainer);
-                        }
-
-                        try {
-                            const root = createRoot(searchContainer);
-                            root.render(<CodeSearchField codeElement={codeContainer as HTMLElement} />);
-                            reactRoots.set(codeBlock, root);
-                        } catch (error) {
-                            logger.error("Failed to render search field", error);
-                            searchContainer.remove();
-                        }
+                    const copyButton = buttonsContainer.lastElementChild;
+                    if (copyButton) {
+                        buttonsContainer.insertBefore(searchContainer, copyButton);
                     } else {
-                        const localObserver = new MutationObserver(mutations => {
-                            for (const mutation of mutations) {
-                                if (mutation.type === "childList") {
-                                    const addedCodeContainer = querySelector(CODE_CONTAINER_SELECTOR, codeBlock);
-                                    if (addedCodeContainer) {
-                                        processCodeBlock(codeBlock);
-                                        localObserver.disconnect();
-                                        localObservers.delete(codeBlock);
-                                        break;
-                                    }
+                        buttonsContainer.appendChild(searchContainer);
+                    }
+
+                    let root: Root;
+                    try {
+                        root = createRoot(searchContainer);
+                        reactRoots.set(codeBlock, root);
+                    } catch (error) {
+                        logger.error("Failed to create React root", error);
+                        searchContainer.remove();
+                        return;
+                    }
+
+                    const tryRender = () => {
+                        const codeContainer = querySelector(CODE_CONTAINER_SELECTOR, codeBlock) as HTMLElement | null;
+                        if (codeContainer) {
+                            try {
+                                root.render(
+                                    <CodeSearchField
+                                        codeElement={codeContainer}
+                                    />
+                                );
+                            } catch (error) {
+                                logger.error("Failed to render search field", error);
+                            }
+                            return true;
+                        }
+                        return false;
+                    };
+
+                    if (tryRender()) {
+                        return;
+                    }
+
+                    const localObserver = new MutationObserver(mutations => {
+                        for (const mutation of mutations) {
+                            if (mutation.type === "childList") {
+                                if (tryRender()) {
+                                    localObserver.disconnect();
+                                    localObservers.delete(codeBlock);
+                                    break;
                                 }
                             }
-                        });
-                        try {
-                            localObserver.observe(codeBlock, { childList: true, subtree: true });
-                            localObservers.set(codeBlock, localObserver);
-                        } catch (error) {
-                            logger.error("Failed to start local observer", error);
                         }
+                    });
+
+                    try {
+                        localObserver.observe(codeBlock, { childList: true, subtree: true });
+                        localObservers.set(codeBlock, localObserver);
+                    } catch (error) {
+                        logger.error("Failed to start local observer", error);
+                        root.unmount();
+                        reactRoots.delete(codeBlock);
+                        searchContainer.remove();
                     }
                 };
 
