@@ -13,7 +13,7 @@
 2. Click **Install** in your userscript manager (Violentmonkey, Tampermonkey, etc.)
 3. Reload [grok.com](https://grok.com) and open **Settings → Grokness** to manage plugins.
 
-## 🔧 Features
+## Features
 - **Plugin Management**: Enable, disable, and reorder your plugins with a single click
 - **Custom Plugins**: Drop your own scripts into `src/plugins/` and manage them from the UI
 - **Lightweight & Fast**: Minimal overhead to keep your browsing swift
@@ -52,7 +52,7 @@
 2. Click **Settings → Grokness**
 3. Toggle plugins on/off as needed
 
-## 🛠 Development
+## Development
     # Fork & clone
     git clone https://github.com/your-username/grokness.git
     cd grokness
