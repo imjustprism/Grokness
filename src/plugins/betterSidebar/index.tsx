@@ -47,19 +47,25 @@ function useIsSidebarCollapsed(): boolean {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        const toggleIcon = querySelector(TOGGLE_ICON_SELECTOR);
-        if (!toggleIcon) {
-            return;
+        try {
+            const toggleIcon = querySelector(TOGGLE_ICON_SELECTOR);
+            if (!toggleIcon) {
+                logger.warn("Toggle icon not found for sidebar collapse detection");
+                return;
+            }
+
+            const updateState = () => setIsCollapsed(!toggleIcon.classList.contains("rotate-180"));
+
+            updateState();
+
+            const observer = new MutationObserver(updateState);
+            observer.observe(toggleIcon, { attributes: true, attributeFilter: ["class"] });
+
+            return () => observer.disconnect();
+        } catch (error) {
+            logger.error("Error in useIsSidebarCollapsed hook:", error);
+            return () => { };
         }
-
-        const updateState = () => setIsCollapsed(!toggleIcon.classList.contains("rotate-180"));
-
-        updateState();
-
-        const observer = new MutationObserver(updateState);
-        observer.observe(toggleIcon, { attributes: true, attributeFilter: ["class"] });
-
-        return () => observer.disconnect();
     }, []);
 
     return isCollapsed;
@@ -70,7 +76,12 @@ function SidebarUserInfo() {
     const isCollapsed = useIsSidebarCollapsed();
 
     useEffect(() => {
-        fetchUserPlanData().then(setUserPlanData);
+        fetchUserPlanData().then(data => {
+            if (!data) {
+                logger.warn("User plan data not available");
+            }
+            setUserPlanData(data);
+        });
     }, []);
 
     if (!userPlanData || isCollapsed) {
@@ -92,53 +103,74 @@ const betterSidebarPatch: IPatch = (() => {
     let styleManager: { cleanup: () => void; } | null = null;
 
     function mountUserInfo(footer: HTMLElement) {
-        const avatarButton = querySelector(AVATAR_BUTTON_SELECTOR, footer);
-        if (!avatarButton) {
-            return;
-        }
+        try {
+            const avatarButton = querySelector(AVATAR_BUTTON_SELECTOR, footer);
+            if (!avatarButton) {
+                logger.warn("Avatar button not found in sidebar footer");
+                return;
+            }
 
-        if (userInfoContainer && avatarButton.parentElement?.contains(userInfoContainer)) {
-            return;
-        }
+            if (userInfoContainer && avatarButton.parentElement?.contains(userInfoContainer)) {
+                return;
+            }
 
-        unmountUserInfo();
-        userInfoContainer = document.createElement("div");
-        userInfoContainer.className = USER_CONTAINER_CLASS;
-        avatarButton.parentElement?.insertBefore(userInfoContainer, avatarButton.nextSibling);
-        userInfoRoot = createRoot(userInfoContainer);
-        userInfoRoot.render(<SidebarUserInfo />);
+            unmountUserInfo();
+            userInfoContainer = document.createElement("div");
+            userInfoContainer.className = USER_CONTAINER_CLASS;
+            avatarButton.parentElement?.insertBefore(userInfoContainer, avatarButton.nextSibling);
+            userInfoRoot = createRoot(userInfoContainer);
+            userInfoRoot.render(<SidebarUserInfo />);
+        } catch (error) {
+            logger.error("Error mounting user info:", error);
+        }
     }
 
     function unmountUserInfo() {
-        userInfoRoot?.unmount();
-        userInfoContainer?.remove();
-        userInfoRoot = null;
-        userInfoContainer = null;
+        try {
+            userInfoRoot?.unmount();
+            userInfoContainer?.remove();
+            userInfoRoot = null;
+            userInfoContainer = null;
+        } catch (error) {
+            logger.error("Error unmounting user info:", error);
+        }
     }
 
     return {
         apply() {
-            styleManager = injectStyles(styles, "better-sidebar-styles");
+            try {
+                styleManager = injectStyles(styles, "better-sidebar-styles");
 
-            (async () => {
-                const footer = await waitForElementByConfig({ selector: SIDEBAR_FOOTER_SELECTOR });
-                mountUserInfo(footer);
+                (async () => {
+                    try {
+                        const footer = await waitForElementByConfig({ selector: SIDEBAR_FOOTER_SELECTOR });
+                        mountUserInfo(footer);
 
-                const observerManager = new MutationObserverManager();
-                const { observe, disconnect } = observerManager.createDebouncedObserver({
-                    target: footer,
-                    options: { childList: true, subtree: true },
-                    callback: () => mountUserInfo(footer),
-                    debounceDelay: 100,
-                });
-                observe();
-                footerObserverDisconnect = disconnect;
-            })();
+                        const observerManager = new MutationObserverManager();
+                        const { observe, disconnect } = observerManager.createDebouncedObserver({
+                            target: footer,
+                            options: { childList: true, subtree: true },
+                            callback: () => mountUserInfo(footer),
+                            debounceDelay: 100,
+                        });
+                        observe();
+                        footerObserverDisconnect = disconnect;
+                    } catch (error) {
+                        logger.error("Error setting up sidebar footer observer:", error);
+                    }
+                })();
+            } catch (error) {
+                logger.error("Error applying better sidebar patch:", error);
+            }
         },
         remove() {
-            footerObserverDisconnect?.();
-            unmountUserInfo();
-            styleManager?.cleanup();
+            try {
+                footerObserverDisconnect?.();
+                unmountUserInfo();
+                styleManager?.cleanup();
+            } catch (error) {
+                logger.error("Error removing better sidebar patch:", error);
+            }
         },
     };
 })();

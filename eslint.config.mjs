@@ -53,7 +53,6 @@ export default [
             "path-alias": pathAliasPlugin,
         },
         rules: {
-            // Existing rules
             semi: ["error", "always"],
             "no-console": ["warn", { allow: ["warn", "error", "info"] }],
             eqeqeq: ["error", "always", { null: "ignore" }],

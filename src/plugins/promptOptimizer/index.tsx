@@ -27,137 +27,166 @@ const promptOptimizerPatch: IPatch = (() => {
     const storedContents: Map<HTMLElement, string> = new Map();
 
     function addCollapseToPrompt(promptElement: HTMLElement) {
-        if (promptElement.querySelector(`#${COLLAPSE_CONTAINER_ID}`)) {
-            return;
+        try {
+            if (promptElement.querySelector(`#${COLLAPSE_CONTAINER_ID}`)) {
+                return;
+            }
+
+            const contentElement = querySelector(PROMPT_CONTENT_SELECTOR, promptElement);
+            if (!contentElement) {
+                logger.warn("Content element not found in prompt");
+                return;
+            }
+
+            const promptText = contentElement.textContent || "";
+            if (promptText.length <= CHARACTER_LIMIT) {
+                return;
+            }
+
+            storedContents.set(promptElement, promptText);
+
+            promptElement.style.position = "relative";
+            promptElement.style.paddingRight = "2.5rem";
+
+            const collapseContainer = document.createElement("div");
+            collapseContainer.id = COLLAPSE_CONTAINER_ID;
+            collapseContainer.className = "absolute top-1 right-2";
+
+            contentElement.textContent = `Prompt collapsed (length: ${promptText.length} chars). Click to expand.`;
+            contentElement.style.opacity = "0.7";
+
+            const reactRoot = createRoot(collapseContainer);
+            reactRoot.render(
+                <IconButton
+                    icon="ChevronDown"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => togglePrompt(promptElement)}
+                    tooltipContent="Expand prompt"
+                />
+            );
+            reactRoots.set(promptElement, reactRoot);
+
+            promptElement.appendChild(collapseContainer);
+        } catch (error) {
+            logger.error("Error adding collapse to prompt:", error);
         }
-
-        const contentElement = querySelector(PROMPT_CONTENT_SELECTOR, promptElement);
-        if (!contentElement) {
-            logger.warn("Content element not found in prompt");
-            return;
-        }
-
-        const promptText = contentElement.textContent || "";
-        if (promptText.length <= CHARACTER_LIMIT) {
-            return;
-        }
-
-        storedContents.set(promptElement, promptText);
-
-        promptElement.style.position = "relative";
-        promptElement.style.paddingRight = "2.5rem";
-
-        const collapseContainer = document.createElement("div");
-        collapseContainer.id = COLLAPSE_CONTAINER_ID;
-        collapseContainer.className = "absolute top-1 right-2";
-
-        contentElement.textContent = `Prompt collapsed (length: ${promptText.length} chars). Click to expand.`;
-        contentElement.style.opacity = "0.7";
-
-        const reactRoot = createRoot(collapseContainer);
-        reactRoot.render(
-            <IconButton
-                icon="ChevronDown"
-                size="sm"
-                variant="ghost"
-                onClick={() => togglePrompt(promptElement)}
-                tooltipContent="Expand prompt"
-            />
-        );
-        reactRoots.set(promptElement, reactRoot);
-
-        promptElement.appendChild(collapseContainer);
     }
 
     function togglePrompt(promptElement: HTMLElement) {
-        const contentElement = querySelector(PROMPT_CONTENT_SELECTOR, promptElement);
-        if (!contentElement) {
-            return;
-        }
-
-        const collapseContainer = promptElement.querySelector(`#${COLLAPSE_CONTAINER_ID}`);
-        if (!collapseContainer) {
-            return;
-        }
-
-        const isCollapsed = !storedContents.has(promptElement) || contentElement.textContent !== storedContents.get(promptElement);
-
-        if (isCollapsed) {
-            const originalText = storedContents.get(promptElement);
-            if (originalText) {
-                contentElement.textContent = originalText;
-                contentElement.style.opacity = "1";
+        try {
+            const contentElement = querySelector(PROMPT_CONTENT_SELECTOR, promptElement);
+            if (!contentElement) {
+                logger.warn("Content element not found during toggle");
+                return;
             }
-            const reactRoot = reactRoots.get(promptElement);
-            if (reactRoot) {
-                reactRoot.render(
-                    <IconButton
-                        icon="ChevronUp"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => togglePrompt(promptElement)}
-                        tooltipContent="Collapse prompt"
-                    />
-                );
+
+            const collapseContainer = promptElement.querySelector(`#${COLLAPSE_CONTAINER_ID}`);
+            if (!collapseContainer) {
+                logger.warn("Collapse container not found during toggle");
+                return;
             }
-        } else {
-            const currentText = contentElement.textContent || "";
-            storedContents.set(promptElement, currentText);
-            contentElement.textContent = `Prompt collapsed (length: ${currentText.length} chars). Click to expand.`;
-            contentElement.style.opacity = "0.7";
-            const reactRoot = reactRoots.get(promptElement);
-            if (reactRoot) {
-                reactRoot.render(
-                    <IconButton
-                        icon="ChevronDown"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => togglePrompt(promptElement)}
-                        tooltipContent="Expand prompt"
-                    />
-                );
+
+            const isCollapsed = !storedContents.has(promptElement) || contentElement.textContent !== storedContents.get(promptElement);
+
+            if (isCollapsed) {
+                const originalText = storedContents.get(promptElement);
+                if (originalText) {
+                    contentElement.textContent = originalText;
+                    contentElement.style.opacity = "1";
+                }
+                const reactRoot = reactRoots.get(promptElement);
+                if (reactRoot) {
+                    reactRoot.render(
+                        <IconButton
+                            icon="ChevronUp"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => togglePrompt(promptElement)}
+                            tooltipContent="Collapse prompt"
+                        />
+                    );
+                } else {
+                    logger.warn("React root not found for expand");
+                }
+            } else {
+                const currentText = contentElement.textContent || "";
+                storedContents.set(promptElement, currentText);
+                contentElement.textContent = `Prompt collapsed (length: ${currentText.length} chars). Click to expand.`;
+                contentElement.style.opacity = "0.7";
+                const reactRoot = reactRoots.get(promptElement);
+                if (reactRoot) {
+                    reactRoot.render(
+                        <IconButton
+                            icon="ChevronDown"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => togglePrompt(promptElement)}
+                            tooltipContent="Expand prompt"
+                        />
+                    );
+                } else {
+                    logger.warn("React root not found for collapse");
+                }
             }
+        } catch (error) {
+            logger.error("Error toggling prompt:", error);
         }
     }
 
     return {
         apply() {
-            const mutationCallback = (mutations: MutationRecord[]) => {
-                for (const mutation of mutations) {
-                    if (mutation.type === "childList") {
-                        mutation.addedNodes.forEach(node => {
-                            if (node instanceof HTMLElement) {
-                                if (node.matches(USER_PROMPT_SELECTOR)) {
-                                    addCollapseToPrompt(node);
-                                }
-                                const prompts = querySelectorAll(USER_PROMPT_SELECTOR, node);
-                                prompts.forEach(addCollapseToPrompt);
+            try {
+                const mutationCallback = (mutations: MutationRecord[]) => {
+                    try {
+                        for (const mutation of mutations) {
+                            if (mutation.type === "childList") {
+                                mutation.addedNodes.forEach(node => {
+                                    if (node instanceof HTMLElement) {
+                                        if (node.matches(USER_PROMPT_SELECTOR)) {
+                                            addCollapseToPrompt(node);
+                                        }
+                                        const prompts = querySelectorAll(USER_PROMPT_SELECTOR, node);
+                                        prompts.forEach(addCollapseToPrompt);
+                                    }
+                                });
                             }
-                        });
+                        }
+                    } catch (error) {
+                        logger.error("Error in mutation callback:", error);
                     }
+                };
+
+                const { observe, disconnect } = observerManager.createObserver({
+                    target: document.body,
+                    options: { childList: true, subtree: true },
+                    callback: mutationCallback,
+                });
+
+                observe();
+                bodyObserverDisconnect = disconnect;
+
+                const initialPrompts = querySelectorAll(USER_PROMPT_SELECTOR);
+                if (initialPrompts.length === 0) {
+                    logger.info("No initial prompts found");
                 }
-            };
-
-            const { observe, disconnect } = observerManager.createObserver({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: mutationCallback,
-            });
-
-            observe();
-            bodyObserverDisconnect = disconnect;
-
-            const initialPrompts = querySelectorAll(USER_PROMPT_SELECTOR);
-            initialPrompts.forEach(addCollapseToPrompt);
+                initialPrompts.forEach(addCollapseToPrompt);
+            } catch (error) {
+                logger.error("Error applying prompt optimizer patch:", error);
+            }
         },
         remove() {
-            bodyObserverDisconnect?.();
-            localObservers.forEach(disconnect => disconnect());
-            localObservers.clear();
-            reactRoots.forEach(root => root.unmount());
-            reactRoots.clear();
-            storedContents.clear();
-            observerManager.disconnectAll();
+            try {
+                bodyObserverDisconnect?.();
+                localObservers.forEach(disconnect => disconnect());
+                localObservers.clear();
+                reactRoots.forEach(root => root.unmount());
+                reactRoots.clear();
+                storedContents.clear();
+                observerManager.disconnectAll();
+            } catch (error) {
+                logger.error("Error removing prompt optimizer patch:", error);
+            }
         },
     };
 })();

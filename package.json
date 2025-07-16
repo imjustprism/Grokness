@@ -1,6 +1,11 @@
 {
-    "name": "grok",
-    "version": "1.0.2",
+    "name": "grokness",
+    "author": {
+        "name": "Prism"
+    },
+    "license": "GPL-3.0",
+    "namespace": "https://github.com/imjustprism/grokness",
+    "version": "1.0.3",
     "private": true,
     "description": "A cute Grok extension",
     "devDependencies": {
@@ -13,6 +18,7 @@
         "@typescript-eslint/eslint-plugin": "^8.37.0",
         "@typescript-eslint/parser": "^8.37.0",
         "@vitejs/plugin-react": "^4.6.0",
+        "cross-env": "^7.0.3",
         "eslint": "^9.31.0",
         "eslint-plugin-compat": "^6.0.2",
         "eslint-plugin-path-alias": "^2.1.0",
@@ -34,6 +40,7 @@
         "build:chrome": "BROWSER=chrome SOURCEMAP=false vite build",
         "build:firefox": "BROWSER=firefox SOURCEMAP=false vite build",
         "build": "bun run build:chrome && bun run build:firefox",
+        "build:userscript": "cross-env BUILD_TARGET=userscript vite build",
         "lint": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\"",
         "lint:fix": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\" --fix"
     },
@@ -46,6 +53,7 @@
         "lucide-react": "^0.511.0",
         "react": "^19.1.0",
         "react-dom": "^19.1.0",
+        "vite-plugin-banner": "^0.8.1",
         "webextension-polyfill": "^0.12.0"
     }
 }

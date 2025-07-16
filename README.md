@@ -2,26 +2,20 @@
 
 # Grokness
 
-[![License](https://img.shields.io/github/license/imjustprism/grokness?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/github/package-json/v/imjustprism/grokness?style=for-the-badge)](https://github.com/imjustprism/grokness/blob/main/package.json)
-[![Maintenance](https://img.shields.io/maintenance/yes/2025?style=for-the-badge)]()
+[![License](https://img.shields.io/github/license/imjustprism/grokness?style=for-the-badge)](LICENSE) [![Version](https://img.shields.io/github/package-json/v/imjustprism/grokness?style=for-the-badge)](https://github.com/imjustprism/grokness/blob/main/package.json) [![Maintenance](https://img.shields.io/maintenance/yes/2025?style=for-the-badge)]()
 
 **Grokness** is a minimalist browser extension for [grok.com](https://grok.com), inspired by Vencord. It adds a powerful **Plugins** section to your settings, letting you seamlessly enable, disable, and manage custom plugins to supercharge your Grok experience.
-
 > ⚠️ **Note**: This project is in active development. Some features are still hard‑coded and may change.
+> 📜 **Also available as a standalone userscript!** Install via Violentmonkey, Tampermonkey, or any userscript manager from [Greasy Fork](https://greasyfork.org/en/scripts/542735-grokness).
 
 ---
 
 ## 🔧 Features
 
-- **Plugin Management**
-  Enable, disable, and reorder your plugins with a single click.
-- **Custom Plugins**
-  Drop your own scripts into `src/plugins/` and manage them from the UI.
-- **Lightweight & Fast**
-  Minimal overhead to keep your browsing swift.
-- **Cross‑Browser**
-  Builds available for Chrome, Firefox (and any Chromium‑based browser).
+- **Plugin Management**: Enable, disable, and reorder your plugins with a single click
+- **Custom Plugins**: Drop your own scripts into `src/plugins/` and manage them from the UI
+- **Lightweight & Fast**: Minimal overhead to keep your browsing swift
+- **Cross‑Browser**: Builds available for Chrome, Firefox (and any Chromium‑based browser)
 
 ---
 
@@ -34,39 +28,27 @@
 
 ### 1. Clone & Install
 
-```bash
-git clone https://github.com/imjustprism/grokness.git
-cd grokness
-bun install
-```
+    git clone https://github.com/imjustprism/grokness.git
+    cd grokness
+    bun install
 
 ### 2. Build
 
-Choose your target:
-
-```bash
-bun run build:chrome   # Chrome, Edge, Brave, etc.
-bun run build:firefox  # Firefox
-bun run build          # Both
-```
+    bun run build:chrome   # Chrome, Edge, Brave, etc.
+    bun run build:firefox  # Firefox
+    bun run build          # Both
 
 ### 3. Load in Your Browser
 
-<details>
-<summary><strong>Chromium (Chrome/Edge/Brave)</strong></summary>
-
+**Chromium (Chrome/Edge/Brave)**
 1. Go to `chrome://extensions/`
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select `dist/chrome`
-</details>
 
-<details>
-<summary><strong>Firefox</strong></summary>
-
+**Firefox**
 1. Go to `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on…**
+2. Click **Load Temporary Add‑on…**
 3. Select `dist/firefox/manifest.json`
-</details>
 
 ---
 
@@ -80,28 +62,25 @@ bun run build          # Both
 
 ## 🛠 Development
 
-```bash
-# Fork & clone
-git clone https://github.com/your-username/grokness.git
-cd grokness
+    # Fork & clone
+    git clone https://github.com/your-username/grokness.git
+    cd grokness
 
-# Create your feature branch
-git checkout -b feature/awesome-feature
+    # Create your feature branch
+    git checkout -b feature/awesome-feature
 
-# After coding...
-git add .
-git commit -m "feat: add awesome feature"
-git push origin feature/awesome-feature
+    # After coding...
+    git add .
+    git commit -m "feat: add awesome feature"
+    git push origin feature/awesome-feature
 
-# Open a PR against imjustprism/grokness
-```
+    # Open a PR against imjustprism/grokness
 
 ---
 
 ## 🤝 Contributing
 
-We ❤️ community contributions! Please:
-
+We ❤️ community contributions!
 - Read our [Contributing Guide](CONTRIBUTING.md)
 - Follow the [Code of Conduct](CODE_OF_CONDUCT.md)
 - Open issues or pull requests!
