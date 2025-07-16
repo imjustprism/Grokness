@@ -128,21 +128,26 @@ const screenCleanerPatch = (() => {
     let settingsListener: ((e: Event) => void) | null = null;
 
     function getActiveConfigs(): ElementHideConfig[] {
-        const activeConfigs = [...BASE_HIDE_CONFIGS];
-        if (settings.store.hideNewsletterBanner) {
-            activeConfigs.push(NEWSLETTER_HIDE_CONFIG);
+        try {
+            const activeConfigs = [...BASE_HIDE_CONFIGS];
+            if (settings.store.hideNewsletterBanner) {
+                activeConfigs.push(NEWSLETTER_HIDE_CONFIG);
+            }
+            if (settings.store.hideScreensaver) {
+                activeConfigs.push(SCREENSAVER_HIDE_CONFIG);
+            }
+            return activeConfigs;
+        } catch (error) {
+            logger.error("Failed to get active configs:", error);
+            return [];
         }
-        if (settings.store.hideScreensaver) {
-            activeConfigs.push(SCREENSAVER_HIDE_CONFIG);
-        }
-        return activeConfigs;
     }
 
     function setupHider() {
-        hider?.stopObserving();
-        hider = null;
-
         try {
+            hider?.stopObserving();
+            hider = null;
+
             hider = createDomElementHider(document.body, getActiveConfigs(), {
                 debounce: 0,
                 useRequestAnimationFrame: true,
@@ -152,7 +157,13 @@ const screenCleanerPatch = (() => {
             if (document.readyState === "complete") {
                 hider.hideImmediately();
             } else {
-                document.addEventListener("DOMContentLoaded", () => hider?.hideImmediately(), { once: true });
+                document.addEventListener("DOMContentLoaded", () => {
+                    try {
+                        hider?.hideImmediately();
+                    } catch (error) {
+                        logger.error("Failed to hide immediately on DOMContentLoaded:", error);
+                    }
+                }, { once: true });
             }
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
@@ -162,9 +173,9 @@ const screenCleanerPatch = (() => {
 
     return {
         apply() {
-            setupHider();
-
             try {
+                setupHider();
+
                 const modalObserverConfig: MutationObserverInit = {
                     childList: true,
                     subtree: true
@@ -191,9 +202,13 @@ const screenCleanerPatch = (() => {
             }
 
             settingsListener = (e: Event) => {
-                const event = e as CustomEvent;
-                if (event.detail.pluginId === "screen-cleaner") {
-                    setupHider();
+                try {
+                    const event = e as CustomEvent;
+                    if (event.detail.pluginId === "screen-cleaner") {
+                        setupHider();
+                    }
+                } catch (error) {
+                    logger.error("Error in settings listener:", error);
                 }
             };
             window.addEventListener("grok-settings-updated", settingsListener);
