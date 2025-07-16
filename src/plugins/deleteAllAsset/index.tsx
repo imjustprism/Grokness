@@ -28,22 +28,27 @@ const TOOLBAR_FINDER_CONFIG: ElementFinderConfig = {
 const DELETE_CONTAINER_ID = "grok-delete-all-container";
 
 async function fetchAllAssets(): Promise<Asset[]> {
-    let allAssets: Asset[] = [];
-    let pageToken: string | undefined = undefined;
+    try {
+        let allAssets: Asset[] = [];
+        let pageToken: string | undefined = undefined;
 
-    do {
-        const response = await grokAPI.assetRepository.listAssets({
-            pageSize: 50,
-            orderBy: "ORDER_BY_LAST_USE_TIME",
-            source: "SOURCE_ANY",
-            isLatest: true,
-            pageToken,
-        });
-        allAssets = allAssets.concat(response.assets);
-        pageToken = response.nextPageToken;
-    } while (pageToken);
+        do {
+            const response = await grokAPI.assetRepository.listAssets({
+                pageSize: 50,
+                orderBy: "ORDER_BY_LAST_USE_TIME",
+                source: "SOURCE_ANY",
+                isLatest: true,
+                pageToken,
+            });
+            allAssets = allAssets.concat(response.assets);
+            pageToken = response.nextPageToken;
+        } while (pageToken);
 
-    return allAssets;
+        return allAssets;
+    } catch (error) {
+        logger.error("Failed to fetch all assets:", error);
+        throw error;
+    }
 }
 
 function DeleteAllButton() {
@@ -148,81 +153,98 @@ const deleteAllPatch: IPatch = (() => {
     const observerManager = new MutationObserverManager();
 
     function mountDeleteButton() {
-        const toolbar = findElement(TOOLBAR_FINDER_CONFIG);
-        if (!toolbar) {
-            return;
-        }
-
-        const existingContainer = document.getElementById(DELETE_CONTAINER_ID);
-        if (existingContainer && toolbar.contains(existingContainer)) {
-            return;
-        }
-
-        unmountDeleteButton();
-
-        const sortButton = toolbar.querySelector('button[aria-haspopup="menu"]:has(svg.lucide-arrow-down-narrow-wide)') as HTMLElement | null;
-        if (!sortButton) {
-            return;
-        }
-
-        deleteContainer = document.createElement("div");
-        deleteContainer.id = DELETE_CONTAINER_ID;
-        deleteContainer.style.display = "none";
-        sortButton.after(deleteContainer);
-        deleteRoot = createRoot(deleteContainer);
-        deleteRoot.render(<DeleteAllButton />);
-
-        requestAnimationFrame(() => {
-            if (deleteContainer) {
-                deleteContainer.style.display = "";
+        try {
+            const toolbar = findElement(TOOLBAR_FINDER_CONFIG);
+            if (!toolbar) {
+                return;
             }
-        });
 
-        const { observe, disconnect } = observerManager.createDebouncedObserver({
-            target: toolbar,
-            options: { childList: true, subtree: true, attributes: true },
-            callback: () => mountDeleteButton(),
-            debounceDelay: 50,
-            useRaf: true,
-        });
-        observe();
-        toolbarObserverDisconnect = disconnect;
+            const existingContainer = document.getElementById(DELETE_CONTAINER_ID);
+            if (existingContainer && toolbar.contains(existingContainer)) {
+                return;
+            }
+
+            unmountDeleteButton();
+
+            const sortButton = toolbar.querySelector('button[aria-haspopup="menu"]:has(svg.lucide-arrow-down-narrow-wide)') as HTMLElement | null;
+            if (!sortButton) {
+                logger.warn("Sort button not found in toolbar");
+                return;
+            }
+
+            deleteContainer = document.createElement("div");
+            deleteContainer.id = DELETE_CONTAINER_ID;
+            deleteContainer.style.display = "none";
+            sortButton.after(deleteContainer);
+            deleteRoot = createRoot(deleteContainer);
+            deleteRoot.render(<DeleteAllButton />);
+
+            requestAnimationFrame(() => {
+                if (deleteContainer) {
+                    deleteContainer.style.display = "";
+                }
+            });
+
+            const { observe, disconnect } = observerManager.createDebouncedObserver({
+                target: toolbar,
+                options: { childList: true, subtree: true, attributes: true },
+                callback: () => mountDeleteButton(),
+                debounceDelay: 50,
+                useRaf: true,
+            });
+            observe();
+            toolbarObserverDisconnect = disconnect;
+        } catch (error) {
+            logger.error("Error mounting delete button:", error);
+        }
     }
 
     function unmountDeleteButton() {
-        deleteRoot?.unmount();
-        deleteContainer?.remove();
-        deleteRoot = null;
-        deleteContainer = null;
+        try {
+            deleteRoot?.unmount();
+            deleteContainer?.remove();
+            deleteRoot = null;
+            deleteContainer = null;
+        } catch (error) {
+            logger.error("Error unmounting delete button:", error);
+        }
     }
 
     return {
         apply() {
-            const mutationCallback = () => {
-                mountDeleteButton();
-            };
+            try {
+                const mutationCallback = () => {
+                    mountDeleteButton();
+                };
 
-            const { observe: bodyObserve, disconnect: bodyDisconnect } = observerManager.createDebouncedObserver({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: mutationCallback,
-                debounceDelay: 50,
-                useRaf: true,
-            });
+                const { observe: bodyObserve, disconnect: bodyDisconnect } = observerManager.createDebouncedObserver({
+                    target: document.body,
+                    options: { childList: true, subtree: true },
+                    callback: mutationCallback,
+                    debounceDelay: 50,
+                    useRaf: true,
+                });
 
-            bodyObserve();
-            bodyObserverDisconnect = bodyDisconnect;
+                bodyObserve();
+                bodyObserverDisconnect = bodyDisconnect;
 
-            mutationCallback();
+                mutationCallback();
 
-            document.addEventListener("visibilitychange", mutationCallback);
+                document.addEventListener("visibilitychange", mutationCallback);
+            } catch (error) {
+                logger.error("Error applying delete all patch:", error);
+            }
         },
         remove() {
-            toolbarObserverDisconnect?.();
-            bodyObserverDisconnect?.();
-            unmountDeleteButton();
-            document.removeEventListener("visibilitychange", () => { });
-            observerManager.disconnectAll();
+            try {
+                toolbarObserverDisconnect?.();
+                bodyObserverDisconnect?.();
+                unmountDeleteButton();
+                document.removeEventListener("visibilitychange", () => { });
+                observerManager.disconnectAll();
+            } catch (error) {
+                logger.error("Error removing delete all patch:", error);
+            }
         },
     };
 })();
