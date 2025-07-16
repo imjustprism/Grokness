@@ -9,13 +9,13 @@ import { InputField } from "@components/InputField";
 import { LucideIcon } from "@components/LucideIcon";
 import { Modal } from "@components/Modal";
 import { Switch } from "@components/Switch";
-import { usePluginSettings } from "@hooks/usePluginSettings";
+import { usePluginSettings } from "@plugins/_core/settingsUI/hooks/usePluginSettings";
 import type { InferOptionType, IPlugin, PluginOptionBase, PluginOptions } from "@utils/types";
 import clsx from "clsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-const CARD_HEIGHT = 120; // Configurable fixed height in pixels
-const CARD_BORDER_WIDTH = 1; // Default border width
+const CARD_HEIGHT = 120;
+const CARD_BORDER_WIDTH = 1;
 
 /**
  * Props for the PluginCard component
@@ -32,7 +32,7 @@ export interface PluginCardProps {
     /** Callback function when plugin toggle state changes */
     onToggle?: (pluginName: string, isDisabled: boolean) => void;
     /** Callback function when plugin restart state changes */
-    onRestartChange?: (pluginName: string, requiresRestart: boolean) => void;
+    onRestartChange?: (pluginName: string, requiresRestart: boolean, source: "toggle" | "settings") => void;
 }
 
 /**
@@ -150,11 +150,13 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     onRestartChange,
 }) => {
     const [showModal, setShowModal] = useState(false);
-    const { settings, handleSettingChange } = usePluginSettings(plugin, onRestartChange);
+    const { settings, handleSettingChange } = usePluginSettings(plugin, onRestartChange ? (name: string, req: boolean, source: "toggle" | "settings") => onRestartChange(name, req, source) : undefined);
 
     const pluginStorageKey = `plugin-disabled:${plugin.id}`;
 
-    const [isEnabled, setIsEnabled] = useState(() => !localStorage.getItem(pluginStorageKey));
+    const initialEnabled = useMemo(() => !localStorage.getItem(pluginStorageKey), [pluginStorageKey]);
+
+    const [isEnabled, setIsEnabled] = useState(initialEnabled);
 
     const hasSettings = Object.keys(plugin.options).length > 0;
 
@@ -172,9 +174,10 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         }
         onToggle?.(plugin.name, !checked);
         if (onRestartChange && plugin.requiresRestart) {
-            onRestartChange(plugin.name, true);
+            const requiresRestart = checked !== initialEnabled;
+            onRestartChange(plugin.name, requiresRestart, "toggle");
         }
-    }, [plugin, pluginStorageKey, onToggle, onRestartChange]);
+    }, [plugin, pluginStorageKey, onToggle, onRestartChange, initialEnabled]);
 
     useEffect(() => {
         const storageListener = (e: StorageEvent) => {
@@ -200,10 +203,7 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         value: InferOptionType<PluginOptions[K]>
     ) => {
         handleSettingChange(key as string, value);
-        if (onRestartChange && plugin.requiresRestart) {
-            onRestartChange(plugin.name, true);
-        }
-    }, [handleSettingChange, onRestartChange, plugin]);
+    }, [handleSettingChange]);
 
     const renderControl = (key: string, option: PluginOptionBase, currentValue: unknown) => {
         const labelId = `setting-label-${plugin.id}-${key}`;
@@ -264,8 +264,12 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                     borderStyle: "solid",
                     borderColor: "var(--border-l1)",
                 }}
-                onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)")}
-                onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)")}
+                onMouseEnter={e => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={e => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                }}
             >
                 <PluginActions
                     hasSettings={hasSettings}

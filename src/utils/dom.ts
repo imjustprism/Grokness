@@ -66,10 +66,7 @@ export function querySelector(
         return null;
     }
     try {
-        const element = root.querySelector(selector) as HTMLElement | null;
-        if (!element) {
-        }
-        return element;
+        return root.querySelector(selector) as HTMLElement | null;
     } catch (error) {
         domLogger.warn(`Invalid selector: ${selector}`, error);
         return null;
@@ -95,10 +92,7 @@ export function querySelectorAll(
         return [];
     }
     try {
-        const elements = Array.from(root.querySelectorAll(selector)) as HTMLElement[];
-        if (elements.length === 0) {
-        }
-        return elements;
+        return Array.from(root.querySelectorAll(selector)) as HTMLElement[];
     } catch (error) {
         domLogger.warn(`Invalid selector: ${selector}`, error);
         return [];
@@ -127,7 +121,19 @@ export function findElement(config: ElementFinderConfig): HTMLElement | null {
             return null;
         }
     } else {
-        candidates = querySelectorAll(config.selector, root);
+        let enhancedSelector = config.selector;
+        if (config.classContains) {
+            enhancedSelector += config.classContains.map(cls => `.${CSS.escape(cls)}`).join("");
+        }
+        if (config.idContains) {
+            const escapedId = config.idContains.replace(/"/g, '\\"');
+            enhancedSelector += `[id*="${escapedId}"]`;
+        }
+        if (config.ariaLabel) {
+            const escapedAria = config.ariaLabel.replace(/"/g, '\\"');
+            enhancedSelector += `[aria-label="${escapedAria}"]`;
+        }
+        candidates = querySelectorAll(enhancedSelector, root);
     }
 
     for (const el of candidates) {
@@ -152,23 +158,8 @@ export function findElement(config: ElementFinderConfig): HTMLElement | null {
         }
 
         if (match && config.svgPartialD) {
-            const paths = (config.matchDescendants ? el : el).querySelectorAll("svg path");
-            let hasMatch = false;
-            for (const path of paths) {
-                const d = path.getAttribute("d") ?? "";
-                if (d.includes(config.svgPartialD)) {
-                    hasMatch = true;
-                    break;
-                }
-            }
-            if (!hasMatch) {
-                match = false;
-            }
-        }
-
-        if (match && config.ariaLabel) {
-            const aria = el.getAttribute("aria-label") ?? "";
-            if (aria !== config.ariaLabel) {
+            const escapedD = config.svgPartialD.replace(/"/g, '\\"');
+            if (!el.querySelector(`svg path[d*="${escapedD}"]`)) {
                 match = false;
             }
         }
@@ -176,20 +167,6 @@ export function findElement(config: ElementFinderConfig): HTMLElement | null {
         if (match && config.ariaLabelRegex) {
             const aria = el.getAttribute("aria-label") ?? "";
             if (!config.ariaLabelRegex.test(aria)) {
-                match = false;
-            }
-        }
-
-        if (match && config.classContains) {
-            const classes = el.classList;
-            if (!config.classContains.every(cls => classes.contains(cls))) {
-                match = false;
-            }
-        }
-
-        if (match && config.idContains) {
-            const id = el.id ?? "";
-            if (!id.includes(config.idContains)) {
                 match = false;
             }
         }
@@ -340,19 +317,23 @@ export function hideDomElements(config: ElementHideConfig): number {
                 matchesCondition = config.regexPattern.test(targetValue);
             }
 
-            if (element.hasAttribute(markerAttr)) {
-                continue;
-            }
-
             if (matchesCondition) {
-                element.setAttribute(markerAttr, "true");
-                if (config.removeFromDom) {
-                    element.remove();
+                if (!element.hasAttribute(markerAttr)) {
+                    element.setAttribute(markerAttr, "true");
+                    if (config.removeFromDom) {
+                        element.remove();
+                    } else {
+                        element.style.setProperty("display", "none", "important");
+                        element.style.setProperty("visibility", "hidden", "important");
+                    }
+                    countHidden++;
                 }
-                countHidden++;
             } else {
-                element.style.setProperty("display", "flex", "important");
-                element.style.setProperty("visibility", "visible", "important");
+                if (element.hasAttribute(markerAttr)) {
+                    element.removeAttribute(markerAttr);
+                    element.style.removeProperty("display");
+                    element.style.removeProperty("visibility");
+                }
             }
         }
     } catch (error) {
@@ -371,8 +352,13 @@ export function createDomElementHider(
     let isHiding = false;
     let styleManager: { cleanup: () => void; } | null = null;
 
-    if (hiderOptions.injectCss) {
-        const css = hideConfigs.map(config => `${config.selector} { display: none !important; visibility: hidden !important; }`).join("\n");
+    const cssHideConfigs = hiderOptions.injectCss
+        ? hideConfigs.filter(config => !config.condition && !config.regexPattern && !config.removeFromDom)
+        : [];
+    const jsHideConfigs = hideConfigs.filter(config => config.condition || config.regexPattern || config.removeFromDom || !hiderOptions.injectCss);
+
+    if (cssHideConfigs.length > 0) {
+        const css = cssHideConfigs.map(config => `${config.selector} { display: none !important; visibility: hidden !important; }`).join("\n");
         styleManager = injectStyles(css, "element-hider-preemptive");
     }
 
@@ -381,12 +367,10 @@ export function createDomElementHider(
             return;
         }
         isHiding = true;
-        requestAnimationFrame(() => {
-            for (const config of hideConfigs) {
-                hideDomElements(config);
-            }
-            isHiding = false;
-        });
+        for (const config of jsHideConfigs) {
+            hideDomElements(config);
+        }
+        isHiding = false;
     };
 
     const debouncedPerformHide = () => {
@@ -410,7 +394,7 @@ export function createDomElementHider(
                     continue;
                 }
                 const element = node as HTMLElement;
-                if (hideConfigs.some(config => element.matches(config.selector) || !!element.querySelector(config.selector))) {
+                if (jsHideConfigs.some(config => element.matches(config.selector) || !!element.querySelector(config.selector))) {
                     hasChanges = true;
                     break;
                 }
@@ -420,14 +404,26 @@ export function createDomElementHider(
             }
         }
         if (hasChanges) {
-            debouncedPerformHide();
+            if (hiderOptions.debounce === 0) {
+                performHide();
+            } else {
+                debouncedPerformHide();
+            }
         }
     });
 
+    const noJsNeeded = jsHideConfigs.length === 0;
+
     return {
-        startObserving: () => mutationObserver.observe(targetElement, { childList: true, subtree: true }),
+        startObserving: () => {
+            if (!noJsNeeded) {
+                mutationObserver.observe(targetElement, { childList: true, subtree: true });
+            }
+        },
         stopObserving: () => {
-            mutationObserver.disconnect();
+            if (!noJsNeeded) {
+                mutationObserver.disconnect();
+            }
             if (debounceTimer !== null) {
                 if (hiderOptions.useRequestAnimationFrame) {
                     cancelAnimationFrame(debounceTimer);

@@ -72,7 +72,6 @@ function DeleteAllButton() {
             try {
                 const assets = await fetchAllAssets();
                 if (assets.length === 0) {
-                    logger.info("No assets to delete.");
                     setIsConfirming(false);
                     return;
                 }
@@ -82,7 +81,6 @@ function DeleteAllButton() {
                         grokAPI.assetRepository.deleteAsset({ assetId: asset.assetId })
                     )
                 );
-                logger.info(`Successfully deleted ${assets.length} assets.`);
                 window.location.reload();
             } catch (error) {
                 logger.error("Failed to delete assets:", error);

@@ -48,7 +48,8 @@ interface SettingsPanelProps {
     /** Callback for handling restart changes */
     handleRestartChange: (
         pluginName: string,
-        isRestartRequired: boolean
+        requiresRestart: boolean,
+        source: "toggle" | "settings"
     ) => void;
 }
 

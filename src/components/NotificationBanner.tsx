@@ -35,10 +35,12 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
     variant = "warning",
 }) => {
     const variantStyles = {
-        warning: "from-gray-900 to-gray-800 border-gray-700",
-        info: "from-blue-900 to-blue-800 border-blue-700",
-        error: "from-red-900 to-red-800 border-red-700",
+        warning: "from-yellow-800/50 to-yellow-700/50 border-yellow-600",
+        info: "from-blue-900/50 to-blue-800/50 border-blue-700",
+        error: "from-red-900/50 to-red-800/50 border-red-700",
     };
+
+    const buttonColor = variant === "error" ? "danger" : variant === "warning" ? "warning" : "default";
 
     return (
         <div className={clsx("w-full mb-6", className)}>
@@ -59,13 +61,7 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
                     <Button
                         onClick={onAction}
                         variant="outline"
-                        color={
-                            variant === "warning"
-                                ? "warning"
-                                : variant === "error"
-                                    ? "danger"
-                                    : "default"
-                        }
+                        color={buttonColor}
                     >
                         {actionText}
                     </Button>

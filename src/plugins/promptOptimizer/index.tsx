@@ -168,7 +168,6 @@ const promptOptimizerPatch: IPatch = (() => {
 
                 const initialPrompts = querySelectorAll(USER_PROMPT_SELECTOR);
                 if (initialPrompts.length === 0) {
-                    logger.info("No initial prompts found");
                 }
                 initialPrompts.forEach(addCollapseToPrompt);
             } catch (error) {
