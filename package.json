@@ -3,6 +3,8 @@
     "author": {
         "name": "Prism"
     },
+    "license": "GPL-3.0",
+    "namespace": "https://github.com/imjustprism/grokness",
     "version": "1.0.3",
     "private": true,
     "description": "A cute Grok extension",

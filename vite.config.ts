@@ -10,8 +10,9 @@ const __dirname = path.dirname(__filename);
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
 const userscriptHeader = `// ==UserScript==
 // @name         ${pkg.name ?? 'grokness'}
+// @namespace    ${pkg.namespace ?? 'https://github.com/imjustprism/grokness'}
 // @description  ${pkg.description ?? 'A cute Grok extension'}
-// @version      ${pkg.version ?? '1.0.3'}
+// @version      ${pkg.version}
 // @author       ${pkg.author?.name ?? 'Prism'}
 // @license      ${pkg.license ?? 'GPL-3.0'}
 // @match        https://grok.com/*
@@ -52,7 +53,7 @@ export default defineConfig(({ mode }) => {
                 emptyOutDir: true,
                 target: 'esnext',
                 sourcemap: mode === 'development',
-                minify: mode === 'production' ? 'esbuild' : false,
+                minify: false,
                 lib: {
                     entry: path.resolve(__dirname, 'src/PluginManager.ts'),
                     name: pkg.name,
@@ -78,7 +79,7 @@ export default defineConfig(({ mode }) => {
             emptyOutDir: true,
             target: 'esnext',
             sourcemap: mode === 'development',
-            minify: mode === 'production' ? 'esbuild' : false,
+            minify: false,
             rollupOptions: {
                 output: {
                     chunkFileNames: 'assets/[name]-[hash].js'
