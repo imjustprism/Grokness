@@ -6,15 +6,18 @@
 
 import { SettingsPanel } from "@plugins/_core/settingsUI/components/SettingsPanel";
 import { SettingsTab } from "@plugins/_core/settingsUI/components/SettingsTab";
+import { useSettingsLogic } from "@plugins/_core/settingsUI/hooks/useSettingsLogic";
+import { useTabLogic } from "@plugins/_core/settingsUI/hooks/useTabLogic";
 import styles from "@plugins/_core/settingsUI/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { injectStyles } from "@utils/dom";
-import { useSettingsLogic } from "@utils/hooks/useSettingsLogic";
-import { useTabLogic } from "@utils/hooks/useTabLogic";
+import { injectStyles, MutationObserverManager, querySelectorAll } from "@utils/dom";
+import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+
+const settingsLogger = new Logger("Settings", "#10b981");
 
 const SettingsUIComponent: React.FC<{ dialogElement: HTMLElement; }> = ({ dialogElement }) => {
     const {
@@ -56,12 +59,14 @@ const SettingsUIComponent: React.FC<{ dialogElement: HTMLElement; }> = ({ dialog
 };
 
 let styleManager: { styleElement: HTMLStyleElement; cleanup: () => void; } | null = null;
-let mutationObserver: MutationObserver | null = null;
+let mutationObserverManager: MutationObserverManager | null = null;
 const rootsMap = new Map<HTMLElement, Root>();
 
 const settingsPatch: IPatch = {
     apply() {
         styleManager = injectStyles(styles, "settings-ui-styles");
+
+        mutationObserverManager = new MutationObserverManager();
 
         const attachToDialog = (dialog: HTMLElement) => {
             if (dialog.querySelector("#grokness-root")) {
@@ -75,7 +80,7 @@ const settingsPatch: IPatch = {
                 root.render(<SettingsUIComponent dialogElement={dialog} />);
                 rootsMap.set(dialog, root);
             } catch (err) {
-                console.warn("[SettingsUI] mount failed:", err);
+                settingsLogger.warn("mount failed:", err);
             }
         };
 
@@ -91,42 +96,40 @@ const settingsPatch: IPatch = {
             }
         };
 
-        mutationObserver = new MutationObserver(records => {
-            records.forEach(record => {
-                Array.from(record.addedNodes).forEach(node => {
-                    if (
-                        node instanceof HTMLElement &&
-                        node.matches('div[role="dialog"][data-state="open"]')
-                    ) {
-                        attachToDialog(node);
-                    }
+        const { observe } = mutationObserverManager.createObserver({
+            target: document.body,
+            options: { childList: true, subtree: true },
+            callback: records => {
+                records.forEach(record => {
+                    Array.from(record.addedNodes).forEach(node => {
+                        if (
+                            node instanceof HTMLElement &&
+                            node.matches('div[role="dialog"][data-state="open"]')
+                        ) {
+                            attachToDialog(node);
+                        }
+                    });
+                    Array.from(record.removedNodes).forEach(node => {
+                        if (
+                            node instanceof HTMLElement &&
+                            node.matches('div[role="dialog"][data-state="open"]')
+                        ) {
+                            detachFromDialog(node);
+                        }
+                    });
                 });
-                Array.from(record.removedNodes).forEach(node => {
-                    if (
-                        node instanceof HTMLElement &&
-                        node.matches('div[role="dialog"][data-state="open"]')
-                    ) {
-                        detachFromDialog(node);
-                    }
-                });
-            });
+            },
         });
 
-        mutationObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-        });
+        observe();
 
-        document
-            .querySelectorAll<HTMLElement>(
-                'div[role="dialog"][data-state="open"]'
-            )
+        querySelectorAll('div[role="dialog"][data-state="open"]')
             .forEach(attachToDialog);
 
         window.addEventListener(
             "unload",
             () => {
-                mutationObserver?.disconnect();
+                mutationObserverManager?.disconnectAll();
                 rootsMap.forEach(root => root.unmount());
                 rootsMap.clear();
             },
@@ -136,8 +139,8 @@ const settingsPatch: IPatch = {
     remove() {
         styleManager?.cleanup();
         styleManager = null;
-        mutationObserver?.disconnect();
-        mutationObserver = null;
+        mutationObserverManager?.disconnectAll();
+        mutationObserverManager = null;
         rootsMap.forEach(root => root.unmount());
         rootsMap.clear();
     }
@@ -145,7 +148,7 @@ const settingsPatch: IPatch = {
 
 export default definePlugin({
     name: "Settings",
-    description: "Adds a settings UI to manage plugins",
+    description: "Adds a settings to manage plugins",
     authors: [Devs.Prism],
     required: true,
     category: "utility",

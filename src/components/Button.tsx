@@ -9,7 +9,7 @@ import React, { type ElementType } from "react";
 
 export type ButtonVariant = "outline" | "solid" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
-export type ButtonColor = "default" | "danger";
+export type ButtonColor = "default" | "danger" | "warning";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: ButtonVariant;
@@ -68,6 +68,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         const colorClasses = {
             default: "",
             danger: "text-fg-danger border-[hsl(var(--fg-danger))] bg-[hsl(var(--fg-danger))/0.1] hover:bg-[hsl(var(--fg-danger))/0.2] [&_svg]:text-fg-danger [&_svg]:hover:text-fg-danger",
+            warning: "text-yellow-400 border-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20 [&_svg]:text-yellow-400 [&_svg]:hover:text-yellow-300",
         };
 
         const iconHoverClass = color === "default" && variant === "outline" ? "[&_svg]:hover:text-fg-primary" : "";
