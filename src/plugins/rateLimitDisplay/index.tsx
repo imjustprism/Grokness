@@ -8,7 +8,13 @@ import { grokAPI } from "@api/api";
 import type { RateLimitData } from "@api/interfaces";
 import { IconButton } from "@components/IconButton";
 import { Devs } from "@utils/constants";
-import { commonFinderConfigs, commonSelectors, findElement, MutationObserverManager, querySelector, waitForElementByConfig } from "@utils/dom";
+import {
+    type ElementFinderConfig,
+    findElement,
+    MutationObserverManager,
+    querySelector,
+    waitForElementByConfig,
+} from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePluginSettings } from "@utils/settings";
 import { definePlugin, type IPatch } from "@utils/types";
@@ -60,6 +66,36 @@ const ELEMENT_WAIT_TIMEOUT_MS = 5000;
 
 const RATE_LIMIT_CONTAINER_ID = "grok-rate-limit-container";
 
+const commonSelectors = {
+    queryBar: ".query-bar",
+    modelButton: ".query-bar button:has(span.inline-block.text-primary)",
+    modelSpan: ".query-bar button span.inline-block.text-primary",
+    textarea: ".query-bar textarea",
+    attachButton: '.query-bar button.group\\/attach-button, .query-bar button svg path[d*="M10 9V15"]',
+} as const;
+
+const commonFinderConfigs = {
+    thinkButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        ariaLabel: "Think",
+        svgPartialD: "M19 9C19 12.866",
+    } as ElementFinderConfig,
+    deepSearchButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        ariaLabelRegex: /Deep(er)?Search/i,
+        svgPartialD: "M19.2987 8.84667",
+    } as ElementFinderConfig,
+    attachButton: {
+        selector: `${commonSelectors.queryBar} button`,
+        classContains: ["group/attach-button"],
+        svgPartialD: "M10 9V15",
+    } as ElementFinderConfig,
+    modelSelectorButton: {
+        selector: commonSelectors.modelButton,
+        attrRegex: { attr: "aria-haspopup", regex: /menu/ },
+    } as ElementFinderConfig,
+} as const;
+
 const cachedRateLimits: Record<string, Record<string, RateLimitData | undefined>> = {};
 const observerManager = new MutationObserverManager();
 
@@ -93,31 +129,38 @@ function useCurrentModel(): string {
     const [model, setModel] = useState<string>(DEFAULT_MODEL);
 
     useEffect(() => {
-        const queryBar = querySelector(commonSelectors.queryBar);
-        if (!queryBar) {
-            return;
-        }
-
-        const updateModel = () => {
-            const modelSpan = querySelector(commonSelectors.modelSpan, queryBar);
-            if (!modelSpan) {
+        try {
+            const queryBar = querySelector(commonSelectors.queryBar);
+            if (!queryBar) {
+                logger.warn("Query bar not found for model detection");
                 return;
             }
-            const rawName = modelSpan.textContent?.trim() ?? DEFAULT_MODEL;
-            setModel(normalizeModelName(rawName));
-        };
 
-        const { observe, disconnect } = observerManager.createDebouncedObserver({
-            target: queryBar,
-            options: { childList: true, subtree: true, characterData: true, attributes: true },
-            callback: updateModel,
-            debounceDelay: DEBOUNCE_DELAY_MS,
-        });
+            const updateModel = () => {
+                const modelSpan = querySelector(commonSelectors.modelSpan, queryBar);
+                if (!modelSpan) {
+                    logger.warn("Model span not found in query bar");
+                    return;
+                }
+                const rawName = modelSpan.textContent?.trim() ?? DEFAULT_MODEL;
+                setModel(normalizeModelName(rawName));
+            };
 
-        updateModel();
-        observe();
+            const { observe, disconnect } = observerManager.createDebouncedObserver({
+                target: queryBar,
+                options: { childList: true, subtree: true, characterData: true, attributes: true },
+                callback: updateModel,
+                debounceDelay: DEBOUNCE_DELAY_MS,
+            });
 
-        return disconnect;
+            updateModel();
+            observe();
+
+            return disconnect;
+        } catch (error) {
+            logger.error("Error in useCurrentModel hook:", error);
+            return () => { };
+        }
     }, []);
 
     return model;
@@ -133,45 +176,62 @@ function useCurrentRequestKind(currentModel: string): string {
         }
 
         (async () => {
-            const thinkButton = await waitForElementByConfig(commonFinderConfigs.thinkButton, ELEMENT_WAIT_TIMEOUT_MS);
-            const searchButton = await waitForElementByConfig(commonFinderConfigs.deepSearchButton, ELEMENT_WAIT_TIMEOUT_MS);
+            try {
+                const thinkButton = await waitForElementByConfig(commonFinderConfigs.thinkButton, ELEMENT_WAIT_TIMEOUT_MS);
+                const searchButton = await waitForElementByConfig(commonFinderConfigs.deepSearchButton, ELEMENT_WAIT_TIMEOUT_MS);
 
-            if (!thinkButton || !searchButton) {
-                return setRequestKind(DEFAULT_KIND);
-            }
-
-            const updateKind = () => {
-                if (thinkButton.getAttribute("aria-pressed") === "true") {
-                    setRequestKind("REASONING");
-                } else if (searchButton.getAttribute("aria-pressed") === "true") {
-                    const modeSpan = querySelector("span", searchButton);
-                    const modeText = modeSpan?.textContent?.trim() ?? "";
-                    setRequestKind(/deeper/i.test(modeText) ? "DEEPERSEARCH" : /deep/i.test(modeText) ? "DEEPSEARCH" : DEFAULT_KIND);
-                } else {
-                    setRequestKind(DEFAULT_KIND);
+                if (!thinkButton) {
+                    logger.warn("Think button not found");
                 }
-            };
+                if (!searchButton) {
+                    logger.warn("Search button not found");
+                }
+                if (!thinkButton || !searchButton) {
+                    return setRequestKind(DEFAULT_KIND);
+                }
 
-            updateKind();
+                const updateKind = () => {
+                    if (thinkButton.getAttribute("aria-pressed") === "true") {
+                        setRequestKind("REASONING");
+                    } else if (searchButton.getAttribute("aria-pressed") === "true") {
+                        const modeSpan = querySelector("span", searchButton);
+                        if (!modeSpan) {
+                            logger.warn("Mode span not found in search button");
+                            setRequestKind(DEFAULT_KIND);
+                            return;
+                        }
+                        const modeText = modeSpan?.textContent?.trim() ?? "";
+                        setRequestKind(/deeper/i.test(modeText) ? "DEEPERSEARCH" : /deep/i.test(modeText) ? "DEEPSEARCH" : DEFAULT_KIND);
+                    } else {
+                        setRequestKind(DEFAULT_KIND);
+                    }
+                };
 
-            const thinkObs = observerManager.createObserver({
-                target: thinkButton,
-                options: { attributes: true, attributeFilter: ["aria-pressed", "class"] },
-                callback: updateKind,
-            });
-            thinkObs.observe();
+                updateKind();
 
-            const searchObs = observerManager.createObserver({
-                target: searchButton,
-                options: { attributes: true, attributeFilter: ["aria-pressed", "class"], childList: true, subtree: true, characterData: true },
-                callback: updateKind,
-            });
-            searchObs.observe();
+                const thinkObs = observerManager.createObserver({
+                    target: thinkButton,
+                    options: { attributes: true, attributeFilter: ["aria-pressed", "class"] },
+                    callback: updateKind,
+                });
+                thinkObs.observe();
 
-            return () => {
-                thinkObs.disconnect();
-                searchObs.disconnect();
-            };
+                const searchObs = observerManager.createObserver({
+                    target: searchButton,
+                    options: { attributes: true, attributeFilter: ["aria-pressed"], childList: true, subtree: true, characterData: true },
+                    callback: updateKind,
+                });
+                searchObs.observe();
+
+                return () => {
+                    thinkObs.disconnect();
+                    searchObs.disconnect();
+                };
+            } catch (error) {
+                logger.error("Error in useCurrentRequestKind hook:", error);
+                setRequestKind(DEFAULT_KIND);
+                return () => { };
+            }
         })();
     }, [currentModel]);
 
@@ -185,71 +245,84 @@ function RateLimitComponent() {
     const [isLoading, setIsLoading] = useState(false);
 
     const updateRateLimit = async (force: boolean = false) => {
-        setIsLoading(true);
-        const data = await fetchRateLimit(currentModel, currentRequestKind, force);
-        setRateLimit(data);
-        setIsLoading(false);
+        try {
+            setIsLoading(true);
+            const data = await fetchRateLimit(currentModel, currentRequestKind, force);
+            setRateLimit(data);
+        } catch (error) {
+            logger.error("Error updating rate limit:", error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     useEffect(() => {
-        updateRateLimit();
+        try {
+            updateRateLimit();
 
-        let intervalId: ReturnType<typeof setInterval> | null = null;
-        if (settings.store.autoRefresh) {
-            const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
-            intervalId = setInterval(updateRateLimit, intervalMs);
-        }
+            let intervalId: ReturnType<typeof setInterval> | null = null;
+            if (settings.store.autoRefresh) {
+                const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
+                intervalId = setInterval(updateRateLimit, intervalMs);
+            }
 
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === "visible") {
-                updateRateLimit();
-                if (settings.store.autoRefresh && !intervalId) {
-                    const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
-                    intervalId = setInterval(updateRateLimit, intervalMs);
+            const handleVisibilityChange = () => {
+                if (document.visibilityState === "visible") {
+                    updateRateLimit();
+                    if (settings.store.autoRefresh && !intervalId) {
+                        const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
+                        intervalId = setInterval(updateRateLimit, intervalMs);
+                    }
+                } else {
+                    if (intervalId) {
+                        clearInterval(intervalId);
+                        intervalId = null;
+                    }
                 }
-            } else {
+            };
+
+            document.addEventListener("visibilitychange", handleVisibilityChange);
+
+            return () => {
+                document.removeEventListener("visibilitychange", handleVisibilityChange);
                 if (intervalId) {
                     clearInterval(intervalId);
-                    intervalId = null;
                 }
-            }
-        };
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-
-        return () => {
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-            if (intervalId) {
-                clearInterval(intervalId);
-            }
-        };
+            };
+        } catch (error) {
+            logger.error("Error in RateLimitComponent auto-refresh setup:", error);
+            return () => { };
+        }
     }, [currentModel, currentRequestKind, settings.store.autoRefresh, settings.store.refreshInterval]);
 
     useEffect(() => {
         (async () => {
-            const textarea = await waitForElementByConfig({ selector: commonSelectors.textarea }, ELEMENT_WAIT_TIMEOUT_MS);
-            const sendButton = await waitForElementByConfig(commonFinderConfigs.submitButton, ELEMENT_WAIT_TIMEOUT_MS);
-
-            if (!textarea || !sendButton) {
-                return;
-            }
-
-            const handleSubmit = () => {
-                setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
-            };
-
-            textarea.addEventListener("keydown", (e: KeyboardEvent) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                    handleSubmit();
+            try {
+                const textarea = await waitForElementByConfig({ selector: commonSelectors.textarea }, ELEMENT_WAIT_TIMEOUT_MS);
+                if (!textarea) {
+                    logger.warn("Textarea not found for submit detection");
+                    return;
                 }
-            });
 
-            sendButton.addEventListener("click", handleSubmit);
+                const handleSubmit = () => {
+                    setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
+                };
 
-            return () => {
-                textarea.removeEventListener("keydown", () => { });
-                sendButton.removeEventListener("click", () => { });
-            };
+                const keydownListener = (e: KeyboardEvent) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                        handleSubmit();
+                    }
+                };
+
+                textarea.addEventListener("keydown", keydownListener);
+
+                return () => {
+                    textarea.removeEventListener("keydown", keydownListener);
+                };
+            } catch (error) {
+                logger.error("Error setting up submit detection:", error);
+                return () => { };
+            }
         })();
     }, [currentModel, currentRequestKind]);
 
@@ -292,78 +365,96 @@ const rateLimitPatch: IPatch = (() => {
     let bodyObserverDisconnect: (() => void) | null = null;
 
     function mountRateLimit() {
-        const queryBar = querySelector(commonSelectors.queryBar);
-        if (!queryBar) {
-            return;
-        }
-
-        const attachButton = findElement({ ...commonFinderConfigs.attachButton, root: queryBar });
-        if (!attachButton) {
-            return;
-        }
-
-        const existingContainer = document.getElementById(RATE_LIMIT_CONTAINER_ID);
-        if (existingContainer) {
-            if (attachButton.parentElement?.contains(existingContainer)) {
+        try {
+            const queryBar = querySelector(commonSelectors.queryBar);
+            if (!queryBar) {
+                logger.warn("Query bar not found for mounting rate limit");
                 return;
             }
-            existingContainer.remove();
-        }
 
-        rateLimitContainer = document.createElement("div");
-        rateLimitContainer.id = RATE_LIMIT_CONTAINER_ID;
-        attachButton.insertAdjacentElement("afterend", rateLimitContainer);
-        rateLimitRoot = createRoot(rateLimitContainer);
-        rateLimitRoot.render(<RateLimitComponent />);
+            const attachButton = findElement({ ...commonFinderConfigs.attachButton, root: queryBar });
+            if (!attachButton) {
+                logger.warn("Attach button not found in query bar");
+                return;
+            }
+
+            const existingContainer = document.getElementById(RATE_LIMIT_CONTAINER_ID);
+            if (existingContainer) {
+                if (attachButton.parentElement?.contains(existingContainer)) {
+                    return;
+                }
+                existingContainer.remove();
+            }
+
+            rateLimitContainer = document.createElement("div");
+            rateLimitContainer.id = RATE_LIMIT_CONTAINER_ID;
+            attachButton.insertAdjacentElement("afterend", rateLimitContainer);
+            rateLimitRoot = createRoot(rateLimitContainer);
+            rateLimitRoot.render(<RateLimitComponent />);
+        } catch (error) {
+            logger.error("Error mounting rate limit component:", error);
+        }
     }
 
     function unmountRateLimit() {
-        rateLimitRoot?.unmount();
-        rateLimitContainer?.remove();
-        rateLimitRoot = null;
-        rateLimitContainer = null;
+        try {
+            rateLimitRoot?.unmount();
+            rateLimitContainer?.remove();
+            rateLimitRoot = null;
+            rateLimitContainer = null;
+        } catch (error) {
+            logger.error("Error unmounting rate limit component:", error);
+        }
     }
 
     return {
         apply() {
-            const mutationCallback = () => {
-                const queryBar = querySelector(commonSelectors.queryBar);
-                if (queryBar) {
-                    mountRateLimit();
-                    if (queryBarObserverDisconnect) {
-                        queryBarObserverDisconnect();
+            try {
+                const mutationCallback = () => {
+                    const queryBar = querySelector(commonSelectors.queryBar);
+                    if (queryBar) {
+                        mountRateLimit();
+                        if (queryBarObserverDisconnect) {
+                            queryBarObserverDisconnect();
+                        }
+                        const { observe, disconnect } = observerManager.createDebouncedObserver({
+                            target: queryBar,
+                            options: { childList: true, subtree: true, attributes: true },
+                            callback: mountRateLimit,
+                            debounceDelay: DEBOUNCE_DELAY_MS,
+                        });
+                        observe();
+                        queryBarObserverDisconnect = disconnect;
                     }
-                    const { observe, disconnect } = observerManager.createDebouncedObserver({
-                        target: queryBar,
-                        options: { childList: true, subtree: true, attributes: true },
-                        callback: mountRateLimit,
-                        debounceDelay: DEBOUNCE_DELAY_MS,
-                    });
-                    observe();
-                    queryBarObserverDisconnect = disconnect;
-                }
-            };
+                };
 
-            const { observe: bodyObserve, disconnect: bodyDisconnect } = observerManager.createDebouncedObserver({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: mutationCallback,
-                debounceDelay: BODY_OBSERVER_DEBOUNCE_MS,
-            });
+                const { observe: bodyObserve, disconnect: bodyDisconnect } = observerManager.createDebouncedObserver({
+                    target: document.body,
+                    options: { childList: true, subtree: true, attributes: true },
+                    callback: mutationCallback,
+                    debounceDelay: BODY_OBSERVER_DEBOUNCE_MS,
+                });
 
-            bodyObserve();
-            bodyObserverDisconnect = bodyDisconnect;
+                bodyObserve();
+                bodyObserverDisconnect = bodyDisconnect;
 
-            mutationCallback();
+                mutationCallback();
 
-            document.addEventListener("visibilitychange", mutationCallback);
+                document.addEventListener("visibilitychange", mutationCallback);
+            } catch (error) {
+                logger.error("Error applying rate limit patch:", error);
+            }
         },
         remove() {
-            queryBarObserverDisconnect?.();
-            bodyObserverDisconnect?.();
-            unmountRateLimit();
-            document.removeEventListener("visibilitychange", () => { });
-            observerManager.disconnectAll();
+            try {
+                queryBarObserverDisconnect?.();
+                bodyObserverDisconnect?.();
+                unmountRateLimit();
+                document.removeEventListener("visibilitychange", () => { });
+                observerManager.disconnectAll();
+            } catch (error) {
+                logger.error("Error removing rate limit patch:", error);
+            }
         },
     };
 })();
