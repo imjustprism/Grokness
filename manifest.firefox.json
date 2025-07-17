@@ -16,7 +16,7 @@
                 "*://*.grok.com/*"
             ],
             "js": [
-                "PluginManager.js"
+                "loader.js"
             ],
             "run_at": "document_idle"
         }
