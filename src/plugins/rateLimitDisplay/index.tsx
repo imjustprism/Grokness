@@ -63,6 +63,9 @@ const DEBOUNCE_DELAY_MS = 100;
 const BODY_OBSERVER_DEBOUNCE_MS = 200;
 const POST_SUBMIT_UPDATE_DELAY_MS = 5000;
 const ELEMENT_WAIT_TIMEOUT_MS = 5000;
+const API_RETRY_MAX = 3;
+const API_RETRY_BACKOFF_INITIAL_MS = 1000;
+const API_RETRY_BACKOFF_MULTIPLIER = 2;
 
 const RATE_LIMIT_CONTAINER_ID = "grok-rate-limit-container";
 
@@ -99,6 +102,26 @@ const commonFinderConfigs = {
 const cachedRateLimits: Record<string, Record<string, RateLimitData | undefined>> = {};
 const observerManager = new MutationObserverManager();
 
+async function fetchWithRetry<T>(
+    fetchFn: () => Promise<T>,
+    maxRetries = API_RETRY_MAX,
+    backoffMs = API_RETRY_BACKOFF_INITIAL_MS
+): Promise<T> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            return await fetchFn();
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            if (attempt < maxRetries - 1) {
+                const delay = backoffMs * Math.pow(API_RETRY_BACKOFF_MULTIPLIER, attempt);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    throw lastError ?? new Error("Unknown error during fetch");
+}
+
 function normalizeModelName(rawName: string): string {
     const trimmed = rawName.trim();
     if (!trimmed) {
@@ -113,7 +136,7 @@ async function fetchRateLimit(modelName: string, requestKind: string, force: boo
     }
 
     try {
-        const data = await grokAPI.rateLimits.get({ requestKind, modelName });
+        const data = await fetchWithRetry(() => grokAPI.rateLimits.get({ requestKind, modelName }));
         cachedRateLimits[modelName] = cachedRateLimits[modelName] || {};
         cachedRateLimits[modelName][requestKind] = data;
         return data;
