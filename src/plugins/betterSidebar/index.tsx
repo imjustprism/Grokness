@@ -22,50 +22,65 @@ const TOGGLE_ICON_SELECTOR = '[data-sidebar="trigger"] svg';
 
 const USER_CONTAINER_CLASS = "sidebar-user-info";
 
-let cachedUserPlanData: { name: string; plan: string; } | null = null;
+const DEFAULT_USER_NAME = "User";
+const DEFAULT_PLAN = "Free";
 
-async function fetchUserPlanData(): Promise<{ name: string; plan: string; } | null> {
+let cachedUserPlanData: { name: string; plan: string; } | null = null;
+let fetchPromise: Promise<{ name: string; plan: string; } | null> | null = null;
+
+async function fetchUserPlanDataWithRetry(maxRetries = 3, backoffMs = 500): Promise<{ name: string; plan: string; } | null> {
     if (cachedUserPlanData) {
         return cachedUserPlanData;
     }
 
-    try {
-        const user = await grokAPI.auth.getUser();
-        const name = (`${user.givenName ?? ""} ${user.familyName ?? ""}`.trim() || (user.email?.split("@")[0] ?? "Unknown User"));
-        const subscriptions = await grokAPI.subscriptions.getSubscriptions();
-        const tier = getBestSubscriptionTier(subscriptions);
-        const plan = getFriendlyPlanName(tier);
-        cachedUserPlanData = { name, plan };
-        return cachedUserPlanData;
-    } catch (error) {
-        logger.error("Failed to fetch user plan data:", error);
-        return null;
+    if (!fetchPromise) {
+        fetchPromise = (async () => {
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    const user = await grokAPI.auth.getUser();
+                    const name = (`${user.givenName ?? ""} ${user.familyName ?? ""}`.trim() || (user.email?.split("@")[0] ?? DEFAULT_USER_NAME));
+                    const subscriptions = await grokAPI.subscriptions.getSubscriptions();
+                    const tier = getBestSubscriptionTier(subscriptions);
+                    const plan = getFriendlyPlanName(tier);
+                    cachedUserPlanData = { name, plan };
+                    return cachedUserPlanData;
+                } catch (error) {
+                    logger.error(`Failed to fetch user plan data (attempt ${attempt}/${maxRetries}):`, error);
+                    if (attempt < maxRetries) {
+                        await new Promise(resolve => setTimeout(resolve, backoffMs * attempt));
+                    }
+                }
+            }
+            return { name: DEFAULT_USER_NAME, plan: DEFAULT_PLAN };
+        })();
     }
+
+    return fetchPromise;
 }
 
 function useIsSidebarCollapsed(): boolean {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        try {
+        const updateCollapseState = () => {
             const toggleIcon = querySelector(TOGGLE_ICON_SELECTOR);
             if (!toggleIcon) {
                 logger.warn("Toggle icon not found for sidebar collapse detection");
+                setIsCollapsed(false); // Default to not collapsed
                 return;
             }
+            setIsCollapsed(!toggleIcon.classList.contains("rotate-180"));
+        };
 
-            const updateState = () => setIsCollapsed(!toggleIcon.classList.contains("rotate-180"));
+        updateCollapseState();
 
-            updateState();
-
-            const observer = new MutationObserver(updateState);
+        const observer = new MutationObserver(updateCollapseState);
+        const toggleIcon = querySelector(TOGGLE_ICON_SELECTOR);
+        if (toggleIcon) {
             observer.observe(toggleIcon, { attributes: true, attributeFilter: ["class"] });
-
-            return () => observer.disconnect();
-        } catch (error) {
-            logger.error("Error in useIsSidebarCollapsed hook:", error);
-            return () => { };
         }
+
+        return () => observer.disconnect();
     }, []);
 
     return isCollapsed;
@@ -76,11 +91,8 @@ function SidebarUserInfo() {
     const isCollapsed = useIsSidebarCollapsed();
 
     useEffect(() => {
-        fetchUserPlanData().then(data => {
-            if (!data) {
-                logger.warn("User plan data not available");
-            }
-            setUserPlanData(data);
+        fetchUserPlanDataWithRetry().then(data => {
+            setUserPlanData(data || { name: DEFAULT_USER_NAME, plan: DEFAULT_PLAN });
         });
     }, []);
 
@@ -102,7 +114,7 @@ const betterSidebarPatch: IPatch = (() => {
     let footerObserverDisconnect: (() => void) | null = null;
     let styleManager: { cleanup: () => void; } | null = null;
 
-    function mountUserInfo(footer: HTMLElement) {
+    async function mountUserInfo(footer: HTMLElement) {
         try {
             const avatarButton = querySelector(AVATAR_BUTTON_SELECTOR, footer);
             if (!avatarButton) {
@@ -144,7 +156,7 @@ const betterSidebarPatch: IPatch = (() => {
                 (async () => {
                     try {
                         const footer = await waitForElementByConfig({ selector: SIDEBAR_FOOTER_SELECTOR });
-                        mountUserInfo(footer);
+                        await mountUserInfo(footer);
 
                         const observerManager = new MutationObserverManager();
                         const { observe, disconnect } = observerManager.createDebouncedObserver({

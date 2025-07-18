@@ -55,7 +55,7 @@ export default defineConfig(({ mode }) => {
                 sourcemap: mode === 'development',
                 minify: false,
                 lib: {
-                    entry: path.resolve(__dirname, 'src/PluginManager.ts'),
+                    entry: path.resolve(__dirname, 'src/loader.ts'),
                     name: pkg.name,
                     formats: ['iife'],
                     fileName: () => 'userscript.js'
@@ -97,7 +97,7 @@ export default defineConfig(({ mode }) => {
             webExtension({
                 browser: targetBrowser,
                 manifest: manifestFile,
-                additionalInputs: ['PluginManager.ts']
+                additionalInputs: ['loader.ts']
             })
         ]
     };
