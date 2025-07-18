@@ -58,10 +58,8 @@ const MODEL_MAP: Record<string, string> = {
 
 const DEFAULT_MODEL = "grok-4";
 const DEFAULT_KIND = "DEFAULT";
-const MIN_REFRESH_INTERVAL_MS = 30000;
 const DEBOUNCE_DELAY_MS = 100;
 const BODY_OBSERVER_DEBOUNCE_MS = 200;
-const POST_SUBMIT_UPDATE_DELAY_MS = 5000;
 const ELEMENT_WAIT_TIMEOUT_MS = 5000;
 const API_RETRY_MAX = 3;
 const API_RETRY_BACKOFF_INITIAL_MS = 1000;
@@ -266,12 +264,18 @@ function RateLimitComponent() {
     const currentRequestKind = useCurrentRequestKind(currentModel);
     const [rateLimit, setRateLimit] = useState<RateLimitData | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [waitTimeCountdown, setWaitTimeCountdown] = useState<number | null>(null);
 
     const updateRateLimit = async (force: boolean = false) => {
         try {
             setIsLoading(true);
             const data = await fetchRateLimit(currentModel, currentRequestKind, force);
             setRateLimit(data);
+            if (data?.waitTimeSeconds && data.waitTimeSeconds > 0) {
+                setWaitTimeCountdown(data.waitTimeSeconds);
+            } else {
+                setWaitTimeCountdown(null);
+            }
         } catch (error) {
             logger.error("Error updating rate limit:", error);
         } finally {
@@ -279,43 +283,75 @@ function RateLimitComponent() {
         }
     };
 
+    const formatCountdown = (seconds: number): string => {
+        if (seconds <= 0) {
+            return "Resetting...";
+        }
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+        const parts: string[] = [];
+        if (hours > 0) {
+            parts.push(`${hours}h`);
+        }
+        if (minutes > 0 || hours > 0) {
+            parts.push(`${minutes}m`);
+        }
+        parts.push(`${remainingSeconds}s`);
+        return parts.join(" ");
+    };
+
     useEffect(() => {
-        try {
-            updateRateLimit();
-
-            let intervalId: ReturnType<typeof setInterval> | null = null;
-            if (settings.store.autoRefresh) {
-                const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
-                intervalId = setInterval(updateRateLimit, intervalMs);
-            }
-
-            const handleVisibilityChange = () => {
-                if (document.visibilityState === "visible") {
-                    updateRateLimit();
-                    if (settings.store.autoRefresh && !intervalId) {
-                        const intervalMs = Math.max(settings.store.refreshInterval * 1000, MIN_REFRESH_INTERVAL_MS);
-                        intervalId = setInterval(updateRateLimit, intervalMs);
+        if (waitTimeCountdown !== null && waitTimeCountdown > 0) {
+            let lastUpdate = Date.now();
+            const interval = setInterval(() => {
+                const now = Date.now();
+                const delta = Math.floor((now - lastUpdate) / 1000);
+                lastUpdate = now;
+                setWaitTimeCountdown(prev => {
+                    if (prev === null) {
+                        return null;
                     }
-                } else {
-                    if (intervalId) {
-                        clearInterval(intervalId);
-                        intervalId = null;
+                    const newTime = Math.max(0, prev - delta);
+                    if (newTime <= 0) {
+                        updateRateLimit(true);
+                        return null;
                     }
+                    return newTime;
+                });
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+    }, [waitTimeCountdown, currentModel, currentRequestKind]);
+
+    useEffect(() => {
+        updateRateLimit();
+        let intervalId: ReturnType<typeof setInterval> | null = null;
+        if (settings.store.autoRefresh) {
+            const intervalMs = Math.max(settings.store.refreshInterval * 1000, 30000);
+            intervalId = setInterval(updateRateLimit, intervalMs);
+        }
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                updateRateLimit();
+                if (settings.store.autoRefresh && !intervalId) {
+                    const intervalMs = Math.max(settings.store.refreshInterval * 1000, 30000);
+                    intervalId = setInterval(updateRateLimit, intervalMs);
                 }
-            };
-
-            document.addEventListener("visibilitychange", handleVisibilityChange);
-
-            return () => {
-                document.removeEventListener("visibilitychange", handleVisibilityChange);
+            } else {
                 if (intervalId) {
                     clearInterval(intervalId);
+                    intervalId = null;
                 }
-            };
-        } catch (error) {
-            logger.error("Error in RateLimitComponent auto-refresh setup:", error);
-            return () => { };
-        }
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+        };
     }, [currentModel, currentRequestKind, settings.store.autoRefresh, settings.store.refreshInterval]);
 
     useEffect(() => {
@@ -323,25 +359,16 @@ function RateLimitComponent() {
             try {
                 const textarea = await waitForElementByConfig({ selector: commonSelectors.textarea }, ELEMENT_WAIT_TIMEOUT_MS);
                 if (!textarea) {
-                    logger.warn("Textarea not found for submit detection");
                     return;
                 }
-
-                const handleSubmit = () => {
-                    setTimeout(() => updateRateLimit(true), POST_SUBMIT_UPDATE_DELAY_MS);
-                };
-
+                const handleSubmit = () => setTimeout(() => updateRateLimit(true), 5000);
                 const keydownListener = (e: KeyboardEvent) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                         handleSubmit();
                     }
                 };
-
                 textarea.addEventListener("keydown", keydownListener);
-
-                return () => {
-                    textarea.removeEventListener("keydown", keydownListener);
-                };
+                return () => textarea.removeEventListener("keydown", keydownListener);
             } catch (error) {
                 logger.error("Error setting up submit detection:", error);
                 return () => { };
@@ -350,6 +377,8 @@ function RateLimitComponent() {
     }, [currentModel, currentRequestKind]);
 
     let content = "Unavailable";
+    let tooltipContent = "Rate Limit";
+
     if (rateLimit) {
         switch (settings.store.displayFormat) {
             case "remaining_total":
@@ -361,6 +390,14 @@ function RateLimitComponent() {
             case "percentage":
                 content = `${Math.round((rateLimit.remainingQueries / rateLimit.totalQueries) * 100)}%`;
                 break;
+        }
+
+        if (waitTimeCountdown !== null && waitTimeCountdown > 0) {
+            tooltipContent = `Next reset in ${formatCountdown(waitTimeCountdown)}`;
+        } else if (rateLimit.waitTimeSeconds && rateLimit.waitTimeSeconds > 0) {
+            tooltipContent = `Limit reached. Reset in ${formatCountdown(rateLimit.waitTimeSeconds)}`;
+        } else {
+            tooltipContent = `${rateLimit.remainingQueries}/${rateLimit.totalQueries} queries remaining`;
         }
     }
 
@@ -374,7 +411,7 @@ function RateLimitComponent() {
             loading={isLoading}
             onClick={() => updateRateLimit(true)}
             aria-label="Rate Limit"
-            tooltipContent="Rate Limit"
+            tooltipContent={tooltipContent}
         >
             {content}
         </IconButton>
