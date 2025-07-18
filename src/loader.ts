@@ -43,7 +43,11 @@ const allPlugins: IPlugin[] = (() => {
     }
     for (const plugin of dynamicPlugins) {
         if (pluginMap.has(plugin.id)) {
-            console.warn(`Skipping duplicate plugin load for id: ${plugin.id}`);
+            const existing = pluginMap.get(plugin.id);
+            if (existing !== plugin) {
+                console.warn(`Skipping duplicate plugin load for id: ${plugin.id}`);
+            }
+            // Else: same object reference, skip silently (common due to eager loading)
         } else {
             pluginMap.set(plugin.id, plugin);
         }
@@ -128,7 +132,6 @@ export class PluginManager {
      */
     public async loadPlugins(): Promise<void> {
         const enabled = this.getEnabledPlugins();
-        this.logger.info(`Loading ${enabled.length} plugins...`);
 
         // Load required plugins first (sequentially for safety)
         const required = enabled.filter(p => p.required);

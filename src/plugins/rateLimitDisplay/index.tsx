@@ -379,26 +379,34 @@ function RateLimitComponent() {
     let content = "Unavailable";
     let tooltipContent = "Rate Limit";
 
-    if (rateLimit) {
-        switch (settings.store.displayFormat) {
-            case "remaining_total":
-                content = `${rateLimit.remainingQueries}/${rateLimit.totalQueries}`;
-                break;
-            case "remaining":
-                content = `${rateLimit.remainingQueries}`;
-                break;
-            case "percentage":
-                content = `${Math.round((rateLimit.remainingQueries / rateLimit.totalQueries) * 100)}%`;
-                break;
-        }
+    const remaining = rateLimit?.remainingQueries ?? 0;
+    const total = rateLimit?.totalQueries ?? 0;
+    const isLimited = remaining === 0 && waitTimeCountdown !== null && waitTimeCountdown > 0;
 
-        if (waitTimeCountdown !== null && waitTimeCountdown > 0) {
-            tooltipContent = `Next reset in ${formatCountdown(waitTimeCountdown)}`;
-        } else if (rateLimit.waitTimeSeconds && rateLimit.waitTimeSeconds > 0) {
-            tooltipContent = `Limit reached. Reset in ${formatCountdown(rateLimit.waitTimeSeconds)}`;
+    if (rateLimit) {
+        if (isLimited) {
+            content = formatCountdown(waitTimeCountdown);
         } else {
-            tooltipContent = `${rateLimit.remainingQueries}/${rateLimit.totalQueries} queries remaining`;
+            switch (settings.store.displayFormat) {
+                case "remaining_total":
+                    content = `${remaining}/${total}`;
+                    break;
+                case "remaining":
+                    content = `${remaining}`;
+                    break;
+                case "percentage":
+                    content = `${Math.round((remaining / total) * 100)}%`;
+                    break;
+            }
         }
+    }
+
+    if (isLimited) {
+        tooltipContent = `Rate limit reached. Remaining: 0/${total}`;
+    } else if (rateLimit?.waitTimeSeconds && rateLimit.waitTimeSeconds > 0) {
+        tooltipContent = `Limit reached. Reset in ${formatCountdown(rateLimit.waitTimeSeconds)}`;
+    } else if (rateLimit) {
+        tooltipContent = `${remaining}/${total} queries remaining`;
     }
 
     return (
@@ -412,6 +420,7 @@ function RateLimitComponent() {
             onClick={() => updateRateLimit(true)}
             aria-label="Rate Limit"
             tooltipContent={tooltipContent}
+            className={isLimited ? "dark:text-red-200" : ""}
         >
             {content}
         </IconButton>
