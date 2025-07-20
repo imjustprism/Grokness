@@ -361,7 +361,7 @@ function RateLimitComponent() {
                 if (!textarea) {
                     return;
                 }
-                const handleSubmit = () => setTimeout(() => updateRateLimit(true), 5000);
+                const handleSubmit = () => setTimeout(() => updateRateLimit(true), 2000);
                 const keydownListener = (e: KeyboardEvent) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                         handleSubmit();
@@ -415,7 +415,7 @@ function RateLimitComponent() {
             as="button"
             variant="outline"
             size="md"
-            icon="Gauge"
+            icon={isLimited ? "ClockFading" : "Gauge"}
             loading={isLoading}
             onClick={() => updateRateLimit(true)}
             aria-label="Rate Limit"
