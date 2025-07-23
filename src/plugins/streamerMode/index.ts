@@ -50,11 +50,11 @@ let settingsListener: ((e: Event) => void) | null = null;
 
 function updateClasses(context: IPluginContext) {
     try {
-        const isDisabled = Boolean(localStorage.getItem(context.storageKey));
+        const isEnabled = Boolean(localStorage.getItem(context.storageKey));
         const htmlElement = document.documentElement;
-        htmlElement.classList.toggle("streamer-mode-active", !isDisabled);
+        htmlElement.classList.toggle("streamer-mode-active", isEnabled);
 
-        if (isDisabled) {
+        if (!isEnabled) {
             htmlElement.classList.remove("blur-username", "blur-email", "blur-project-titles", "blur-chat-titles", "blur-file-names");
             return;
         }
