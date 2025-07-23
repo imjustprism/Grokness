@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { CodeSearchField, DEFAULT_HIGHLIGHT_CLASS, DEFAULT_HIGHLIGHT_CURRENT_CLASS } from "@plugins/betterCodeBlock/components/CodeSearchField";
+import { CodeSearchField } from "@plugins/betterCodeBlock/components/CodeSearchField";
+import styles from "@plugins/betterCodeBlock/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { injectStyles, MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
+import { MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin } from "@utils/types";
 import { createRoot, type Root } from "react-dom/client";
@@ -18,37 +19,8 @@ const BUTTONS_CONTAINER_SELECTOR = "div.absolute.bottom-1.right-1.flex.flex-row.
 const CODE_CONTAINER_SELECTOR = 'div[style*="display: block; overflow: auto; padding: 16px;"]';
 const SEARCH_CONTAINER_ID = "grok-code-search-container";
 
-const HIGHLIGHT_STYLE = `
-:root {
-    --highlight-bg: rgba(255, 255, 0, 0.3);
-    --highlight-text: inherit;
-    --current-highlight-bg: rgba(255, 165, 0, 0.5);
-    --current-highlight-shadow: 0 0 4px rgba(255, 165, 0, 0.7);
-    --highlight-radius: 2px;
-    --highlight-padding: 0 2px;
-    --highlight-transition: background-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.${DEFAULT_HIGHLIGHT_CLASS} {
-    background-color: var(--highlight-bg);
-    color: var(--highlight-text);
-    border-radius: var(--highlight-radius);
-    padding: var(--highlight-padding);
-    transition: var(--highlight-transition);
-}
-
-.${DEFAULT_HIGHLIGHT_CURRENT_CLASS} {
-    background-color: var(--current-highlight-bg);
-    color: var(--highlight-text);
-    border-radius: var(--highlight-radius);
-    padding: var(--highlight-padding);
-    box-shadow: var(--current-highlight-shadow);
-    transition: var(--highlight-transition);
-}
-`;
-
 const betterCodeBlockPatch = (() => {
-    let styleInjection: ReturnType<typeof injectStyles> | null = null;
+    let styleElement: HTMLStyleElement | null = null;
     const reactRoots: Map<HTMLElement, Root> = new Map();
     const localDisconnects: Map<HTMLElement, () => void> = new Map();
     const observerManager = new MutationObserverManager();
@@ -136,7 +108,14 @@ const betterCodeBlockPatch = (() => {
 
     return {
         apply() {
-            styleInjection = injectStyles(HIGHLIGHT_STYLE, "better-codeblock-highlight");
+            try {
+                styleElement = document.createElement("style");
+                styleElement.id = "better-codeblock-highlight";
+                styleElement.textContent = styles;
+                document.head.appendChild(styleElement);
+            } catch (error) {
+                logger.error("Failed to inject styles", error);
+            }
 
             const { observe, disconnect } = observerManager.createObserver({
                 target: document.body,
@@ -193,7 +172,8 @@ const betterCodeBlockPatch = (() => {
                     container.remove();
                 });
 
-                styleInjection?.cleanup();
+                styleElement?.remove();
+                styleElement = null;
                 observerManager.disconnectAll();
             } catch (error) {
                 logger.error("Error during plugin cleanup", error);

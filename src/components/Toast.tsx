@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { injectStyles } from "@utils/dom";
 import clsx from "clsx";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -26,9 +25,11 @@ export const Toast: React.FC<ToastProps> = ({
     const [visible, setVisible] = useState(true);
     const [mounted, setMounted] = useState(true);
     const toastRef = useRef<HTMLLIElement>(null);
+    const styleRef = useRef<HTMLStyleElement | null>(null);
 
     useEffect(() => {
-        const css = `
+        styleRef.current = document.createElement("style");
+        styleRef.current.textContent = `
             @keyframes sonner-fade-in {
                 from { opacity: 0; transform: translateY(-10px) scale(0.95); }
                 to { opacity: 1; transform: translateY(0) scale(1); }
@@ -44,14 +45,16 @@ export const Toast: React.FC<ToastProps> = ({
                 animation: sonner-fade-out 0.3s ease-in;
             }
         `;
-        const { cleanup } = injectStyles(css, `toast-styles-${Date.now()}`);
+        document.head.appendChild(styleRef.current);
+
         const timer = setTimeout(() => {
             setVisible(false);
         }, duration);
 
         return () => {
             clearTimeout(timer);
-            cleanup();
+            styleRef.current?.remove();
+            styleRef.current = null;
         };
     }, [duration]);
 

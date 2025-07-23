@@ -1,5 +1,11 @@
-import { type IDeveloper } from "@utils/constants";
+/*
+ * Grokness, a grok.com browser extension mod
+ * Copyright (c) 2025 Prism and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { getPluginSetting, initializePluginSettings } from "@utils/settings";
+import { type IDeveloper } from "@utils/constants";
 
 export enum PluginCategory {
     Utility = "utility",
@@ -121,7 +127,7 @@ function toKebabCase(str: string): string {
 
 export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
     const id = def.id || toKebabCase(def.name);
-    const storageKey = `plugin-disabled:${id}`;
+    const storageKey = `plugin-enabled:${id}`;
 
     // Handle settings initialization
     if (def.settings) {
@@ -170,9 +176,8 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
         plugin.start({ storageKey });
         return plugin;
     }
-    const disabled = Boolean(localStorage.getItem(storageKey));
-    const shouldEnable = !disabled && plugin.enabledByDefault;
-    if (shouldEnable) {
+    const enabled = Boolean(localStorage.getItem(storageKey));
+    if (enabled) {
         plugin.start({ storageKey });
     }
     return plugin;

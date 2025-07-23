@@ -10,7 +10,7 @@ import { useSettingsLogic } from "@plugins/_core/settingsUI/hooks/useSettingsLog
 import { useTabLogic } from "@plugins/_core/settingsUI/hooks/useTabLogic";
 import styles from "@plugins/_core/settingsUI/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { injectStyles, MutationObserverManager, querySelectorAll } from "@utils/dom";
+import { MutationObserverManager, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
 import React from "react";
@@ -58,13 +58,20 @@ const SettingsUIComponent: React.FC<{ dialogElement: HTMLElement; }> = ({ dialog
     );
 };
 
-let styleManager: { styleElement: HTMLStyleElement; cleanup: () => void; } | null = null;
+let styleElement: HTMLStyleElement | null = null;
 let mutationObserverManager: MutationObserverManager | null = null;
 const rootsMap = new Map<HTMLElement, Root>();
 
 const settingsPatch: IPatch = {
     apply() {
-        styleManager = injectStyles(styles, "settings-ui-styles");
+        try {
+            styleElement = document.createElement("style");
+            styleElement.id = "settings-ui-styles";
+            styleElement.textContent = styles;
+            document.head.appendChild(styleElement);
+        } catch (error) {
+            settingsLogger.error("Failed to inject styles", error);
+        }
 
         mutationObserverManager = new MutationObserverManager();
 
@@ -137,8 +144,8 @@ const settingsPatch: IPatch = {
         );
     },
     remove() {
-        styleManager?.cleanup();
-        styleManager = null;
+        styleElement?.remove();
+        styleElement = null;
         mutationObserverManager?.disconnectAll();
         mutationObserverManager = null;
         rootsMap.forEach(root => root.unmount());

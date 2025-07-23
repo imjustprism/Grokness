@@ -159,7 +159,7 @@ export class PluginManager {
                 return true;
             }
             const key = this.getStorageKey(plugin);
-            return !localStorage.getItem(key);
+            return !!localStorage.getItem(key);
         });
     }
 
@@ -179,7 +179,7 @@ export class PluginManager {
         } catch (error) {
             this.logger.error(`Error starting ${plugin.name}:`, error);
             if (!plugin.required) {
-                localStorage.setItem(key, "1");
+                localStorage.removeItem(key);
                 this.logger.info(`Disabled ${plugin.name} due to error.`);
             }
         }
@@ -215,7 +215,7 @@ export class PluginManager {
      * Generates a storage key for plugin disabled state.
      */
     private getStorageKey(plugin: IPlugin): string {
-        return `plugin-disabled:${plugin.id}`;
+        return `plugin-enabled:${plugin.id}`;
     }
 
     /**

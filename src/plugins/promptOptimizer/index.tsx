@@ -7,7 +7,7 @@
 import { IconButton } from "@components/IconButton";
 import collapsedStyles from "@plugins/promptOptimizer/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { injectStyles, MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
+import { MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
 import { createRoot, type Root } from "react-dom/client";
@@ -32,7 +32,7 @@ const promptOptimizerPatch: IPatch = (() => {
     const collapsedMessagesMap: Map<HTMLElement, HTMLElement> = new Map();
     const originalStylesMap: Map<HTMLElement, { paddingTop: string; paddingRight: string; }> = new Map();
     const mutationObserverManager = new MutationObserverManager();
-    let stylesCleanupCallback: (() => void) | null = null;
+    let styleElement: HTMLStyleElement | null = null;
 
     function createCollapsedMessageElement(characterLength: number): HTMLElement {
         const collapsedMessageElement = document.createElement("span");
@@ -192,9 +192,15 @@ const promptOptimizerPatch: IPatch = (() => {
     return {
         apply() {
             try {
-                const { cleanup } = injectStyles(collapsedStyles, stylesId);
-                stylesCleanupCallback = cleanup;
+                styleElement = document.createElement("style");
+                styleElement.id = stylesId;
+                styleElement.textContent = collapsedStyles;
+                document.head.appendChild(styleElement);
+            } catch (error) {
+                logger.error("Failed to inject styles", error);
+            }
 
+            try {
                 const mutationCallback = (mutations: MutationRecord[]) => {
                     try {
                         for (const mutation of mutations) {
@@ -264,7 +270,8 @@ const promptOptimizerPatch: IPatch = (() => {
                 collapsedMessagesMap.clear();
                 originalStylesMap.clear();
                 mutationObserverManager.disconnectAll();
-                stylesCleanupCallback?.();
+                styleElement?.remove();
+                styleElement = null;
             } catch (error) {
                 logger.error("Error removing prompt optimizer patch:", error);
             }

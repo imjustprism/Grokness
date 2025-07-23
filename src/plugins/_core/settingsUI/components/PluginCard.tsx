@@ -152,9 +152,9 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     const [showModal, setShowModal] = useState(false);
     const { settings, handleSettingChange } = usePluginSettings(plugin, onRestartChange ? (name: string, req: boolean, source: "toggle" | "settings") => onRestartChange(name, req, source) : undefined);
 
-    const pluginStorageKey = `plugin-disabled:${plugin.id}`;
+    const pluginStorageKey = `plugin-enabled:${plugin.id}`;
 
-    const initialEnabled = useMemo(() => !localStorage.getItem(pluginStorageKey), [pluginStorageKey]);
+    const initialEnabled = useMemo(() => !!localStorage.getItem(pluginStorageKey), [pluginStorageKey]);
 
     const [isEnabled, setIsEnabled] = useState(initialEnabled);
 
@@ -166,10 +166,10 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         }
         setIsEnabled(checked);
         if (checked) {
-            localStorage.removeItem(pluginStorageKey);
+            localStorage.setItem(pluginStorageKey, "1");
             plugin.start?.({ storageKey: pluginStorageKey });
         } else {
-            localStorage.setItem(pluginStorageKey, "1");
+            localStorage.removeItem(pluginStorageKey);
             plugin.stop?.({ storageKey: pluginStorageKey });
         }
         onToggle?.(plugin.name, !checked);
@@ -182,7 +182,7 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     useEffect(() => {
         const storageListener = (e: StorageEvent) => {
             if (e.key === pluginStorageKey && !plugin.required) {
-                setIsEnabled(!e.newValue);
+                setIsEnabled(!!e.newValue);
             }
         };
         window.addEventListener("storage", storageListener);
