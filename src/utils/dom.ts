@@ -213,36 +213,6 @@ export async function waitForElementByConfig(
     });
 }
 
-/**
- * Injects CSS styles into the document head.
- * @param cssContent Raw CSS string to inject.
- * @param styleId Optional ID for the style element.
- * @returns Object with style element and cleanup function.
- */
-export function injectStyles(
-    cssContent: string,
-    styleId?: string
-): { styleElement: HTMLStyleElement; cleanup: () => void; } {
-    let styleElement = styleId ? document.getElementById(styleId) as HTMLStyleElement | null : null;
-
-    if (styleElement) {
-        styleElement.textContent = cssContent;
-    } else {
-        styleElement = document.createElement("style");
-        if (styleId) {
-            styleElement.id = styleId;
-        }
-        styleElement.textContent = cssContent;
-        document.head.appendChild(styleElement);
-    }
-
-    const cleanup = () => {
-        styleElement?.remove();
-    };
-
-    return { styleElement, cleanup };
-}
-
 export class MutationObserverManager {
     private observersMap: Map<MutationObserver, string> = new Map();
     private nextObserverId = 0;
@@ -350,7 +320,7 @@ export function createDomElementHider(
 ): { startObserving: () => void; stopObserving: () => void; hideImmediately: () => void; } {
     let debounceTimer: ReturnType<typeof setTimeout> | number | null = null;
     let isHiding = false;
-    let styleManager: { cleanup: () => void; } | null = null;
+    let styleElement: HTMLStyleElement | null = null;
 
     const cssHideConfigs = hiderOptions.injectCss
         ? hideConfigs.filter(config => !config.condition && !config.regexPattern && !config.removeFromDom)
@@ -359,7 +329,10 @@ export function createDomElementHider(
 
     if (cssHideConfigs.length > 0) {
         const css = cssHideConfigs.map(config => `${config.selector} { display: none !important; visibility: hidden !important; }`).join("\n");
-        styleManager = injectStyles(css, "element-hider-preemptive");
+        styleElement = document.createElement("style");
+        styleElement.id = "element-hider-preemptive";
+        styleElement.textContent = css;
+        document.head.appendChild(styleElement);
     }
 
     const performHide = () => {
@@ -431,7 +404,7 @@ export function createDomElementHider(
                     clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
                 }
             }
-            styleManager?.cleanup();
+            styleElement?.remove();
         },
         hideImmediately: performHide,
     };
