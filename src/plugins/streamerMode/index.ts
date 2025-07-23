@@ -4,22 +4,19 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import styles from "@plugins/streamerMode/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { injectStyles } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePluginSettings } from "@utils/settings";
 import { definePlugin, type IPluginContext } from "@utils/types";
 
 const logger = new Logger("StreamerMode", "#f2d5cf");
 
-const TEXT_BLUR_STYLE = "filter: blur(3px) !important; padding: 0 4px !important; margin: 0 -4px !important; display: inline-block !important; width: calc(100% + 8px) !important; position: relative !important;";
-const IMAGE_BLUR_STYLE = "filter: blur(8px) !important;";
-
 const settings = definePluginSettings({
-    blurFilePreviews: {
+    blurUsername: {
         type: "boolean",
-        displayName: "Blur File Previews",
-        description: "Blur image previews in uploaded files.",
+        displayName: "Blur Username",
+        description: "Blur the username in the sidebar and settings.",
         default: true,
     },
     blurEmail: {
@@ -28,55 +25,48 @@ const settings = definePluginSettings({
         description: "Blur email addresses in the interface.",
         default: true,
     },
-    blurProjectChatNames: {
+    blurProjectTitles: {
         type: "boolean",
-        displayName: "Blur Project and Chat Names",
-        description: "Blur project names, chat titles, and related text.",
+        displayName: "Blur Project Titles",
+        description: "Blur project titles in the sidebar.",
+        default: true,
+    },
+    blurChatTitles: {
+        type: "boolean",
+        displayName: "Blur Chat Titles",
+        description: "Blur chat titles in the sidebar.",
+        default: true,
+    },
+    blurFileNames: {
+        type: "boolean",
+        displayName: "Blur File Names",
+        description: "Blur file names in the files section.",
         default: true,
     },
 });
 
-function generateStyles(config: typeof settings.store): string {
-    let css = "";
-
-    if (config.blurFilePreviews) {
-        css += `html.streamer-mode-active figure.relative.flex-shrink-0.aspect-square.overflow-hidden.rounded-md.w-6.h-6 img { ${IMAGE_BLUR_STYLE} }\n`;
-    }
-
-    if (config.blurEmail) {
-        css += `html.streamer-mode-active .p-1.min-w-0.text-sm .text-secondary.truncate { ${TEXT_BLUR_STYLE} }\n`;
-    }
-
-    if (config.blurProjectChatNames) {
-        css += `html.streamer-mode-active .sidebar-user-info .display-name,
-html.streamer-mode-active [data-sidebar="menu"] .group\\/conversation-item span.flex-1.select-none,
-html.streamer-mode-active span.flex-1.select-none.text-nowrap.max-w-full.overflow-hidden.inline-block { ${TEXT_BLUR_STYLE} }\n`;
-        css += `html.streamer-mode-active .p-1.min-w-0.text-sm .text-sm.font-medium { ${TEXT_BLUR_STYLE} }\n`;
-        css += `html.streamer-mode-active div.absolute.start-1 div.flex.flex-row.items-center a.overflow-hidden div.border.border-border-l2.px-3.py-1.rounded-full.text-sm.text-secondary.flex.flex-row.items-center.gap-1 span.truncate { ${TEXT_BLUR_STYLE} }\n`;
-    }
-
-    return css;
-}
-
-let styleManager: { cleanup: () => void; } | null = null;
+let styleElement: HTMLStyleElement | null = null;
 let settingsListener: ((e: Event) => void) | null = null;
 
-function updateStylesheetAndClass(context: IPluginContext) {
+function updateClasses(context: IPluginContext) {
     try {
         const isDisabled = Boolean(localStorage.getItem(context.storageKey));
-        document.documentElement.classList.toggle("streamer-mode-active", !isDisabled);
+        const htmlElement = document.documentElement;
+        htmlElement.classList.toggle("streamer-mode-active", !isDisabled);
 
-        styleManager?.cleanup();
-        styleManager = null;
-
-        if (!isDisabled) {
-            const dynamicStyles = generateStyles(settings.store);
-            if (dynamicStyles) {
-                styleManager = injectStyles(dynamicStyles, "streamer-mode-styles");
-            }
+        if (isDisabled) {
+            htmlElement.classList.remove("blur-username", "blur-email", "blur-project-titles", "blur-chat-titles", "blur-file-names");
+            return;
         }
+
+        const config = settings.store;
+        htmlElement.classList.toggle("blur-username", config.blurUsername);
+        htmlElement.classList.toggle("blur-email", config.blurEmail);
+        htmlElement.classList.toggle("blur-project-titles", config.blurProjectTitles);
+        htmlElement.classList.toggle("blur-chat-titles", config.blurChatTitles);
+        htmlElement.classList.toggle("blur-file-names", config.blurFileNames);
     } catch (error) {
-        logger.error("Failed to update stylesheet or class:", error);
+        logger.error("Failed to update classes:", error);
     }
 }
 
@@ -91,16 +81,25 @@ export default definePlugin({
 
     start(context: IPluginContext) {
         try {
+            styleElement = document.createElement("style");
+            styleElement.id = "streamer-mode-styles";
+            styleElement.textContent = styles;
+            document.head.appendChild(styleElement);
+        } catch (error) {
+            logger.error("Failed to inject styles", error);
+        }
+
+        try {
             if (document.readyState === "loading") {
-                document.addEventListener("DOMContentLoaded", () => updateStylesheetAndClass(context), { once: true });
+                document.addEventListener("DOMContentLoaded", () => updateClasses(context), { once: true });
             } else {
-                updateStylesheetAndClass(context);
+                updateClasses(context);
             }
 
             settingsListener = (e: Event) => {
                 const event = e as CustomEvent;
                 if (event.detail.pluginId === "streamer-mode") {
-                    updateStylesheetAndClass(context);
+                    updateClasses(context);
                 }
             };
             window.addEventListener("grok-settings-updated", settingsListener);
@@ -111,9 +110,10 @@ export default definePlugin({
 
     stop() {
         try {
-            document.documentElement.classList.remove("streamer-mode-active");
-            styleManager?.cleanup();
-            styleManager = null;
+            const htmlElement = document.documentElement;
+            htmlElement.classList.remove("streamer-mode-active", "blur-username", "blur-email", "blur-project-titles", "blur-chat-titles", "blur-file-names");
+            styleElement?.remove();
+            styleElement = null;
             if (settingsListener) {
                 window.removeEventListener("grok-settings-updated", settingsListener);
                 settingsListener = null;

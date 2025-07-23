@@ -8,7 +8,7 @@ import { grokAPI } from "@api/api";
 import { getBestSubscriptionTier, getFriendlyPlanName } from "@api/interfaces";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { injectStyles, MutationObserverManager, querySelector, waitForElementByConfig } from "@utils/dom";
+import { MutationObserverManager, querySelector, waitForElementByConfig } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
 import { useEffect, useState } from "react";
@@ -112,7 +112,7 @@ const betterSidebarPatch: IPatch = (() => {
     let userInfoRoot: Root | null = null;
     let userInfoContainer: HTMLDivElement | null = null;
     let footerObserverDisconnect: (() => void) | null = null;
-    let styleManager: { cleanup: () => void; } | null = null;
+    let styleElement: HTMLStyleElement | null = null;
 
     async function mountUserInfo(footer: HTMLElement) {
         try {
@@ -151,35 +151,39 @@ const betterSidebarPatch: IPatch = (() => {
     return {
         apply() {
             try {
-                styleManager = injectStyles(styles, "better-sidebar-styles");
-
-                (async () => {
-                    try {
-                        const footer = await waitForElementByConfig({ selector: SIDEBAR_FOOTER_SELECTOR });
-                        await mountUserInfo(footer);
-
-                        const observerManager = new MutationObserverManager();
-                        const { observe, disconnect } = observerManager.createDebouncedObserver({
-                            target: footer,
-                            options: { childList: true, subtree: true },
-                            callback: () => mountUserInfo(footer),
-                            debounceDelay: 100,
-                        });
-                        observe();
-                        footerObserverDisconnect = disconnect;
-                    } catch (error) {
-                        logger.error("Error setting up sidebar footer observer:", error);
-                    }
-                })();
+                styleElement = document.createElement("style");
+                styleElement.id = "better-sidebar-styles";
+                styleElement.textContent = styles;
+                document.head.appendChild(styleElement);
             } catch (error) {
-                logger.error("Error applying better sidebar patch:", error);
+                logger.error("Failed to inject styles", error);
             }
+
+            (async () => {
+                try {
+                    const footer = await waitForElementByConfig({ selector: SIDEBAR_FOOTER_SELECTOR });
+                    await mountUserInfo(footer);
+
+                    const observerManager = new MutationObserverManager();
+                    const { observe, disconnect } = observerManager.createDebouncedObserver({
+                        target: footer,
+                        options: { childList: true, subtree: true },
+                        callback: () => mountUserInfo(footer),
+                        debounceDelay: 100,
+                    });
+                    observe();
+                    footerObserverDisconnect = disconnect;
+                } catch (error) {
+                    logger.error("Error setting up sidebar footer observer:", error);
+                }
+            })();
         },
         remove() {
             try {
                 footerObserverDisconnect?.();
                 unmountUserInfo();
-                styleManager?.cleanup();
+                styleElement?.remove();
+                styleElement = null;
             } catch (error) {
                 logger.error("Error removing better sidebar patch:", error);
             }

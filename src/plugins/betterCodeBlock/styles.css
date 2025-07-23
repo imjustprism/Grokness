@@ -1,0 +1,26 @@
+:root {
+    --highlight-bg: rgba(255, 255, 0, 0.3);
+    --highlight-text: inherit;
+    --current-highlight-bg: rgba(255, 165, 0, 0.5);
+    --current-highlight-shadow: 0 0 4px rgba(255, 165, 0, 0.7);
+    --highlight-radius: 2px;
+    --highlight-padding: 0 2px;
+    --highlight-transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.highlight {
+    background-color: var(--highlight-bg);
+    color: var(--highlight-text);
+    border-radius: var(--highlight-radius);
+    padding: var(--highlight-padding);
+    transition: var(--highlight-transition);
+}
+
+.highlight-current {
+    background-color: var(--current-highlight-bg);
+    color: var(--highlight-text);
+    border-radius: var(--highlight-radius);
+    padding: var(--highlight-padding);
+    box-shadow: var(--current-highlight-shadow);
+    transition: var(--highlight-transition);
+}
