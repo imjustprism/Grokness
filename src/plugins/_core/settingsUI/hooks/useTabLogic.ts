@@ -31,23 +31,35 @@ export const useTabLogic = (dialogElement: HTMLElement) => {
                 return;
             }
 
-            if (targetTabButton.hasAttribute("data-grokness")) {
-                setIsTabActive(true);
-                querySelectorAll("button", sidebarAreaElement).forEach(sidebarButton => {
-                    if (sidebarButton !== targetTabButton) {
-                        sidebarButton.setAttribute("aria-selected", "false");
-                        sidebarButton.classList.remove("bg-button-ghost-hover");
+            const isGrokness = targetTabButton.hasAttribute("data-grokness");
+            setIsTabActive(isGrokness);
+
+            querySelectorAll("button", sidebarAreaElement).forEach(sidebarButton => {
+                const active = sidebarButton === targetTabButton;
+                sidebarButton.setAttribute("aria-selected", active ? "true" : "false");
+
+                if (active) {
+                    sidebarButton.classList.add("text-primary", "bg-button-ghost-hover", "[&>svg]:text-primary");
+                    sidebarButton.classList.remove("text-fg-primary");
+                } else {
+                    sidebarButton.classList.remove("text-primary", "bg-button-ghost-hover", "[&>svg]:text-primary");
+                    sidebarButton.classList.add("text-fg-primary");
+                }
+            });
+
+            querySelectorAll("button svg", sidebarAreaElement).forEach(svg => {
+                const btn = svg.closest("button");
+                if (btn) {
+                    const active = btn.getAttribute("aria-selected") === "true";
+                    if (active) {
+                        svg.classList.add("text-primary");
+                        svg.classList.remove("text-secondary", "group-hover:text-primary");
+                    } else {
+                        svg.classList.add("text-secondary", "group-hover:text-primary");
+                        svg.classList.remove("text-primary");
                     }
-                });
-                groknessTabButton.setAttribute("aria-selected", "true");
-                groknessTabButton.classList.add("bg-button-ghost-hover");
-            } else {
-                setIsTabActive(false);
-                groknessTabButton.setAttribute("aria-selected", "false");
-                groknessTabButton.classList.remove("bg-button-ghost-hover");
-                targetTabButton.setAttribute("aria-selected", "true");
-                targetTabButton.classList.add("bg-button-ghost-hover");
-            }
+                }
+            });
         };
 
         sidebarAreaElement.addEventListener("click", handleTabClick);
@@ -88,7 +100,7 @@ export const useTabLogic = (dialogElement: HTMLElement) => {
             tabButtonElement.classList.add(...conditionalClasses);
 
             const iconSvgClasses = ["lucide", "lucide-user"];
-            const iconColorClass = isTabActive ? "text-primary" : "text-secondary";
+            const iconColorClass = isTabActive ? "text-primary" : "text-secondary group-hover:text-primary";
             iconSvgClasses.push(iconColorClass);
 
             const svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
