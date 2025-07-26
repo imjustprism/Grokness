@@ -42,11 +42,10 @@ const settings = definePluginSettings({
         displayName: "Display Format",
         description: "How to display the rate limit information.",
         options: [
-            { label: "Remaining/Total", value: "remaining_total" },
             { label: "Remaining Only", value: "remaining" },
             { label: "Percentage", value: "percentage" },
         ],
-        default: "remaining_total",
+        default: "remaining",
     },
 });
 
@@ -54,6 +53,11 @@ const MODEL_MAP: Record<string, string> = {
     "Grok 4": "grok-4",
     "Grok 3": "grok-3",
     "Grok 4 Heavy": "grok-4-heavy",
+    "Grok 4 With Effort Decider": "grok-4-auto",
+    "Expert": "grok-4",
+    "Fast": "grok-3",
+    "Auto": "grok-4-auto",
+    "Heavy": "grok-4-heavy",
 } satisfies Record<string, string>;
 
 const DEFAULT_MODEL = "grok-4";
@@ -101,6 +105,17 @@ const commonFinderConfigs = {
 const cachedRateLimits: Record<string, Record<string, RateLimitData | undefined>> = {};
 const observerManager = new MutationObserverManager();
 
+type EffortLevel = "high" | "low" | "both";
+
+type ProcessedRateLimit = { error: true; } | {
+    isBoth: boolean;
+    highRemaining: number;
+    highTotal: number;
+    lowRemaining?: number;
+    lowTotal?: number;
+    waitTimeSeconds: number;
+};
+
 async function fetchWithRetry<T>(
     fetchFn: () => Promise<T>,
     maxRetries: number = API_RETRY_MAX,
@@ -126,6 +141,16 @@ function normalizeModelName(rawName: string): string {
     return trimmed ? (MODEL_MAP[trimmed] ?? trimmed.toLowerCase().replace(/\s+/g, "-")) : DEFAULT_MODEL;
 }
 
+function getEffortLevel(modelName: string): EffortLevel {
+    if (modelName === "grok-4-auto") {
+        return "both";
+    } else if (modelName === "grok-3") {
+        return "low";
+    } else {
+        return "high";
+    }
+}
+
 async function fetchRateLimit(modelName: string, requestKind: string, force: boolean = false): Promise<RateLimitData | null> {
     if (!force && cachedRateLimits[modelName]?.[requestKind] !== undefined) {
         return cachedRateLimits[modelName][requestKind] ?? null;
@@ -142,6 +167,32 @@ async function fetchRateLimit(modelName: string, requestKind: string, force: boo
         cachedRateLimits[modelName][requestKind] = undefined;
         return null;
     }
+}
+
+function processRateLimitData(data: RateLimitData | null, effortLevel: EffortLevel): ProcessedRateLimit {
+    if (!data) {
+        return { error: true };
+    }
+
+    const processed: ProcessedRateLimit = {
+        isBoth: effortLevel === "both",
+        highRemaining: 0,
+        highTotal: 0,
+        waitTimeSeconds: data.waitTimeSeconds ?? 0
+    };
+
+    if (effortLevel === "both") {
+        processed.highRemaining = data.highEffortRateLimits?.remainingQueries ?? 0;
+        processed.highTotal = data.highEffortRateLimits?.totalQueries ?? data.totalQueries ?? 0;
+        processed.lowRemaining = data.lowEffortRateLimits?.remainingQueries ?? 0;
+        processed.lowTotal = data.lowEffortRateLimits?.totalQueries ?? data.totalQueries ?? 0;
+    } else {
+        const effLimits = effortLevel === "high" ? data.highEffortRateLimits : data.lowEffortRateLimits;
+        processed.highRemaining = effLimits?.remainingQueries ?? data.remainingQueries ?? 0;
+        processed.highTotal = effLimits?.totalQueries ?? data.totalQueries ?? 0;
+    }
+
+    return processed;
 }
 
 function useCurrentModel(): string {
@@ -240,7 +291,9 @@ function useCurrentRequestKind(currentModel: string): string {
 function RateLimitComponent() {
     const currentModel = useCurrentModel();
     const currentRequestKind = useCurrentRequestKind(currentModel);
-    const [rateLimit, setRateLimit] = useState<RateLimitData | null>(null);
+    const effortLevel = getEffortLevel(currentModel);
+    const [rateLimit, setRateLimit] = useState<ProcessedRateLimit | null>(null);
+    const [lastRateLimit, setLastRateLimit] = useState<ProcessedRateLimit | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [waitTimeCountdown, setWaitTimeCountdown] = useState<number | null>(null);
     const [pendingRefresh, setPendingRefresh] = useState(false);
@@ -249,10 +302,17 @@ function RateLimitComponent() {
         setIsLoading(true);
         try {
             const data = await fetchRateLimit(currentModel, currentRequestKind, force);
-            setRateLimit(data);
-            setWaitTimeCountdown(data?.waitTimeSeconds && data.waitTimeSeconds > 0 ? data.waitTimeSeconds : null);
+            const processed = processRateLimitData(data, effortLevel);
+            if ("error" in processed) {
+                setRateLimit(processed);
+            } else {
+                setRateLimit(processed);
+                setLastRateLimit(processed);
+                setWaitTimeCountdown(processed.waitTimeSeconds > 0 ? processed.waitTimeSeconds : null);
+            }
         } catch (error) {
             logger.error("Error updating rate limit:", error);
+            setRateLimit({ error: true });
         } finally {
             setIsLoading(false);
         }
@@ -331,16 +391,8 @@ function RateLimitComponent() {
                 target: document.body,
                 options: { childList: true, subtree: true, characterData: true },
                 callback: async () => {
-                    try {
-                        const data = await fetchRateLimit(currentModel, currentRequestKind, true);
-                        setRateLimit(data);
-                        setWaitTimeCountdown(data?.waitTimeSeconds && data.waitTimeSeconds > 0 ? data.waitTimeSeconds : null);
-                    } catch (error) {
-                        logger.error("Error updating rate limit after submit:", error);
-                    } finally {
-                        setIsLoading(false);
-                        setPendingRefresh(false);
-                    }
+                    await updateRateLimit(true);
+                    setPendingRefresh(false);
                     disconnect();
                 },
                 debounceDelay: SUBMIT_RESPONSE_DEBOUNCE_MS,
@@ -358,7 +410,7 @@ function RateLimitComponent() {
                 clearTimeout(timeoutId);
             };
         }
-    }, [pendingRefresh, currentModel, currentRequestKind]);
+    }, [pendingRefresh]);
 
     useEffect(() => {
         (async () => {
@@ -383,37 +435,66 @@ function RateLimitComponent() {
         })();
     }, []);
 
-    let content = "Unavailable";
-    let tooltipContent = "Rate Limit";
+    const format = settings.store.displayFormat;
 
-    const remaining = rateLimit?.remainingQueries ?? 0;
-    const total = rateLimit?.totalQueries ?? 0;
-    const isLimited = remaining === 0 && waitTimeCountdown !== null && waitTimeCountdown > 0;
+    const isError = rateLimit === null || ("error" in rateLimit && rateLimit.error);
+    const currentData = isError ? lastRateLimit : rateLimit;
 
-    if (rateLimit) {
-        if (isLimited) {
-            content = formatCountdown(waitTimeCountdown);
-        } else {
-            switch (settings.store.displayFormat) {
-                case "remaining_total":
-                    content = `${remaining}/${total}`;
-                    break;
-                case "remaining":
-                    content = `${remaining}`;
-                    break;
-                case "percentage":
-                    content = `${Math.round((remaining / total) * 100)}%`;
-                    break;
-            }
-        }
+    let highRemaining = 0;
+    let highTotal = 0;
+    let lowRemaining = 0;
+    let lowTotal = 0;
+    let waitTime = 0;
+    let isBoth = false;
+
+    if (currentData && !("error" in currentData)) {
+        highRemaining = currentData.highRemaining;
+        highTotal = currentData.highTotal;
+        lowRemaining = currentData.lowRemaining ?? 0;
+        lowTotal = currentData.lowTotal ?? 0;
+        waitTime = currentData.waitTimeSeconds;
+        isBoth = currentData.isBoth;
     }
 
+    const isLimited = isBoth
+        ? highRemaining === 0 && lowRemaining === 0 && waitTime > 0
+        : highRemaining === 0 && waitTime > 0;
+
+    let content: string;
+
     if (isLimited) {
-        tooltipContent = `Rate limit reached. Remaining: 0/${total}`;
-    } else if (rateLimit?.waitTimeSeconds && rateLimit.waitTimeSeconds > 0) {
-        tooltipContent = `Limit reached. Reset in ${formatCountdown(rateLimit.waitTimeSeconds)}`;
-    } else if (rateLimit) {
-        tooltipContent = `${remaining}/${total} queries remaining`;
+        content = formatCountdown(waitTimeCountdown ?? waitTime);
+    } else if (currentData && !("error" in currentData)) {
+        let highContent: string;
+        let lowContent: string | undefined;
+
+        if (format === "percentage") {
+            highContent = highTotal > 0 ? `${Math.round((highRemaining / highTotal) * 100)}%` : highRemaining.toString();
+            if (isBoth) {
+                lowContent = lowTotal > 0 ? `${Math.round((lowRemaining / lowTotal) * 100)}%` : lowRemaining.toString();
+            }
+        } else {
+            highContent = highRemaining.toString();
+            if (isBoth) {
+                lowContent = lowRemaining.toString();
+            }
+        }
+
+        content = isBoth ? `${highContent} | ${lowContent}` : highContent;
+    } else {
+        content = "Unavailable";
+    }
+
+    let tooltipContent: string;
+
+    if (isBoth) {
+        tooltipContent = isLimited
+            ? `Rate limit reached. Reset in ${formatCountdown(waitTimeCountdown ?? waitTime)}`
+            : `High: ${highRemaining} queries left Low: ${lowRemaining} queries left`;
+    } else {
+        tooltipContent = isLimited
+            ? `Rate limit reached. Reset in ${formatCountdown(waitTimeCountdown ?? waitTime)}`
+            : `${highRemaining} queries left`;
     }
 
     return (
@@ -422,12 +503,12 @@ function RateLimitComponent() {
             as="button"
             variant="outline"
             size="md"
-            icon={isLimited ? "ClockFading" : "Gauge"}
+            icon={isLimited ? "Clock" : "Gauge"}
             loading={isLoading}
             onClick={() => updateRateLimit(true)}
             aria-label="Rate Limit"
             tooltipContent={tooltipContent}
-            className={isLimited ? "dark:text-red-200" : ""}
+            className={isLimited ? "text-fg-danger [&_svg]:text-fg-danger" : ""}
         >
             {content}
         </IconButton>
