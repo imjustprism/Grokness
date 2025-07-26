@@ -15,6 +15,16 @@ export interface RateLimitRequest {
 }
 
 /**
+ * Effort-specific rate limit data.
+ */
+export interface EffortRateLimits {
+    cost?: number;
+    waitTimeSeconds?: number;
+    remainingQueries?: number;
+    totalQueries?: number;
+}
+
+/**
  * Response data for rate limits.
  */
 export interface RateLimitData {
@@ -26,6 +36,14 @@ export interface RateLimitData {
     waitTimeSeconds?: number;
     /** Total queries allowed in the window. */
     totalQueries: number;
+    /** Optional remaining tokens. */
+    remainingTokens?: number;
+    /** Optional total tokens. */
+    totalTokens?: number;
+    /** Optional low effort rate limits. */
+    lowEffortRateLimits?: EffortRateLimits;
+    /** Optional high effort rate limits. */
+    highEffortRateLimits?: EffortRateLimits;
 }
 
 /**
