@@ -85,7 +85,7 @@ const ALL_HIDE_CONFIGS: ElementHideConfig[] = [
 
 export default definePlugin({
     name: "Screen Cleaner",
-    description: "Eliminates distracting elements for a better.",
+    description: "Eliminates distracting elements for a cleaner experience.",
     authors: [Devs.Prism],
     category: "appearance",
     tags: ["hide", "cleaner", "screensaver"],
