@@ -4,22 +4,28 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { TabButton } from "@components/TabButton";
+import { Button } from "@components/Button";
 import React from "react";
 
-/**
- * Props for the SettingsTab component
- */
 interface SettingsTabProps {
-    /** Controls whether the tab is currently active/selected */
     isActive: boolean;
+    onClick: () => void;
+    iconSize?: number;
 }
 
-export const SettingsTab: React.FC<SettingsTabProps> = ({ isActive }) => (
-    <TabButton
+export const SettingsTab: React.FC<SettingsTabProps> = ({ isActive, onClick, iconSize }) => (
+    <Button
         icon="TestTubeDiagonal"
-        label="Grokness"
+        iconSize={iconSize}
         isActive={isActive}
-        data-grokness
-    />
+        onClick={onClick}
+        variant="ghost"
+        color="default"
+        size="md"
+        rounded={false}
+        className="min-w-40 gap-3 px-4"
+        data-grokness-tab
+    >
+        Grokness
+    </Button>
 );

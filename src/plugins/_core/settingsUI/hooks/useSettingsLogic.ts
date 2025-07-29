@@ -17,7 +17,7 @@ export const useSettingsLogic = () => {
     const [disabledPluginsMap, setDisabledPluginsMap] = useState<Record<string, boolean>>(() => {
         const initialDisabledMap: Record<string, boolean> = {};
         allPlugins.forEach(pluginItem => {
-            initialDisabledMap[pluginItem.id] = Boolean(localStorage.getItem(`plugin-disabled:${pluginItem.id}`));
+            initialDisabledMap[pluginItem.id] = pluginItem.required ? false : !Boolean(localStorage.getItem(`plugin-enabled:${pluginItem.id}`));
         });
         return initialDisabledMap;
     });

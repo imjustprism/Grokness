@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { DropdownMenu, type DropdownOption } from "@components/DropdownMenu";
-import { FilterBar } from "@components/FilterBar";
 import { Grid } from "@components/Grid";
-import { NotificationBanner } from "@components/NotificationBanner";
-import { SearchInput } from "@components/SearchInput";
-import { SectionTitle } from "@components/SectionTitle";
+import { Subheader } from "@components/Subheader";
+import { DropdownMenu, type DropdownOption } from "@plugins/_core/settingsUI/components/DropdownMenu";
+import { FilterBar } from "@plugins/_core/settingsUI/components/FilterBar";
+import { NotificationBanner } from "@plugins/_core/settingsUI/components/NotificationBanner";
 import { PluginCard } from "@plugins/_core/settingsUI/components/PluginCard";
+import { SearchInput } from "@plugins/_core/settingsUI/components/SearchInput";
 import { type IPlugin } from "@utils/types";
 import React from "react";
 
@@ -90,7 +90,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                                 ></div>
                             </div>
                         )}
-                        <SectionTitle>{title}</SectionTitle>
+                        <Subheader>{title}</Subheader>
                         {title === "Filters" ? (
                             <FilterBar>
                                 <div className="flex-1">

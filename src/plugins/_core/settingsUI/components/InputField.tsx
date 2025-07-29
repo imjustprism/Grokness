@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { LucideIcon } from "@components/LucideIcon";
+import { Lucide } from "@components/Lucide";
 import clsx from "clsx";
 import React from "react";
 
@@ -34,8 +34,6 @@ export interface InputFieldProps {
     options?: InputOption[];
     /** Additional CSS classes */
     className?: string;
-    /** Minimum value for number type */
-    min?: number;
 }
 
 export const InputField: React.FC<InputFieldProps> = ({
@@ -45,7 +43,6 @@ export const InputField: React.FC<InputFieldProps> = ({
     placeholder = "",
     options = [],
     className,
-    min,
 }) => {
     const [isOpen, setIsOpen] = React.useState(false);
     const selectedOption = options.find(opt => opt.value === value.toString());
@@ -67,11 +64,21 @@ export const InputField: React.FC<InputFieldProps> = ({
     }, [type]);
 
     const commonClass = clsx(
-        "h-8 py-1 px-3 text-sm bg-transparent focus:outline-none text-primary rounded-xl border border-border-l1",
+        "h-10 py-2 px-3.5 text-sm bg-transparent focus:outline-none text-primary rounded-xl border border-border-l1",
         "transition-colors duration-200",
-        "w-[140px]",
+        "w-48",
         className
     );
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const inputValue = e.target.value;
+        if (type === "number") {
+            const sanitizedValue = inputValue.replace(/[^0-9]/g, "");
+            onChange(sanitizedValue === "" ? 0 : parseInt(sanitizedValue, 10));
+        } else {
+            onChange(inputValue);
+        }
+    };
 
     if (type === "select") {
         return (
@@ -87,7 +94,7 @@ export const InputField: React.FC<InputFieldProps> = ({
                             isOpen && "transform rotate-180"
                         )}
                     >
-                        <LucideIcon name="ChevronDown" size={14} strokeWidth={2} />
+                        <Lucide name="ChevronDown" size={16} strokeWidth={2} />
                     </div>
                 </button>
                 {isOpen && (
@@ -96,7 +103,7 @@ export const InputField: React.FC<InputFieldProps> = ({
                             "absolute top-full left-0 mt-1",
                             "bg-surface-l1 dark:bg-surface-l1 rounded-xl shadow-lg border border-border-l1",
                             "z-10 p-1 overflow-y-auto max-h-40",
-                            "w-[140px]"
+                            "w-48"
                         )}
                     >
                         <div className="flex flex-col gap-0.5">
@@ -111,7 +118,7 @@ export const InputField: React.FC<InputFieldProps> = ({
                                         "w-full text-left px-2 py-1",
                                         "text-secondary focus:outline-none whitespace-nowrap",
                                         "transition-colors duration-200",
-                                        "text-sm rounded-sm",
+                                        "text-sm rounded-md",
                                         option.value === value.toString()
                                             ? "bg-button-ghost-hover text-primary"
                                             : "hover:bg-button-ghost-hover hover:text-primary"
@@ -129,15 +136,12 @@ export const InputField: React.FC<InputFieldProps> = ({
 
     return (
         <input
-            type={type}
-            value={value}
-            onChange={e => onChange(type === "number" ? parseFloat(e.target.value) || 0 : e.target.value)}
+            type={type === "number" ? "text" : type}
+            inputMode={type === "number" ? "numeric" : undefined}
+            value={value.toString()}
+            onChange={handleInputChange}
             placeholder={placeholder}
-            min={min}
-            className={clsx(
-                commonClass,
-                "[-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            )}
+            className={clsx(commonClass)}
         />
     );
 };

@@ -1,0 +1,47 @@
+.text-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--max-visible-height, 6em);
+    overflow: hidden;
+    pointer-events: none;
+    color: inherit;
+    filter: blur(1.95px);
+}
+
+.ellipsis {
+    position: absolute;
+    bottom: 0.125rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+    color: var(--fg-secondary);
+    pointer-events: none;
+}
+
+.prompt-toggle-button {
+    position: absolute !important;
+    top: 0.625rem !important;
+    right: 0.5rem !important;
+    transition: none !important;
+}
+
+.prompt-toggle-button:hover {
+    background: transparent !important;
+}
+
+.prompt-toggle-button:hover svg {
+    color: inherit !important;
+}
+
+.fade-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2em;
+    background: linear-gradient(to bottom, transparent, var(--surface-l2));
+    pointer-events: none;
+}

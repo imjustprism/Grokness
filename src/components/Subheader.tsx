@@ -8,17 +8,17 @@ import clsx from "clsx";
 import React, { forwardRef, useEffect, useRef } from "react";
 
 /**
- * Props for the SectionTitle component.
+ * Props for the Subheader component.
  *
- * @property children - The content of the section title (usually text or elements).
+ * @property children - The content of the subheader (usually text or elements).
  * @property className - Additional class names to apply for custom styling.
  * @property testID - Optional test id for testing purposes.
  * @property All other standard HTML heading element props are supported.
  */
-export interface SectionTitleProps
+export interface SubheaderProps
     extends React.HTMLAttributes<HTMLHeadingElement> {
     /**
-     * The content of the section title (usually text or elements).
+     * The content of the subheader (usually text or elements).
      */
     children: React.ReactNode;
     /**
@@ -32,13 +32,13 @@ export interface SectionTitleProps
 }
 
 /**
- * A modern, accessible, and professional section title for grouping content.
+ * A modern, accessible, and professional subheader for grouping content.
  * - Uses semantic <h2> by default.
  * - Keyboard focusable for accessibility.
  * - Customizable via className and testID.
  * - Visual focus ring for keyboard navigation.
  */
-export const SectionTitle = forwardRef<HTMLHeadingElement, SectionTitleProps>(
+export const Subheader = forwardRef<HTMLHeadingElement, SubheaderProps>(
     ({ children, className, testID, tabIndex = 0, ...props }, ref) => {
         const localRef = useRef<HTMLHeadingElement>(null);
         const combinedRef = (node: HTMLHeadingElement) => {
@@ -71,4 +71,4 @@ export const SectionTitle = forwardRef<HTMLHeadingElement, SectionTitleProps>(
     }
 );
 
-SectionTitle.displayName = "SectionTitle";
+Subheader.displayName = "Subheader";
