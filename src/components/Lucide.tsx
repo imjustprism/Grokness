@@ -15,26 +15,26 @@ type LucideIconName = keyof Omit<
 >;
 
 /**
- * LucideIcon component for rendering any Lucide icon by name
+ * Lucide component for rendering any Lucide icon by name
  *
  * @example
  * ```tsx
  * // Basic usage
- * <LucideIcon name="Settings" />
+ * <Lucide name="Settings" />
  *
  * // With custom size and styling
- * <LucideIcon name="Heart" size={24} className="text-red-500" />
+ * <Lucide name="Heart" size={24} className="text-red-500" />
  *
  * // With all Lucide props
- * <LucideIcon
- *   name="Search"
- *   size={20}
- *   strokeWidth={1.5}
- *   className="text-blue-500"
+ * <Lucide
+ * name="Search"
+ * size={20}
+ * strokeWidth={1.5}
+ * className="text-blue-500"
  * />
  * ```
  */
-export interface LucideIconProps extends Omit<LucideProps, "ref"> {
+export interface LucideComponentProps extends Omit<LucideProps, "ref"> {
     /** The name of the Lucide icon to render */
     name: LucideIconName;
     /** Size of the icon (default: 24) */
@@ -43,7 +43,7 @@ export interface LucideIconProps extends Omit<LucideProps, "ref"> {
     fallback?: LucideIconName;
 }
 
-export const LucideIcon = React.forwardRef<SVGSVGElement, LucideIconProps>(
+export const Lucide = React.forwardRef<SVGSVGElement, LucideComponentProps>(
     (
         { name, size = 24, fallback = "AlertCircle", ...props },
         ref
@@ -64,7 +64,7 @@ export const LucideIcon = React.forwardRef<SVGSVGElement, LucideIconProps>(
     }
 );
 
-LucideIcon.displayName = "LucideIcon";
+Lucide.displayName = "Lucide";
 
 export type { LucideIconName };
 

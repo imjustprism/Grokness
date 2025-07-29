@@ -1,13 +1,3 @@
-.hover\:bg-yellow-400\/10:hover {
-    background-color: hsl(var(--yellow-400) / 0.1);
-}
-
-/* Light theme */
-:root {
-    color-scheme: light;
-}
-
-/* Dark theme */
-.dark {
-    color-scheme: dark;
+[data-grokness-tab] {
+    flex-shrink: 0 !important;
 }

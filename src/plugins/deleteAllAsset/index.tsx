@@ -7,31 +7,26 @@
 import { grokAPI } from "@api/api";
 import type { Asset } from "@api/interfaces";
 import { Button } from "@components/Button";
-import { LucideIcon } from "@components/LucideIcon";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { Devs } from "@utils/constants";
-import { type ElementFinderConfig, findElement, MutationObserverManager } from "@utils/dom";
+import { type ElementFinderConfig, MutationObserverManager, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePlugin, type IPatch } from "@utils/types";
-import { clsx } from "clsx";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 const logger = new Logger("DeleteAllAssets", "#ef4444");
 
 const TOOLBAR_FINDER_CONFIG: ElementFinderConfig = {
     selector: "div.flex.gap-2.overflow-x-auto.no-scrollbar.h-subheader-height.items-center",
-    filter: el => !!el.querySelector('button[aria-haspopup="menu"] svg path[d="M3 7L21 7"]') &&
+    filter: el =>
+        !!el.querySelector('button[aria-haspopup="menu"] svg path[d="M3 7L21 7"]') &&
         !!el.querySelector('button[aria-haspopup="menu"] svg.lucide-arrow-down-narrow-wide'),
 };
-
-const DELETE_CONTAINER_ID = "grok-delete-all-container";
 
 async function fetchAllAssets(): Promise<Asset[]> {
     try {
         let allAssets: Asset[] = [];
         let pageToken: string | undefined = undefined;
-
         do {
             const response = await grokAPI.assetRepository.listAssets({
                 pageSize: 50,
@@ -43,7 +38,6 @@ async function fetchAllAssets(): Promise<Asset[]> {
             allAssets = allAssets.concat(response.assets);
             pageToken = response.nextPageToken;
         } while (pageToken);
-
         return allAssets;
     } catch (error) {
         logger.error("Failed to fetch all assets:", error);
@@ -51,7 +45,7 @@ async function fetchAllAssets(): Promise<Asset[]> {
     }
 }
 
-function DeleteAllButton() {
+const DeleteAllButton: React.FC = () => {
     const [isConfirming, setIsConfirming] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -75,11 +69,8 @@ function DeleteAllButton() {
                     setIsConfirming(false);
                     return;
                 }
-
                 await Promise.all(
-                    assets.map(asset =>
-                        grokAPI.assetRepository.deleteAsset({ assetId: asset.assetId })
-                    )
+                    assets.map(asset => grokAPI.assetRepository.deleteAsset({ assetId: asset.assetId }))
                 );
                 window.location.reload();
             } catch (error) {
@@ -93,163 +84,109 @@ function DeleteAllButton() {
         }
     };
 
-    const icon = isLoading ? (
-        <LucideIcon name="Loader2" size={16} className="animate-spin text-fg-secondary" />
-    ) : (
-        <LucideIcon
-            name="Trash2"
-            size={16}
-            className={clsx(
-                "transition-colors duration-100",
-                isConfirming ? "text-fg-danger group-hover:text-fg-danger" : "text-fg-secondary group-hover:text-fg-primary"
-            )}
-        />
-    );
-
     return (
-        <Tooltip.Provider>
-            <Tooltip.Root delayDuration={600} disableHoverableContent={true}>
-                <Tooltip.Trigger asChild>
-                    <Button
-                        id="grok-delete-all"
-                        as="button"
-                        variant="outline"
-                        size="sm"
-                        icon={icon}
-                        iconPosition="left"
-                        disabled={isLoading}
-                        onClick={handleClick}
-                        aria-label="Delete All Assets"
-                        className="h-8 px-3 text-xs flex-shrink-0"
-                        style={{ boxShadow: "none" }}
-                        rounded={true}
-                        color={isConfirming ? "danger" : "default"}
-                    >
-                        <span className="sr-only">Delete All Assets</span>
-                        <span className="hidden @[160px]:inline-block">{isConfirming ? "Confirm" : "Delete All"}</span>
-                    </Button>
-                </Tooltip.Trigger>
-                <Tooltip.Portal>
-                    <Tooltip.Content
-                        side="bottom"
-                        sideOffset={8}
-                        className="z-50 overflow-hidden rounded-md shadow-sm dark:shadow-none px-3 py-1.5 text-xs pointer-events-none animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 bg-primary text-background"
-                    >
-                        {isConfirming ? "Are you sure? Click again to confirm" : "Delete All Assets"}
-                    </Tooltip.Content>
-                </Tooltip.Portal>
-            </Tooltip.Root>
-        </Tooltip.Provider>
+        <Button
+            id="grok-delete-all"
+            variant="outline"
+            size="sm"
+            loading={isLoading}
+            icon={isLoading ? "Loader2" : "Trash"}
+            iconSize={15}
+            iconPosition="left"
+            disabled={isLoading}
+            onClick={handleClick}
+            aria-label="Delete All Assets"
+            className="h-8 px-3 text-xs flex-shrink-0"
+            style={{ boxShadow: "none" }}
+            rounded={true}
+            color={isConfirming ? "danger" : "default"}
+            tooltip={isConfirming ? "Are you sure? Click again to confirm" : "Delete All Assets"}
+        >
+            <span className="sr-only">Delete All Assets</span>
+            <span className="hidden @[160px]:inline-block">{isConfirming ? "Confirm" : "Delete All"}</span>
+        </Button>
     );
-}
+};
 
 const deleteAllPatch: IPatch = (() => {
-    let deleteRoot: Root | null = null;
-    let deleteContainer: HTMLDivElement | null = null;
-    let toolbarObserverDisconnect: (() => void) | null = null;
-    let bodyObserverDisconnect: (() => void) | null = null;
+    const roots = new Map<HTMLElement, Root>();
     const observerManager = new MutationObserverManager();
+    let observerDisconnect: (() => void) | null = null;
 
-    function mountDeleteButton() {
-        try {
-            const toolbar = findElement(TOOLBAR_FINDER_CONFIG);
-            if (!toolbar) {
-                return;
-            }
+    const attachToToolbar = (toolbar: HTMLElement) => {
+        if (toolbar.querySelector("#grok-delete-all-container")) {
+            return;
+        }
 
-            const existingContainer = document.getElementById(DELETE_CONTAINER_ID);
-            if (existingContainer && toolbar.contains(existingContainer)) {
-                return;
-            }
+        const container = document.createElement("div");
+        container.id = "grok-delete-all-container";
 
-            unmountDeleteButton();
-
-            const sortButton = toolbar.querySelector('button[aria-haspopup="menu"]:has(svg.lucide-arrow-down-narrow-wide)') as HTMLElement | null;
-            if (!sortButton) {
-                logger.warn("Sort button not found in toolbar");
-                return;
-            }
-
-            deleteContainer = document.createElement("div");
-            deleteContainer.id = DELETE_CONTAINER_ID;
-            deleteContainer.style.display = "none";
-            sortButton.after(deleteContainer);
-            deleteRoot = createRoot(deleteContainer);
-            deleteRoot.render(<DeleteAllButton />);
-
-            requestAnimationFrame(() => {
-                if (deleteContainer) {
-                    deleteContainer.style.display = "";
+        const referenceNode = (() => {
+            const buttons = toolbar.querySelectorAll('button[aria-haspopup="menu"]');
+            for (const btn of buttons) {
+                if (btn.querySelector("svg.lucide-arrow-down-narrow-wide")) {
+                    return btn.nextSibling;
                 }
-            });
+            }
+            return null;
+        })();
 
-            const { observe, disconnect } = observerManager.createDebouncedObserver({
-                target: toolbar,
-                options: { childList: true, subtree: true, attributes: true },
-                callback: () => mountDeleteButton(),
-                debounceDelay: 50,
-                useRaf: true,
-            });
-            observe();
-            toolbarObserverDisconnect = disconnect;
-        } catch (error) {
-            logger.error("Error mounting delete button:", error);
-        }
-    }
+        toolbar.insertBefore(container, referenceNode);
 
-    function unmountDeleteButton() {
-        try {
-            deleteRoot?.unmount();
-            deleteContainer?.remove();
-            deleteRoot = null;
-            deleteContainer = null;
-        } catch (error) {
-            logger.error("Error unmounting delete button:", error);
+        const root = createRoot(container);
+        root.render(<DeleteAllButton />);
+        roots.set(toolbar, root);
+    };
+
+    const detachFromToolbar = (toolbar: HTMLElement) => {
+        const root = roots.get(toolbar);
+        if (root) {
+            root.unmount();
+            roots.delete(toolbar);
+            toolbar.querySelector("#grok-delete-all-container")?.remove();
         }
-    }
+    };
 
     return {
         apply() {
-            try {
-                const mutationCallback = () => {
-                    mountDeleteButton();
-                };
+            const { observe, disconnect } = observerManager.createObserver({
+                target: document.body,
+                options: { childList: true, subtree: true },
+                callback: () => {
+                    const toolbars = querySelectorAll(TOOLBAR_FINDER_CONFIG.selector).filter(el => TOOLBAR_FINDER_CONFIG.filter?.(el));
+                    const currentToolbars = new Set(toolbars);
 
-                const { observe: bodyObserve, disconnect: bodyDisconnect } = observerManager.createDebouncedObserver({
-                    target: document.body,
-                    options: { childList: true, subtree: true },
-                    callback: mutationCallback,
-                    debounceDelay: 50,
-                    useRaf: true,
-                });
+                    currentToolbars.forEach(toolbar => {
+                        if (!roots.has(toolbar)) {
+                            attachToToolbar(toolbar);
+                        }
+                    });
 
-                bodyObserve();
-                bodyObserverDisconnect = bodyDisconnect;
+                    roots.forEach((_, toolbar) => {
+                        if (!currentToolbars.has(toolbar)) {
+                            detachFromToolbar(toolbar);
+                        }
+                    });
+                },
+            });
 
-                mutationCallback();
+            observerDisconnect = disconnect;
+            observe();
 
-                document.addEventListener("visibilitychange", mutationCallback);
-            } catch (error) {
-                logger.error("Error applying delete all patch:", error);
-            }
+            const initialToolbars = querySelectorAll(TOOLBAR_FINDER_CONFIG.selector).filter(el => TOOLBAR_FINDER_CONFIG.filter?.(el));
+            initialToolbars.forEach(attachToToolbar);
         },
         remove() {
-            try {
-                toolbarObserverDisconnect?.();
-                bodyObserverDisconnect?.();
-                unmountDeleteButton();
-                document.removeEventListener("visibilitychange", () => { });
-                observerManager.disconnectAll();
-            } catch (error) {
-                logger.error("Error removing delete all patch:", error);
-            }
+            observerDisconnect?.();
+            roots.forEach((_, toolbar) => detachFromToolbar(toolbar));
+            roots.clear();
         },
     };
 })();
 
 export default definePlugin({
     name: "Delete All Assets",
-    description: "Adds a button to the files toolbar to delete all uploaded assets with confirmation.",
+    description: "Adds a button to the files to delete all uploaded assets.",
     authors: [Devs.Prism],
     category: "utility",
     tags: ["assets", "delete", "files"],

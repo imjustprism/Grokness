@@ -5,8 +5,6 @@
  */
 
 import { Button } from "@components/Button";
-import { IconButton } from "@components/IconButton";
-import { LucideIcon } from "@components/LucideIcon";
 import { createFocusTrap } from "@utils/dom";
 import clsx from "clsx";
 import React, { useEffect, useRef } from "react";
@@ -158,14 +156,21 @@ export const Modal: React.FC<ModalProps> = ({
                 style={{ pointerEvents: "auto" }}
             >
                 <div className="flex flex-col space-y-1.5 text-center sm:text-left">
-                    <div className="flex w-full items-center justify-between">
-                        {title && (
-                            <h1 className="font-semibold text-lg flex-1">
-                                {title}
-                            </h1>
-                        )}
-                        <IconButton
-                            icon={props => <LucideIcon name="X" {...props} />}
+                    <div className="flex w-full items-start justify-between">
+                        <div className="flex-1">
+                            {title && (
+                                <h2 className="font-semibold text-lg" id={ariaLabelledBy}>
+                                    {title}
+                                </h2>
+                            )}
+                            {description && (
+                                <div className="text-sm text-secondary mt-1" id={ariaDescribedBy}>
+                                    {description}
+                                </div>
+                            )}
+                        </div>
+                        <Button
+                            icon="X"
                             size="md"
                             variant="ghost"
                             iconSize={18}
@@ -174,11 +179,6 @@ export const Modal: React.FC<ModalProps> = ({
                             className="-mt-2 -mr-2 rounded-xl text-secondary hover:text-primary"
                         />
                     </div>
-                    {description && (
-                        <div className="text-sm text-secondary mt-1">
-                            {description}
-                        </div>
-                    )}
                 </div>
                 <div className="flex flex-col gap-3 pl-1 pr-1">{children}</div>
                 {(footer || showCancel) && (

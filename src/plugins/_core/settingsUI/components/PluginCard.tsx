@@ -4,142 +4,29 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { IconButton } from "@components/IconButton";
-import { InputField } from "@components/InputField";
-import { LucideIcon } from "@components/LucideIcon";
+import { Button } from "@components/Button";
 import { Modal } from "@components/Modal";
 import { Switch } from "@components/Switch";
+import { InputField } from "@plugins/_core/settingsUI/components/InputField";
 import { usePluginSettings } from "@plugins/_core/settingsUI/hooks/usePluginSettings";
+import { Logger } from "@utils/logger";
 import type { InferOptionType, IPlugin, PluginOptionBase, PluginOptions } from "@utils/types";
 import clsx from "clsx";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const CARD_HEIGHT = 120;
 const CARD_BORDER_WIDTH = 1;
 
-/**
- * Props for the PluginCard component
- */
+const pluginCardLogger = new Logger("PluginCard", "#f5c2e7");
+
 export interface PluginCardProps {
-    /** The plugin object containing all plugin information */
     plugin: IPlugin;
-    /** Border width in pixels */
     borderSize?: number;
-    /** CSS width class for the card */
     cardWidth?: string;
-    /** CSS border radius class for the card */
     borderRadius?: string;
-    /** Callback function when plugin toggle state changes */
     onToggle?: (pluginName: string, isDisabled: boolean) => void;
-    /** Callback function when plugin restart state changes */
     onRestartChange?: (pluginName: string, requiresRestart: boolean, source: "toggle" | "settings") => void;
 }
-
-/**
- * Renders the plugin title with consistent styling
- */
-const PluginTitle: React.FC<{ id: string; title: string; }> = ({ id, title }) => (
-    <div id={id} className="text-sm font-medium flex flex-row items-center gap-1.5 mb-3 truncate">
-        {title}
-    </div>
-);
-
-/**
- * Renders the plugin description with consistent styling and truncation
- */
-const PluginDescription: React.FC<{ description: string; }> = ({ description }) => (
-    <div className="text-xs text-secondary text-pretty leading-tight line-clamp-3 overflow-hidden">
-        {description}
-    </div>
-);
-
-/**
- * Renders the action buttons (settings/info and toggle switch)
- */
-const PluginActions: React.FC<{
-    hasSettings: boolean;
-    onSettingsClick: () => void;
-    isEnabled: boolean;
-    isRequired: boolean;
-    onToggle: (checked: boolean) => void;
-    switchLabelId: string;
-    pluginName: string;
-}> = ({ hasSettings, onSettingsClick, isEnabled, isRequired, onToggle, switchLabelId, pluginName }) => {
-    const SettingsIcon = (props: Omit<React.ComponentProps<typeof LucideIcon>, "name">) => (
-        <LucideIcon name="SlidersHorizontal" {...props} />
-    );
-    const InfoIcon = (props: Omit<React.ComponentProps<typeof LucideIcon>, "name">) => (
-        <LucideIcon name="Info" {...props} />
-    );
-
-    return (
-        <div className="absolute top-2 right-2 flex gap-2 items-center z-10">
-            <IconButton
-                icon={hasSettings ? SettingsIcon : InfoIcon}
-                size="sm"
-                variant="ghost"
-                iconSize={16}
-                onClick={onSettingsClick}
-                aria-label={hasSettings ? "Show plugin settings" : "Show plugin information"}
-                className="text-secondary hover:text-primary"
-            />
-            <Switch
-                checked={isRequired ? true : isEnabled}
-                disabled={isRequired}
-                onCheckedChange={onToggle}
-                ariaLabelledBy={switchLabelId}
-                aria-label={`Toggle ${pluginName} (${isRequired ? "required" : "optional"})`}
-            />
-        </div>
-    );
-};
-
-/**
- * Renders the settings modal content
- */
-const SettingsModalContent: React.FC<{
-    plugin: IPlugin;
-    hasSettings: boolean;
-    settings: Record<string, unknown>;
-    renderControl: (key: string, option: PluginOptionBase, value: unknown) => React.ReactNode;
-}> = ({ plugin, hasSettings, settings, renderControl }) => (
-    <div className="p-4 space-y-4">
-        <p className="text-sm text-secondary">{plugin.description}</p>
-        <div>
-            <h3 className="text-sm font-medium text-primary mb-1">Authors</h3>
-            <p className="text-sm text-secondary">{plugin.authors.map(author => author.name).join(", ")}</p>
-        </div>
-        {plugin.requiresRestart && (
-            <div className="text-sm text-warning bg-warning/10 p-3 rounded-lg border border-warning/20">
-                This plugin requires a restart to take effect
-            </div>
-        )}
-        <div>
-            <h3 className="text-sm font-medium text-primary mb-1">Settings</h3>
-            {hasSettings ? (
-                <div className="mt-2 space-y-4">
-                    {Object.entries(plugin.options).map(([key, option]) => {
-                        const currentValue = settings[key];
-                        const labelId = `setting-label-${plugin.id}-${key}`;
-                        return (
-                            <div key={key} className="flex justify-between items-start gap-4">
-                                <div className="flex flex-col flex-1">
-                                    <label id={labelId} className="text-sm font-medium text-primary">
-                                        {option.displayName || key}
-                                    </label>
-                                    {option.description && <p className="text-xs text-secondary mt-1">{option.description}</p>}
-                                </div>
-                                <div className="flex-shrink-0 mt-1">{renderControl(key, option, currentValue)}</div>
-                            </div>
-                        );
-                    })}
-                </div>
-            ) : (
-                <p className="text-sm text-secondary">No settings available for this plugin.</p>
-            )}
-        </div>
-    </div>
-);
 
 export const PluginCard: React.FC<PluginCardProps> = ({
     plugin,
@@ -150,33 +37,62 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     onRestartChange,
 }) => {
     const [showModal, setShowModal] = useState(false);
-    const { settings, handleSettingChange } = usePluginSettings(plugin, onRestartChange ? (name: string, req: boolean, source: "toggle" | "settings") => onRestartChange(name, req, source) : undefined);
+    const { settings, handleSettingChange } = usePluginSettings(plugin, onRestartChange);
+    const debounceTimer = useRef<number | null>(null);
 
     const pluginStorageKey = `plugin-enabled:${plugin.id}`;
-
     const initialEnabled = useMemo(() => !!localStorage.getItem(pluginStorageKey), [pluginStorageKey]);
-
     const [isEnabled, setIsEnabled] = useState(initialEnabled);
 
     const hasSettings = Object.keys(plugin.options).length > 0;
+
+    const sortedOptions = useMemo(() => {
+        const typeOrder: Record<string, number> = { select: 0, string: 1, number: 2, custom: 3, boolean: 4 };
+        return Object.entries(plugin.options).sort(([, a], [, b]) => {
+            const orderA = typeOrder[a.type] ?? 99;
+            const orderB = typeOrder[b.type] ?? 99;
+            return orderA - orderB;
+        });
+    }, [plugin.options]);
 
     const handleToggleChange = useCallback((checked: boolean) => {
         if (plugin.required) {
             return;
         }
+
         setIsEnabled(checked);
-        if (checked) {
-            localStorage.setItem(pluginStorageKey, "1");
-            plugin.start?.({ storageKey: pluginStorageKey });
-        } else {
-            localStorage.removeItem(pluginStorageKey);
-            plugin.stop?.({ storageKey: pluginStorageKey });
-        }
         onToggle?.(plugin.name, !checked);
-        if (onRestartChange && plugin.requiresRestart) {
-            const requiresRestart = checked !== initialEnabled;
-            onRestartChange(plugin.name, requiresRestart, "toggle");
+
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
         }
+
+        debounceTimer.current = window.setTimeout(() => {
+            try {
+                if (checked) {
+                    localStorage.setItem(pluginStorageKey, "1");
+                    if (plugin.start) {
+                        plugin.start({ storageKey: pluginStorageKey });
+                    } else {
+                        pluginCardLogger.warn(`Plugin "${plugin.name}" has no start method.`);
+                    }
+                } else {
+                    localStorage.removeItem(pluginStorageKey);
+                    if (plugin.stop) {
+                        plugin.stop({ storageKey: pluginStorageKey });
+                    } else {
+                        pluginCardLogger.warn(`Plugin "${plugin.name}" has no stop method.`);
+                    }
+                }
+            } catch (error) {
+                pluginCardLogger.error(`Error toggling plugin "${plugin.name}":`, error);
+            }
+
+            if (onRestartChange && plugin.requiresRestart) {
+                const requiresRestart = checked !== initialEnabled;
+                onRestartChange(plugin.name, requiresRestart, "toggle");
+            }
+        }, 250);
     }, [plugin, pluginStorageKey, onToggle, onRestartChange, initialEnabled]);
 
     useEffect(() => {
@@ -196,7 +112,6 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     }, [plugin.required, isEnabled]);
 
     const switchLabelId = useMemo(() => `plugin-switch-${plugin.id}`, [plugin.id]);
-    const modalAriaId = useMemo(() => `plugin-modal-title-${plugin.id}`, [plugin.id]);
 
     const handleSettingUpdate = useCallback(<K extends keyof PluginOptions>(
         key: K,
@@ -209,29 +124,37 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         const labelId = `setting-label-${plugin.id}-${key}`;
         switch (option.type) {
             case "boolean":
-                return <Switch checked={currentValue as boolean} onCheckedChange={checked => handleSettingUpdate(key, checked)} ariaLabelledBy={labelId} />;
+                return (
+                    <Switch
+                        checked={currentValue as boolean}
+                        onCheckedChange={checked => handleSettingUpdate(key, checked)}
+                        ariaLabelledBy={labelId}
+                    />
+                );
             case "string":
-                return <InputField type="text" value={currentValue as string} onChange={value => handleSettingUpdate(key, value as string)} />;
-            case "number":
-                const minVal = typeof option.min === "number" ? option.min : undefined;
+                return (
+                    <InputField
+                        type="text"
+                        value={currentValue as string}
+                        onChange={value => handleSettingUpdate(key, value as string)}
+                    />
+                );
+            case "number": {
                 const maxVal = typeof option.max === "number" ? option.max : undefined;
                 return (
                     <InputField
                         type="number"
                         value={currentValue as number}
                         onChange={value => {
-                            let newValue = typeof value === "string" ? parseFloat(value) || 0 : value;
-                            if (minVal !== undefined && newValue < minVal) {
-                                newValue = minVal;
-                            }
+                            let newValue = typeof value === "string" ? parseInt(value, 10) || 0 : value;
                             if (maxVal !== undefined && newValue > maxVal) {
                                 newValue = maxVal;
                             }
                             handleSettingUpdate(key, newValue);
                         }}
-                        min={minVal}
                     />
                 );
+            }
             case "select":
                 return (
                     <InputField
@@ -251,38 +174,41 @@ export const PluginCard: React.FC<PluginCardProps> = ({
             <div
                 className={clsx(
                     "relative flex flex-col p-4 bg-surface-l1 dark:bg-surface-l1",
-                    "transition-all duration-300 ease-in-out hover:shadow-md",
+                    "transition-colors duration-200 hover:bg-surface-l2",
                     cardWidth,
                     borderRadius,
                     "overflow-hidden"
                 )}
                 style={{
-                    height: `${CARD_HEIGHT}px`,
-                    minHeight: `${CARD_HEIGHT}px`,
-                    maxHeight: `${CARD_HEIGHT}px`,
-                    borderWidth: borderSize,
-                    borderStyle: "solid",
-                    borderColor: "var(--border-l1)",
-                }}
-                onMouseEnter={e => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                }}
-                onMouseLeave={e => {
-                    e.currentTarget.style.transform = "translateY(0)";
+                    height: `${CARD_HEIGHT}px`, minHeight: `${CARD_HEIGHT}px`, maxHeight: `${CARD_HEIGHT}px`,
+                    borderWidth: borderSize, borderStyle: "solid", borderColor: "var(--border-l1)"
                 }}
             >
-                <PluginActions
-                    hasSettings={hasSettings}
-                    onSettingsClick={() => setShowModal(true)}
-                    isEnabled={isEnabled}
-                    isRequired={plugin.required}
-                    onToggle={handleToggleChange}
-                    switchLabelId={switchLabelId}
-                    pluginName={plugin.name}
-                />
+                <div className="absolute top-2 right-2 flex gap-2 items-center z-10">
+                    <Button
+                        icon={hasSettings ? "SlidersHorizontal" : "Info"}
+                        size="icon"
+                        variant="ghost"
+                        iconSize={16}
+                        onClick={() => setShowModal(true)}
+                        aria-label={hasSettings ? "Show plugin settings" : "Show plugin information"}
+                        className="text-secondary h-8 w-8"
+                    />
+                    <Switch
+                        checked={plugin.required ? true : isEnabled}
+                        disabled={plugin.required}
+                        onCheckedChange={handleToggleChange}
+                        ariaLabelledBy={switchLabelId}
+                        aria-label={`Toggle ${plugin.name} (${plugin.required ? "required" : "optional"})`}
+                    />
+                </div>
                 <div className="pr-20 flex flex-col h-full overflow-hidden">
-                    <PluginTitle id={switchLabelId} title={plugin.name} />
-                    <PluginDescription description={plugin.description} />
+                    <div id={switchLabelId} className="text-sm font-medium flex items-center gap-1.5 mb-3 truncate">
+                        {plugin.name}
+                    </div>
+                    <div className="text-xs text-secondary leading-tight line-clamp-3">
+                        {plugin.description}
+                    </div>
                 </div>
             </div>
 
@@ -290,16 +216,43 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                 isOpen={showModal}
                 onClose={() => setShowModal(false)}
                 title={hasSettings ? `${plugin.name} Settings` : `${plugin.name} Info`}
-                ariaLabelledBy={modalAriaId}
+                description={plugin.description}
                 maxWidth="max-w-2xl"
                 className="max-h-[80vh] overflow-y-auto"
             >
-                <SettingsModalContent
-                    plugin={plugin}
-                    hasSettings={hasSettings}
-                    settings={settings}
-                    renderControl={renderControl}
-                />
+                <div className="space-y-4">
+                    <div>
+                        <h3 className="text-sm font-medium text-primary mb-1">Authors</h3>
+                        <p className="text-sm text-secondary">{plugin.authors.map(a => a.name).join(", ")}</p>
+                    </div>
+                    {plugin.requiresRestart && (
+                        <div className="text-sm text-yellow-400 bg-yellow-400/10 p-3 rounded-lg border border-yellow-400/20">
+                            This plugin requires a restart to take effect
+                        </div>
+                    )}
+                    <div>
+                        <h3 className="text-sm font-medium text-primary mb-1">Settings</h3>
+                        {hasSettings ? (
+                            <div className="mt-2 space-y-4">
+                                {sortedOptions.map(([key, opt]) => {
+                                    const currentValue = settings[key];
+                                    const labelId = `setting-label-${plugin.id}-${key}`;
+                                    return (
+                                        <div key={key} className="flex justify-between items-start gap-4">
+                                            <div className="flex flex-col flex-1">
+                                                <label id={labelId} className="text-sm font-medium text-primary">{opt.displayName || key}</label>
+                                                {opt.description && <p className="text-xs text-secondary mt-1">{opt.description}</p>}
+                                            </div>
+                                            <div className="flex-shrink-0 mt-1">{renderControl(key, opt, currentValue)}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-secondary">No settings available for this plugin.</p>
+                        )}
+                    </div>
+                </div>
             </Modal>
         </>
     );

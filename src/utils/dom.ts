@@ -8,6 +8,7 @@ import { Logger } from "@utils/logger";
 
 const domLogger = new Logger("DOM", "#ef4444");
 
+// --- Type Definitions ---
 export interface ElementFinderConfig {
     selector: string;
     root?: Document | Element;
@@ -47,131 +48,59 @@ export interface ElementHiderOptions {
     injectCss?: boolean;
 }
 
-/**
- * Selects the first element matching the selector.
- * @param selector CSS selector string.
- * @param root Optional root element (defaults to document).
- * @returns Matching HTMLElement or null.
- */
+// --- Element Querying ---
+
 export function querySelector(
     selector: string,
     root: Document | Element = document
 ): HTMLElement | null {
     if (!root) {
-        domLogger.error("Root element is null or undefined");
+        domLogger.error("Root element is null or undefined for selector:", selector);
         return null;
     }
     if (!selector.trim()) {
-        domLogger.warn("Invalid or empty selector provided");
+        domLogger.error("Invalid or empty selector provided.");
         return null;
     }
     try {
         return root.querySelector(selector) as HTMLElement | null;
     } catch (error) {
-        domLogger.warn(`Invalid selector: ${selector}`, error);
+        domLogger.error(`Invalid selector: ${selector}`, error);
         return null;
     }
 }
 
-/**
- * Selects all elements matching the selector.
- * @param selector CSS selector string.
- * @param root Optional root element (defaults to document).
- * @returns Array of matching HTMLElements.
- */
 export function querySelectorAll(
     selector: string,
     root: Document | Element = document
 ): HTMLElement[] {
     if (!root) {
-        domLogger.error("Root element is null or undefined");
+        domLogger.error("Root element is null or undefined for querySelectorAll:", selector);
         return [];
     }
     if (!selector.trim()) {
-        domLogger.warn("Invalid or empty selector provided");
+        domLogger.error("Invalid or empty selector provided for querySelectorAll.");
         return [];
     }
     try {
         return Array.from(root.querySelectorAll(selector)) as HTMLElement[];
     } catch (error) {
-        domLogger.warn(`Invalid selector: ${selector}`, error);
+        domLogger.error(`Invalid selector: ${selector}`, error);
         return [];
     }
 }
 
-/**
- * Finds an element using advanced multi-criteria configuration.
- * @param config Finder configuration.
- * @returns First matching HTMLElement or null.
- */
 export function findElement(config: ElementFinderConfig): HTMLElement | null {
-    const root = config.root ?? document;
-    let candidates: HTMLElement[] = [];
-    if (config.xpath) {
-        try {
-            const result = document.evaluate(config.xpath, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-            for (let i = 0; i < result.snapshotLength; i++) {
-                const node = result.snapshotItem(i);
-                if (node instanceof HTMLElement) {
-                    candidates.push(node);
-                }
-            }
-        } catch (error) {
-            domLogger.warn(`Invalid XPath in config: ${config.xpath}`, error);
-            return null;
-        }
-    } else {
-        let enhancedSelector = config.selector;
-        if (config.classContains) {
-            enhancedSelector += config.classContains.map(cls => `.${CSS.escape(cls)}`).join("");
-        }
-        if (config.idContains) {
-            const escapedId = config.idContains.replace(/"/g, '\\"');
-            enhancedSelector += `[id*="${escapedId}"]`;
-        }
-        if (config.ariaLabel) {
-            const escapedAria = config.ariaLabel.replace(/"/g, '\\"');
-            enhancedSelector += `[aria-label="${escapedAria}"]`;
-        }
-        candidates = querySelectorAll(enhancedSelector, root);
-    }
+    const candidates = getCandidateElements(config);
 
     for (const el of candidates) {
-        let match = true;
-
-        if (config.filter && !config.filter(el)) {
-            match = false;
-        }
-
-        if (match && config.textRegex) {
-            const text = (config.matchDescendants ? el.innerText : el.textContent)?.trim() ?? "";
-            if (!config.textRegex.test(text)) {
-                match = false;
-            }
-        }
-
-        if (match && config.attrRegex) {
-            const attrValue = el.getAttribute(config.attrRegex.attr) ?? "";
-            if (!config.attrRegex.regex.test(attrValue)) {
-                match = false;
-            }
-        }
-
-        if (match && config.svgPartialD) {
-            const escapedD = config.svgPartialD.replace(/"/g, '\\"');
-            if (!el.querySelector(`svg path[d*="${escapedD}"]`)) {
-                match = false;
-            }
-        }
-
-        if (match && config.ariaLabelRegex) {
-            const aria = el.getAttribute("aria-label") ?? "";
-            if (!config.ariaLabelRegex.test(aria)) {
-                match = false;
-            }
-        }
-
-        if (match) {
+        if (
+            (!config.filter || config.filter(el)) &&
+            (!config.textRegex || config.textRegex.test((config.matchDescendants ? el.innerText : el.textContent)?.trim() ?? "")) &&
+            (!config.attrRegex || config.attrRegex.regex.test(el.getAttribute(config.attrRegex.attr) ?? "")) &&
+            (!config.svgPartialD || el.querySelector(`svg path[d*="${config.svgPartialD.replace(/"/g, '\\"')}"]`)) &&
+            (!config.ariaLabelRegex || config.ariaLabelRegex.test(el.getAttribute("aria-label") ?? ""))
+        ) {
             return el;
         }
     }
@@ -179,113 +108,130 @@ export function findElement(config: ElementFinderConfig): HTMLElement | null {
     return null;
 }
 
-/**
- * Waits for an element matching the advanced config to appear in the DOM.
- * @param config Finder configuration.
- * @param timeoutMs Timeout in milliseconds (default: 10000).
- * @returns Promise resolving to the element or rejecting on timeout.
- */
-export async function waitForElementByConfig(
-    config: ElementFinderConfig,
-    timeoutMs = 10000
-): Promise<HTMLElement> {
+function getCandidateElements(config: ElementFinderConfig): HTMLElement[] {
+    const root = config.root ?? document;
+
+    if (config.xpath) {
+        try {
+            const result = document.evaluate(config.xpath, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            const elements: HTMLElement[] = [];
+            for (let i = 0; i < result.snapshotLength; i++) {
+                const node = result.snapshotItem(i);
+                if (node instanceof HTMLElement) {
+                    elements.push(node);
+                }
+            }
+            return elements;
+        } catch (error) {
+            domLogger.warn(`Invalid XPath in config: ${config.xpath}`, error);
+            return [];
+        }
+    }
+
+    let enhancedSelector = config.selector;
+    if (config.classContains) {
+        enhancedSelector += config.classContains.map(cls => `.${CSS.escape(cls)}`).join("");
+    }
+    if (config.idContains) {
+        enhancedSelector += `[id*="${config.idContains.replace(/"/g, '\\"')}"]`;
+    }
+    if (config.ariaLabel) {
+        enhancedSelector += `[aria-label="${config.ariaLabel.replace(/"/g, '\\"')}"]`;
+    }
+    return querySelectorAll(enhancedSelector, root);
+}
+
+export function waitForElementByConfig(config: ElementFinderConfig, timeoutMs = 10000): Promise<HTMLElement> {
     return new Promise((resolve, reject) => {
-        let element = findElement(config);
-        if (element) {
-            return resolve(element);
+        const existingElement = findElement(config);
+        if (existingElement) {
+            return resolve(existingElement);
         }
 
-        const root = config.root ?? document;
         const observer = new MutationObserver(() => {
-            element = findElement(config);
-            if (element) {
+            const foundElement = findElement(config);
+            if (foundElement) {
                 observer.disconnect();
-                resolve(element);
+                clearTimeout(timeoutId);
+                resolve(foundElement);
             }
         });
 
-        observer.observe(root, { childList: true, subtree: true, attributes: true });
-
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
             observer.disconnect();
-            reject(new Error(`Element not found within ${timeoutMs}ms using config: ${JSON.stringify(config)}`));
+            const error = new Error(`Element not found within ${timeoutMs}ms using config: ${JSON.stringify(config)}`);
+            domLogger.error(error.message);
+            reject(error);
         }, timeoutMs);
+
+        observer.observe(config.root ?? document, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+        });
     });
 }
 
+// --- DOM Observation ---
+
 export class MutationObserverManager {
-    private observersMap: Map<MutationObserver, string> = new Map();
+    private observersMap = new Map<MutationObserver, string>();
     private nextObserverId = 0;
 
-    public createObserver(config: MutationObserverConfig): { observe: () => void; disconnect: () => void; } {
+    public createObserver = (config: MutationObserverConfig): { observe: () => void; disconnect: () => void; } => {
         if (!config.target) {
-            domLogger.error("Target element is null or undefined");
-            throw new Error("Target element is null or undefined");
+            const error = new Error("MutationObserverConfig target element is null or undefined");
+            domLogger.error(error.message);
+            throw error;
         }
-
-        const observerId = `observer-${this.nextObserverId++}`;
         const observer = new MutationObserver(config.callback);
-        this.observersMap.set(observer, observerId);
+        this.observersMap.set(observer, `observer-${this.nextObserverId++}`);
 
         const observe = () => observer.observe(config.target, config.options);
         const disconnect = () => {
             observer.disconnect();
             this.observersMap.delete(observer);
         };
-
         return { observe, disconnect };
-    }
+    };
 
-    public createDebouncedObserver(config: MutationObserverConfig): { observe: () => void; disconnect: () => void; } {
-        let debounceTimer: ReturnType<typeof setTimeout> | number | null = null;
-
+    public createDebouncedObserver = (config: MutationObserverConfig): { observe: () => void; disconnect: () => void; } => {
+        let timer: ReturnType<typeof setTimeout> | number | null = null;
         const debouncedCallback = (mutations: MutationRecord[], observer: MutationObserver) => {
-            const delay = config.debounceDelay ?? 100;
-            if (debounceTimer !== null) {
-                if (config.useRaf) {
-                    cancelAnimationFrame(debounceTimer);
-                } else {
-                    clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
-                }
+            if (timer !== null) {
+                config.useRaf ? cancelAnimationFrame(timer as number) : clearTimeout(timer as number);
             }
-            const schedule = config.useRaf ? requestAnimationFrame : (cb: TimerHandler) => setTimeout(cb, delay);
-            debounceTimer = schedule(() => config.callback(mutations, observer));
+            if (config.useRaf) {
+                timer = requestAnimationFrame(() => config.callback(mutations, observer));
+            } else {
+                timer = setTimeout(() => config.callback(mutations, observer), config.debounceDelay ?? 100);
+            }
         };
-
         return this.createObserver({ ...config, callback: debouncedCallback });
-    }
+    };
 
-    public disconnectAll(): void {
-        for (const observer of this.observersMap.keys()) {
-            observer.disconnect();
-        }
+    public disconnectAll = (): void => {
+        this.observersMap.forEach((_, observer) => observer.disconnect());
         this.observersMap.clear();
-    }
+    };
 
-    public getActiveCount(): number {
-        return this.observersMap.size;
-    }
+    public getActiveCount = (): number => this.observersMap.size;
 }
+
+// --- Element Hiding ---
 
 export function hideDomElements(config: ElementHideConfig): number {
     let countHidden = 0;
     const markerAttr = config.markerAttribute || "data-hidden";
 
     try {
-        const matchedElements = querySelectorAll(config.selector);
+        for (const element of querySelectorAll(config.selector)) {
+            const targetValue = config.regexTarget === "textContent" ? element.textContent :
+                config.regexTarget === "class" ? element.className :
+                    config.regexTarget ? element.getAttribute(config.regexTarget) : "";
 
-        for (const element of matchedElements) {
-            let matchesCondition = true;
-            if (config.condition) {
-                matchesCondition = config.condition(element);
-            } else if (config.regexPattern && config.regexTarget) {
-                const targetValue = config.regexTarget === "textContent"
-                    ? element.textContent ?? ""
-                    : config.regexTarget === "class"
-                        ? [...element.classList].join(" ")
-                        : element.getAttribute(config.regexTarget) ?? "";
-                matchesCondition = config.regexPattern.test(targetValue);
-            }
+            const matchesCondition = (config.condition && config.condition(element)) ||
+                (config.regexPattern && config.regexTarget && config.regexPattern.test(targetValue ?? ""));
 
             if (matchesCondition) {
                 if (!element.hasAttribute(markerAttr)) {
@@ -298,18 +244,15 @@ export function hideDomElements(config: ElementHideConfig): number {
                     }
                     countHidden++;
                 }
-            } else {
-                if (element.hasAttribute(markerAttr)) {
-                    element.removeAttribute(markerAttr);
-                    element.style.removeProperty("display");
-                    element.style.removeProperty("visibility");
-                }
+            } else if (element.hasAttribute(markerAttr)) {
+                element.removeAttribute(markerAttr);
+                element.style.removeProperty("display");
+                element.style.removeProperty("visibility");
             }
         }
     } catch (error) {
         domLogger.warn(`Failed to hide elements for "${config.description}":`, error);
     }
-
     return countHidden;
 }
 
@@ -319,13 +262,12 @@ export function createDomElementHider(
     hiderOptions: ElementHiderOptions = {}
 ): { startObserving: () => void; stopObserving: () => void; hideImmediately: () => void; } {
     let debounceTimer: ReturnType<typeof setTimeout> | number | null = null;
-    let isHiding = false;
     let styleElement: HTMLStyleElement | null = null;
 
     const cssHideConfigs = hiderOptions.injectCss
         ? hideConfigs.filter(config => !config.condition && !config.regexPattern && !config.removeFromDom)
         : [];
-    const jsHideConfigs = hideConfigs.filter(config => config.condition || config.regexPattern || config.removeFromDom || !hiderOptions.injectCss);
+    const jsHideConfigs = hideConfigs.filter(config => !hiderOptions.injectCss || config.condition || config.regexPattern || config.removeFromDom);
 
     if (cssHideConfigs.length > 0) {
         const css = cssHideConfigs.map(config => `${config.selector} { display: none !important; visibility: hidden !important; }`).join("\n");
@@ -335,74 +277,32 @@ export function createDomElementHider(
         document.head.appendChild(styleElement);
     }
 
-    const performHide = () => {
-        if (isHiding) {
-            return;
-        }
-        isHiding = true;
-        for (const config of jsHideConfigs) {
-            hideDomElements(config);
-        }
-        isHiding = false;
-    };
+    const performHide = () => jsHideConfigs.forEach(hideDomElements);
 
     const debouncedPerformHide = () => {
-        if (debounceTimer !== null) {
-            if (hiderOptions.useRequestAnimationFrame) {
-                cancelAnimationFrame(debounceTimer);
-            } else {
-                clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
-            }
+        if (debounceTimer) {
+            hiderOptions.useRequestAnimationFrame ? cancelAnimationFrame(debounceTimer as number) : clearTimeout(debounceTimer as number);
         }
-        const delay = hiderOptions.debounce ?? 0;
-        const schedule = hiderOptions.useRequestAnimationFrame ? requestAnimationFrame : (cb: TimerHandler) => setTimeout(cb, delay);
-        debounceTimer = schedule(performHide);
+        if (hiderOptions.useRequestAnimationFrame) {
+            debounceTimer = requestAnimationFrame(performHide);
+        } else {
+            debounceTimer = setTimeout(performHide, hiderOptions.debounce ?? 0);
+        }
     };
 
-    const mutationObserver = new MutationObserver(mutations => {
-        let hasChanges = false;
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType !== Node.ELEMENT_NODE) {
-                    continue;
-                }
-                const element = node as HTMLElement;
-                if (jsHideConfigs.some(config => element.matches(config.selector) || !!element.querySelector(config.selector))) {
-                    hasChanges = true;
-                    break;
-                }
-            }
-            if (hasChanges) {
-                break;
-            }
-        }
-        if (hasChanges) {
-            if (hiderOptions.debounce === 0) {
-                performHide();
-            } else {
-                debouncedPerformHide();
-            }
-        }
-    });
-
-    const noJsNeeded = jsHideConfigs.length === 0;
+    const mutationObserver = new MutationObserver(debouncedPerformHide);
 
     return {
         startObserving: () => {
-            if (!noJsNeeded) {
+            if (jsHideConfigs.length > 0) {
+                performHide();
                 mutationObserver.observe(targetElement, { childList: true, subtree: true });
             }
         },
         stopObserving: () => {
-            if (!noJsNeeded) {
-                mutationObserver.disconnect();
-            }
-            if (debounceTimer !== null) {
-                if (hiderOptions.useRequestAnimationFrame) {
-                    cancelAnimationFrame(debounceTimer);
-                } else {
-                    clearTimeout(debounceTimer as ReturnType<typeof setTimeout>);
-                }
+            mutationObserver.disconnect();
+            if (debounceTimer) {
+                hiderOptions.useRequestAnimationFrame ? cancelAnimationFrame(debounceTimer as number) : clearTimeout(debounceTimer as number);
             }
             styleElement?.remove();
         },
@@ -410,17 +310,17 @@ export function createDomElementHider(
     };
 }
 
-export function createFocusTrap(container: HTMLElement): () => void {
-    const focusableSelector =
-        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// --- Accessibility ---
 
-    const getFocusableElements = () => Array.from(container.querySelectorAll(focusableSelector)) as HTMLElement[];
+export function createFocusTrap(container: HTMLElement): () => void {
+    const focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
     const handleKeyDown = (event: KeyboardEvent) => {
         if (event.key !== "Tab") {
             return;
         }
-        const elements = getFocusableElements();
+
+        const elements = Array.from(container.querySelectorAll(focusableSelector)) as HTMLElement[];
         if (elements.length === 0) {
             return;
         }
@@ -433,11 +333,9 @@ export function createFocusTrap(container: HTMLElement): () => void {
                 last!.focus();
                 event.preventDefault();
             }
-        } else {
-            if (document.activeElement === last) {
-                first!.focus();
-                event.preventDefault();
-            }
+        } else if (document.activeElement === last) {
+            first!.focus();
+            event.preventDefault();
         }
     };
 

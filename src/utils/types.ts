@@ -4,8 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { getPluginSetting, initializePluginSettings } from "@utils/settings";
 import { type IDeveloper } from "@utils/constants";
+import { type ElementFinderConfig } from "@utils/dom";
+import { codePatcher } from "@utils/patcher";
+import { PluginHelper } from "@utils/pluginHelper";
+import { getPluginSetting, initializePluginSettings } from "@utils/settings";
+import React from "react";
 
 export enum PluginCategory {
     Utility = "utility",
@@ -40,11 +44,34 @@ export type InferOptionType<O extends PluginOptionBase> =
     O["type"] extends "number" ? number :
     O["type"] extends "string" ? string :
     O["type"] extends "select" ? O["options"] extends readonly { value: infer V; }[] ? V : unknown :
-    unknown; // fallback for 'custom'
+    unknown;
+
+export interface InjectedComponentProps {
+    rootElement?: HTMLElement;
+}
 
 export interface IPatch {
-    apply(): void;
+    apply?(): void;
     remove?(): void;
+    disconnect?: () => void;
+}
+
+export interface IPluginUIPatch extends IPatch {
+    component: React.ComponentType<InjectedComponentProps>;
+    target: string | ElementFinderConfig;
+    forEach?: boolean;
+    getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
+    referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
+    observerDebounce?: boolean | number;
+}
+
+export interface IPluginCodePatch {
+    find: string | RegExp;
+    replacement: {
+        match: RegExp;
+        replace: string | ((substring: string, ...args: any[]) => string);
+    };
+    predicate?: () => boolean;
 }
 
 export interface ISettingsManager<T extends PluginOptions = PluginOptions> {
@@ -57,45 +84,28 @@ export interface IPluginContext {
 }
 
 export interface IPluginDefinition {
-    /** Unique plugin id (auto-generated from name if not provided) */
     id?: string;
-    /** Display name */
     name: string;
-    /** Description */
     description: string;
-    /** Authors (see constants.ts) */
     authors: IDeveloper[];
-    /** Category/type for filtering */
     category?: PluginCategory | string;
-    /** Tags for search/filtering */
     tags?: string[];
-    /** Plugin dependencies (by id/name) */
+    styles?: string;
     dependencies?: string[];
-    /** Show in UI */
     visible?: boolean;
-    /** Enabled by default */
     enabledByDefault?: boolean;
-    /** Requires restart to enable/disable */
     requiresRestart?: boolean;
-    /** Force enabled, cannot be disabled */
     required?: boolean;
-    /** Hide from UI */
     hidden?: boolean;
-    /** DEPRECATED: Use `settings` property instead */
     options?: PluginOptions;
-    /** Settings manager for the plugin */
     settings?: ISettingsManager;
-    /** Patches (core logic) */
-    patches: IPatch[];
-    /** Start/stop hooks */
+    patches?: (IPatch | IPluginUIPatch | IPluginCodePatch)[];
     start?(context: IPluginContext): void;
     stop?(context: IPluginContext): void;
-    /** Lifecycle hooks */
     onLoad?(context: IPluginContext): void;
     onUnload?(context: IPluginContext): void;
 }
 
-// --- Plugin Runtime Type (resolved, all fields present) ---
 export interface IPlugin {
     id: string;
     name: string;
@@ -103,6 +113,7 @@ export interface IPlugin {
     authors: IDeveloper[];
     category: PluginCategory | string;
     tags: string[];
+    styles?: string;
     dependencies: string[];
     visible: boolean;
     enabledByDefault: boolean;
@@ -110,12 +121,13 @@ export interface IPlugin {
     required: boolean;
     hidden: boolean;
     options: PluginOptions;
-    patches: IPatch[];
+    patches: (IPatch | IPluginUIPatch | IPluginCodePatch)[];
     start(context: IPluginContext): void;
     stop(context: IPluginContext): void;
 }
 
 export const plugins: IPlugin[] = [];
+const pluginHelper = new PluginHelper();
 
 function toKebabCase(str: string): string {
     return str
@@ -127,9 +139,7 @@ function toKebabCase(str: string): string {
 
 export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
     const id = def.id || toKebabCase(def.name);
-    const storageKey = `plugin-enabled:${id}`;
 
-    // Handle settings initialization
     if (def.settings) {
         const options = def.settings.definition;
         initializePluginSettings(id, options);
@@ -139,6 +149,11 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
                 return getPluginSetting(id, key, options);
             },
         }) as StoreType;
+    }
+
+    const codePatches = (def.patches?.filter(p => "find" in p && "replacement" in p) as IPluginCodePatch[]) ?? [];
+    if (codePatches.length > 0) {
+        codePatcher.add(...codePatches);
     }
 
     const plugin: IPlugin = {
@@ -155,30 +170,49 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
         required: !!def.required,
         hidden: !!def.hidden,
         options: def.settings?.definition || def.options || {},
-        patches: def.patches,
+        styles: def.styles,
+        patches: def.patches || [],
         start: ctx => {
             def.onLoad?.(ctx);
+            if (def.styles) {
+                pluginHelper.applyStyles(id, def.styles);
+            }
+            def.patches?.forEach(patch => {
+                if ("component" in patch) {
+                    const uiPatch = patch as IPluginUIPatch;
+                    if (uiPatch.forEach) {
+                        pluginHelper.applyMultiUIPatch(id, uiPatch);
+                    } else {
+                        pluginHelper.applySingleUIPatch(id, uiPatch);
+                    }
+                } else if (!("find" in patch && "replacement" in patch)) {
+                    patch.apply?.();
+                }
+            });
             def.start?.(ctx);
-            def.patches.forEach(p => p.apply());
         },
         stop: ctx => {
-            def.patches.forEach(p => {
-                if (typeof p.remove === "function") {
-                    p.remove!();
+            if (def.styles) {
+                pluginHelper.removeStyles(id);
+            }
+            def.patches?.forEach(patch => {
+                if ("component" in patch) {
+                    patch.disconnect?.();
+                    const uiPatch = patch as IPluginUIPatch;
+                    if (uiPatch.forEach) {
+                        pluginHelper.removeMultiUIPatch(id);
+                    } else {
+                        pluginHelper.removeSingleUIPatch(id);
+                    }
+                } else if (!("find" in patch && "replacement" in patch)) {
+                    patch.remove?.();
                 }
             });
             def.stop?.(ctx);
             def.onUnload?.(ctx);
         },
     };
+
     plugins.push(plugin);
-    if (plugin.required) {
-        plugin.start({ storageKey });
-        return plugin;
-    }
-    const enabled = Boolean(localStorage.getItem(storageKey));
-    if (enabled) {
-        plugin.start({ storageKey });
-    }
     return plugin;
 }

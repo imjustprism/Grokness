@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { LucideIcon } from "@components/LucideIcon";
+import { Lucide } from "@components/Lucide";
 import clsx from "clsx";
 import React from "react";
 
@@ -59,7 +59,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
             {...props}
         />
         <div className="absolute right-5 top-1/2 -translate-y-1/2">
-            <LucideIcon name="Search" size={18} strokeWidth={2} />
+            <Lucide name="Search" size={18} strokeWidth={2} />
         </div>
     </div>
 );

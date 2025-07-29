@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { LucideIcon } from "@components/LucideIcon";
+import { Lucide } from "@components/Lucide";
 import clsx from "clsx";
 import React from "react";
 
@@ -89,7 +89,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
                         isOpen && "transform rotate-180"
                     )}
                 >
-                    <LucideIcon name="ChevronDown" size={16} strokeWidth={2} />
+                    <Lucide name="ChevronDown" size={16} strokeWidth={2} />
                 </div>
             </button>
             {isOpen && (
