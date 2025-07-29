@@ -5,7 +5,7 @@
     },
     "license": "GPL-3.0",
     "namespace": "https://github.com/imjustprism/grokness",
-    "version": "1.0.11",
+    "version": "1.2.0",
     "description": "A cute Grok extension",
     "devDependencies": {
         "@eslint/js": "^9.31.0",
@@ -36,14 +36,15 @@
     "scripts": {
         "clean": "rimraf dist",
         "build:sourcemap": "bun run build:chrome:sourcemap && bun run build:firefox:sourcemap",
+        "build:userscript": "cross-env BUILD_TARGET=userscript vite build",
         "build:chrome": "BROWSER=chrome SOURCEMAP=false vite build",
         "build:firefox": "BROWSER=firefox SOURCEMAP=false vite build",
-        "build": "bun run build:chrome && bun run build:firefox",
-        "build:userscript": "cross-env BUILD_TARGET=userscript vite build",
+        "build": "bun run build:chrome && bun run build:firefox && bun run build:userscript",
         "lint": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\"",
         "lint:fix": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\" --fix"
     },
     "dependencies": {
+        "@radix-ui/react-dialog": "^1.1.14",
         "@radix-ui/react-switch": "^1.2.5",
         "@radix-ui/react-tooltip": "^1.2.7",
         "@types/jszip": "^3.4.1",
