@@ -8,6 +8,7 @@ import { Button } from "@components/Button";
 import { createFocusTrap } from "@utils/dom";
 import clsx from "clsx";
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
     /**
@@ -70,6 +71,11 @@ interface ModalProps {
      * @default true
      */
     closeOnOverlayClick?: boolean;
+    /**
+     * Renders the modal into a portal attached to the document body.
+     * @default false
+     */
+    usePortal?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -87,6 +93,7 @@ export const Modal: React.FC<ModalProps> = ({
     maxWidth = "max-w-[480px]",
     className,
     closeOnOverlayClick = true,
+    usePortal = false,
 }) => {
     const contentRef = useRef<HTMLDivElement>(null);
     const hasFocused = useRef(false);
@@ -128,16 +135,19 @@ export const Modal: React.FC<ModalProps> = ({
         return null;
     }
 
-    const handleOverlayInteraction = (event: React.MouseEvent<HTMLDivElement>) => {
-        if (closeOnOverlayClick && event.target === event.currentTarget) {
-            onClose();
+    const handleOverlayPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.target === event.currentTarget) {
+            event.preventDefault();
+            if (closeOnOverlayClick) {
+                onClose();
+            }
         }
     };
 
-    return (
+    const modalNode = (
         <div
             className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-[1000]"
-            onClick={handleOverlayInteraction}
+            onPointerDown={handleOverlayPointerDown}
         >
             <div
                 ref={contentRef}
@@ -149,7 +159,7 @@ export const Modal: React.FC<ModalProps> = ({
                 className={clsx(
                     "fixed left-[50%] top-[50%] z-[1001] translate-x-[-50%] translate-y-[-50%] bg-surface-base dark:border dark:border-border-l1 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
                     maxWidth,
-                    "w-full p-4 rounded-3xl border border-border-l1 flex flex-col gap-6",
+                    "w-full p-4 rounded-3xl border border-border-l1 flex flex-col gap-4 overflow-hidden h-[640px] max-h-[85vh]",
                     className
                 )}
                 tabIndex={-1}
@@ -180,9 +190,9 @@ export const Modal: React.FC<ModalProps> = ({
                         />
                     </div>
                 </div>
-                <div className="flex flex-col gap-3 pl-1 pr-1">{children}</div>
+                <div className="flex-1 overflow-y-auto pr-3 -mr-3">{children}</div>
                 {(footer || showCancel) && (
-                    <div className="flex w-full items-center justify-end gap-2 mt-2">
+                    <div className="flex w-full items-center justify-end gap-2 pt-2">
                         {showCancel && (
                             <Button
                                 variant="ghost"
@@ -198,4 +208,10 @@ export const Modal: React.FC<ModalProps> = ({
             </div>
         </div>
     );
+
+    if (usePortal) {
+        return createPortal(modalNode, document.body);
+    }
+
+    return modalNode;
 };

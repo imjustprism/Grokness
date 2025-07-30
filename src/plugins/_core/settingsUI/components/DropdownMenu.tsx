@@ -11,23 +11,23 @@ import React from "react";
 /**
  * Represents a single option in a dropdown menu
  */
-export interface DropdownOption {
+export interface DropdownOption<V extends string = string> {
     /** Display text for the option */
     label: string;
     /** Value associated with the option */
-    value: string;
+    value: V;
 }
 
 /**
  * Props for the DropdownMenu component
  */
-export interface DropdownMenuProps {
+export interface DropdownMenuProps<V extends string = string> {
     /** Array of options to display in the dropdown */
-    options: DropdownOption[];
+    options: DropdownOption<V>[];
     /** Currently selected value */
-    value: string;
+    value: V;
     /** Callback fired when an option is selected */
-    onChange: (value: string) => void;
+    onChange: (value: V) => void;
     /** Placeholder text when no option is selected */
     placeholder?: string;
     /** Additional CSS classes to apply */
@@ -36,14 +36,14 @@ export interface DropdownMenuProps {
     width?: string;
 }
 
-export const DropdownMenu: React.FC<DropdownMenuProps> = ({
+export const DropdownMenu = <V extends string = string>({
     options,
     value,
     onChange,
     placeholder = "Select...",
     className,
     width = "w-96",
-}) => {
+}: DropdownMenuProps<V>): React.JSX.Element => {
     const [isOpen, setIsOpen] = React.useState(false);
     const [isHovered, setIsHovered] = React.useState(false);
     const selectedOption = options.find(opt => opt.value === value);
@@ -95,9 +95,9 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
             {isOpen && (
                 <div
                     className={clsx(
-                        "absolute top-full left-0 mt-2",
+                        "absolute top-full left-0 mt-2 z-50",
                         "bg-surface-l1 dark:bg-surface-l1 rounded-xl shadow-lg border border-border-l1",
-                        "z-20 p-1.5",
+                        "z-10 p-1.5",
                         width
                     )}
                 >
