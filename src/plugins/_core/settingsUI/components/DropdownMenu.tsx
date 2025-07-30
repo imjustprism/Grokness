@@ -97,7 +97,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
                     className={clsx(
                         "absolute top-full left-0 mt-2",
                         "bg-surface-l1 dark:bg-surface-l1 rounded-xl shadow-lg border border-border-l1",
-                        "z-10 p-1.5",
+                        "z-20 p-1.5",
                         width
                     )}
                 >
