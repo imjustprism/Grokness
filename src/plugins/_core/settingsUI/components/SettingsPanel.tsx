@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { ErrorBoundary } from "@components/ErrorBoundary";
 import { Grid } from "@components/Grid";
 import { Subheader } from "@components/Subheader";
 import { DropdownMenu, type DropdownOption } from "@plugins/_core/settingsUI/components/DropdownMenu";
@@ -116,12 +117,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         ) : (
                             <Grid cols={2} gap="md">
                                 {items.map(plugin => (
-                                    <PluginCard
-                                        key={plugin.id}
-                                        plugin={plugin}
-                                        onToggle={handlePluginToggle}
-                                        onRestartChange={handleRestartChange}
-                                    />
+                                    <ErrorBoundary key={plugin.id} pluginId={plugin.id}>
+                                        <PluginCard
+                                            plugin={plugin}
+                                            onToggle={handlePluginToggle}
+                                            onRestartChange={handleRestartChange}
+                                        />
+                                    </ErrorBoundary>
                                 ))}
                             </Grid>
                         )}

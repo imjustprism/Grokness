@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { ErrorBoundary } from "@components/ErrorBoundary";
 import { type ElementFinderConfig, findElement, MutationObserverManager, querySelectorAll } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { type IPluginUIPatch } from "@utils/types";
@@ -56,7 +57,14 @@ export class PluginHelper {
                 targetParent.insertBefore(container, referenceNode ?? null);
 
                 const root = createRoot(container);
-                root.render(React.createElement(patch.component, { rootElement }));
+                root.render(
+                    React.createElement(
+                        ErrorBoundary, {
+                        pluginId,
+                        children: React.createElement(patch.component, { rootElement })
+                    }
+                    )
+                );
                 this.singleRoots.set(pluginId, root);
             };
 
@@ -119,7 +127,14 @@ export class PluginHelper {
                 }
                 targetParent.insertBefore(container, referenceNode ?? null);
                 const root = createRoot(container);
-                root.render(React.createElement(patch.component, { rootElement: element }));
+                root.render(
+                    React.createElement(
+                        ErrorBoundary, {
+                        pluginId,
+                        children: React.createElement(patch.component, { rootElement: element })
+                    }
+                    )
+                );
                 instanceRoots.set(container, root);
                 elementToContainer.set(element, container);
             };
