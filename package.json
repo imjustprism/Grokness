@@ -5,7 +5,7 @@
     },
     "license": "GPL-3.0",
     "namespace": "https://github.com/imjustprism/grokness",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "A cute Grok extension",
     "devDependencies": {
         "@eslint/js": "^9.31.0",
