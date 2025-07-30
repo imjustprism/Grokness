@@ -13,6 +13,14 @@ import { definePlugin } from "@utils/types";
 const logger = new Logger("StreamerMode", "#f2d5cf");
 
 const settings = definePluginSettings({
+    blurAmount: {
+        type: "number",
+        displayName: "Blur Amount (pixels)",
+        description: "Sets the strength of the blur effect in pixels.",
+        default: 4,
+        min: 1,
+        max: 20,
+    },
     blurUsername: {
         type: "boolean",
         displayName: "Blur Username",
@@ -34,7 +42,13 @@ const settings = definePluginSettings({
     blurChatTitles: {
         type: "boolean",
         displayName: "Blur Chat Titles",
-        description: "Blur chat titles in the sidebar.",
+        description: "Blur pinned and historical chat titles in the sidebar.",
+        default: true,
+    },
+    blurTaskTitles: {
+        type: "boolean",
+        displayName: "Blur Task Titles",
+        description: "Blur task titles in the sidebar.",
         default: true,
     },
     blurFileNames: {
@@ -47,19 +61,22 @@ const settings = definePluginSettings({
 
 let settingsListener: ((e: Event) => void) | null = null;
 
-function updateClasses() {
+function updateDynamicStyles() {
     try {
         const config = settings.store;
         const htmlElement = document.documentElement;
+
+        htmlElement.style.setProperty("--grokness-blur-amount", `${config.blurAmount}px`);
 
         htmlElement.classList.toggle("streamer-mode-active", true);
         htmlElement.classList.toggle("blur-username", config.blurUsername);
         htmlElement.classList.toggle("blur-email", config.blurEmail);
         htmlElement.classList.toggle("blur-project-titles", config.blurProjectTitles);
         htmlElement.classList.toggle("blur-chat-titles", config.blurChatTitles);
+        htmlElement.classList.toggle("blur-task-titles", config.blurTaskTitles);
         htmlElement.classList.toggle("blur-file-names", config.blurFileNames);
     } catch (error) {
-        logger.error("Failed to update classes:", error);
+        logger.error("Failed to update dynamic styles:", error);
     }
 }
 
@@ -73,12 +90,12 @@ export default definePlugin({
     styles,
 
     start() {
-        updateClasses();
+        updateDynamicStyles();
 
         settingsListener = (e: Event) => {
             const event = e as CustomEvent;
             if (event.detail.pluginId === "streamer-mode") {
-                updateClasses();
+                updateDynamicStyles();
             }
         };
         window.addEventListener("grok-settings-updated", settingsListener);
@@ -86,12 +103,16 @@ export default definePlugin({
 
     stop() {
         const htmlElement = document.documentElement;
+
+        htmlElement.style.removeProperty("--grokness-blur-amount");
+
         htmlElement.classList.remove(
             "streamer-mode-active",
             "blur-username",
             "blur-email",
             "blur-project-titles",
             "blur-chat-titles",
+            "blur-task-titles",
             "blur-file-names"
         );
 

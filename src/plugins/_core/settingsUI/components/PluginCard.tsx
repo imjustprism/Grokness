@@ -120,53 +120,54 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         handleSettingChange(key as string, value);
     }, [handleSettingChange]);
 
-    const renderControl = (key: string, option: PluginOptionBase, currentValue: unknown) => {
+    const renderSettingControl = (key: string, option: PluginOptionBase, currentValue: unknown) => {
         const labelId = `setting-label-${plugin.id}-${key}`;
-        switch (option.type) {
-            case "boolean":
-                return (
+
+        if (option.type === "boolean") {
+            return (
+                <div className="flex justify-between items-center">
+                    <div className="flex flex-col flex-1 pr-4">
+                        <label id={labelId} className="text-sm font-medium text-primary">{option.displayName || key}</label>
+                        {option.description && <p className="text-xs text-secondary mt-1">{option.description}</p>}
+                    </div>
                     <Switch
                         checked={currentValue as boolean}
                         onCheckedChange={checked => handleSettingUpdate(key, checked)}
                         ariaLabelledBy={labelId}
                     />
-                );
-            case "string":
-                return (
+                </div>
+            );
+        }
+
+        if (option.type === "string" || option.type === "number" || option.type === "select") {
+            const maxVal = option.type === "number" && typeof option.max === "number" ? option.max : undefined;
+            return (
+                <div className="flex flex-col gap-2">
+                    <div className="flex flex-col flex-1">
+                        <label id={labelId} className="text-sm font-medium text-primary">{option.displayName || key}</label>
+                        {option.description && <p className="text-xs text-secondary mt-1">{option.description}</p>}
+                    </div>
                     <InputField
-                        type="text"
-                        value={currentValue as string}
-                        onChange={value => handleSettingUpdate(key, value as string)}
-                    />
-                );
-            case "number": {
-                const maxVal = typeof option.max === "number" ? option.max : undefined;
-                return (
-                    <InputField
-                        type="number"
-                        value={currentValue as number}
+                        type={option.type === "string" ? "text" : option.type}
+                        value={currentValue as string | number}
                         onChange={value => {
-                            let newValue = typeof value === "string" ? parseInt(value, 10) || 0 : value;
-                            if (maxVal !== undefined && newValue > maxVal) {
-                                newValue = maxVal;
+                            if (option.type === "number") {
+                                let newValue = typeof value === "string" ? parseInt(value, 10) || 0 : value;
+                                if (maxVal !== undefined && newValue > maxVal) {
+                                    newValue = maxVal;
+                                }
+                                handleSettingUpdate(key, newValue);
+                            } else {
+                                handleSettingUpdate(key, value as string);
                             }
-                            handleSettingUpdate(key, newValue);
                         }}
-                    />
-                );
-            }
-            case "select":
-                return (
-                    <InputField
-                        type="select"
-                        value={currentValue as string}
-                        onChange={value => handleSettingUpdate(key, value as string)}
                         options={option.options?.map(opt => ({ label: opt.label, value: opt.value as string })) ?? []}
                     />
-                );
-            default:
-                return null;
+                </div>
+            );
         }
+
+        return null;
     };
 
     return (
@@ -217,8 +218,8 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                 onClose={() => setShowModal(false)}
                 title={hasSettings ? `${plugin.name} Settings` : `${plugin.name} Info`}
                 description={plugin.description}
-                maxWidth="max-w-2xl"
-                className="max-h-[80vh] overflow-y-auto"
+                maxWidth="max-w-xl"
+                className="h-[500px] max-h-[75vh]"
             >
                 <div className="space-y-4">
                     <div>
@@ -234,19 +235,11 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                         <h3 className="text-sm font-medium text-primary mb-1">Settings</h3>
                         {hasSettings ? (
                             <div className="mt-2 space-y-4">
-                                {sortedOptions.map(([key, opt]) => {
-                                    const currentValue = settings[key];
-                                    const labelId = `setting-label-${plugin.id}-${key}`;
-                                    return (
-                                        <div key={key} className="flex justify-between items-start gap-4">
-                                            <div className="flex flex-col flex-1">
-                                                <label id={labelId} className="text-sm font-medium text-primary">{opt.displayName || key}</label>
-                                                {opt.description && <p className="text-xs text-secondary mt-1">{opt.description}</p>}
-                                            </div>
-                                            <div className="flex-shrink-0 mt-1">{renderControl(key, opt, currentValue)}</div>
-                                        </div>
-                                    );
-                                })}
+                                {sortedOptions.map(([key, opt]) => (
+                                    <div key={key}>
+                                        {renderSettingControl(key, opt, settings[key])}
+                                    </div>
+                                ))}
                             </div>
                         ) : (
                             <p className="text-sm text-secondary">No settings available for this plugin.</p>

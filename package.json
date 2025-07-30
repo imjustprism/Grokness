@@ -5,7 +5,7 @@
     },
     "license": "GPL-3.0",
     "namespace": "https://github.com/imjustprism/grokness",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "A cute Grok extension",
     "devDependencies": {
         "@eslint/js": "^9.31.0",
@@ -45,6 +45,7 @@
     },
     "dependencies": {
         "@radix-ui/react-dialog": "^1.1.14",
+        "@radix-ui/react-dropdown-menu": "^2.1.15",
         "@radix-ui/react-switch": "^1.2.5",
         "@radix-ui/react-tooltip": "^1.2.7",
         "@types/jszip": "^3.4.1",
