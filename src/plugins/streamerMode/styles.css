@@ -1,4 +1,3 @@
-/* --- User & Email --- */
 /* Username in sidebar */
 html.streamer-mode-active.blur-username .sidebar-user-info .display-name,
 /* Username in settings */
@@ -8,20 +7,25 @@ html.streamer-mode-active.blur-username .p-1.min-w-0.text-sm .text-sm.font-mediu
 }
 
 /* Email in settings */
-html.streamer-mode-active.blur-email .p-1.min-w-0.text-sm .text-secondary.truncate {
+html.streamer-mode-active.blur-email
+    .p-1.min-w-0.text-sm
+    .text-secondary.truncate {
     filter: blur(var(--grokness-blur-amount, 4px)) !important;
     -webkit-filter: blur(var(--grokness-blur-amount, 4px)) !important;
 }
 
-/* --- Common blur styles for all sidebar items & file names --- */
-/* Project titles in sidebar */
-html.streamer-mode-active.blur-project-titles a.group\/conversation-item[href^="/project/"] > span.flex-1,
-/* Chat titles (pinned & history) in sidebar */
-html.streamer-mode-active.blur-chat-titles a.group\/conversation-item[href^="/chat/"] > span:first-child,
-/* Task titles in sidebar */
-html.streamer-mode-active.blur-task-titles a.group\/task-item[href^="/chat/"] > span:first-child,
+/* Chat titles under "History" and "Pinned" sections */
+html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="History"]) + div a[href^="/chat/"] > span.flex-1,
+html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="Pinned"]) + div a[href^="/chat/"] > span.flex-1,
+
+/* Project titles under the "Projects" section */
+html.streamer-mode-active.blur-project-titles li:has(a[href="/project"]) + div a[href^="/project/"] > span.flex-1,
+
+/* Task titles under the "Tasks" section */
+html.streamer-mode-active.blur-task-titles li:has(a[href="/tasks"]) + div a[href^="/chat/"] > span.flex-1,
+
 /* File names in files section */
-html.streamer-mode-active.blur-file-names a.group\/file[href^="/files?file="] > div > span.flex-1 {
+html.streamer-mode-active.blur-file-names a[href^="/files?file="] > div > span.flex-1 {
     filter: blur(var(--grokness-blur-amount, 4px)) !important;
     -webkit-filter: blur(var(--grokness-blur-amount, 4px)) !important;
     padding: 0 8px !important;
@@ -36,19 +40,23 @@ html.streamer-mode-active.blur-file-names a.group\/file[href^="/files?file="] > 
 }
 
 /* --- Parent container overflow fixes --- */
-/* Overflow for project, chat, and task containers */
-html.streamer-mode-active.blur-project-titles .group\/conversation-item,
-html.streamer-mode-active.blur-chat-titles .group\/conversation-item,
-html.streamer-mode-active.blur-task-titles .group\/task-item,
-/* Overflow for file name containers */
-html.streamer-mode-active.blur-file-names .group\/file {
-    overflow: visible !important;
-}
 
-/* Additional overflow for parent container to prevent clipping */
-html.streamer-mode-active.blur-project-titles .flex.flex-col.gap-1.w-full.min-w-0,
-html.streamer-mode-active.blur-chat-titles .flex.flex-col.gap-1.w-full.min-w-0,
-html.streamer-mode-active.blur-task-titles .flex.flex-col.gap-1.w-full.min-w-0,
-html.streamer-mode-active.blur-file-names .flex-1.flex.flex-col.overflow-y-auto {
+html.streamer-mode-active.blur-project-titles
+    li:has(a[href="/project"])
+    + div
+    a[href^="/project/"],
+html.streamer-mode-active.blur-chat-titles
+    li:has(div[aria-label="History"])
+    + div
+    a[href^="/chat/"],
+html.streamer-mode-active.blur-chat-titles
+    li:has(div[aria-label="Pinned"])
+    + div
+    a[href^="/chat/"],
+html.streamer-mode-active.blur-task-titles
+    li:has(a[href="/tasks"])
+    + div
+    a[href^="/chat/"],
+html.streamer-mode-active.blur-file-names a[href^="/files?file="] {
     overflow: visible !important;
 }
