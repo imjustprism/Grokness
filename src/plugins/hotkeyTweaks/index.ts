@@ -5,7 +5,6 @@
  */
 
 import { Devs } from "@utils/constants";
-import { querySelector } from "@utils/dom";
 import { definePluginSettings } from "@utils/settings";
 import { definePlugin } from "@utils/types";
 
@@ -23,12 +22,14 @@ const settings = definePluginSettings({
     },
 });
 
-let trackedTextarea: HTMLTextAreaElement | null = null;
-let observer: MutationObserver | null = null;
-const selector = "div.query-bar textarea";
+const TEXTAREA_SELECTOR = "div.query-bar textarea, div.message-bubble textarea";
 
 const handleDocumentKeyDown = (event: KeyboardEvent): void => {
-    if (event.target !== trackedTextarea || event.key !== "Enter") {
+    if (
+        !(event.target instanceof HTMLTextAreaElement) ||
+        !event.target.matches(TEXTAREA_SELECTOR) ||
+        event.key !== "Enter"
+    ) {
         return;
     }
 
@@ -38,11 +39,17 @@ const handleDocumentKeyDown = (event: KeyboardEvent): void => {
         return;
     }
 
-    const currentTextarea = event.target as HTMLTextAreaElement;
+    const currentTextarea = event.target;
 
     const sendMessage = () => {
         const form = currentTextarea.closest("form");
-        form?.requestSubmit();
+        const saveButton = currentTextarea.closest(".message-bubble")?.querySelector<HTMLButtonElement>("button:last-of-type");
+
+        if (form) {
+            form.requestSubmit();
+        } else if (saveButton) {
+            saveButton.click();
+        }
     };
 
     const addNewLine = () => {
@@ -59,17 +66,16 @@ const handleDocumentKeyDown = (event: KeyboardEvent): void => {
         currentTextarea.selectionEnd = newPosition;
     };
 
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
     if (behavior === "swap") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
         if (event.shiftKey) {
             sendMessage();
         } else {
             addNewLine();
         }
     } else if (behavior === "ctrlEnter") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
         if (event.ctrlKey) {
             sendMessage();
         } else {
@@ -89,19 +95,9 @@ export default definePlugin({
 
     start() {
         document.addEventListener("keydown", handleDocumentKeyDown, { capture: true });
-
-        const observerCallback = () => {
-            trackedTextarea = querySelector(selector) as HTMLTextAreaElement | null;
-        };
-
-        observer = new MutationObserver(observerCallback);
-        observer.observe(document.body, { childList: true, subtree: true });
-        observerCallback();
     },
 
     stop() {
         document.removeEventListener("keydown", handleDocumentKeyDown, { capture: true });
-        observer?.disconnect();
-        trackedTextarea = null;
     },
 });
