@@ -67,12 +67,12 @@ export const DropdownMenu = <V extends string = string>({
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 className={clsx(
-                    "h-[2.5rem] py-2.5 ps-[11px] pe-[11px]",
+                    "h-10",
                     "bg-surface-l1 dark:bg-surface-l1 border border-border-l1 rounded-xl",
-                    "text-secondary flex items-center justify-between",
+                    "text-secondary flex items-center",
                     "focus:outline-none focus:border-border-l3 focus-visible:ring-1",
                     "whitespace-nowrap active:bg-button-ghost-active",
-                    "text-sm transition-colors duration-200",
+                    "text-sm",
                     width,
                     className
                 )}
@@ -82,10 +82,10 @@ export const DropdownMenu = <V extends string = string>({
                         : undefined
                 }
             >
-                {selectedOption?.label || placeholder}
+                <span className="flex-1 text-left px-3">{selectedOption?.label || placeholder}</span>
                 <div
                     className={clsx(
-                        "ml-2 transition-transform duration-200",
+                        "px-3 transition-transform duration-200",
                         isOpen && "transform rotate-180"
                     )}
                 >
@@ -96,12 +96,10 @@ export const DropdownMenu = <V extends string = string>({
                 <div
                     className={clsx(
                         "absolute top-full left-0 mt-2 z-50",
-                        "bg-surface-l1 dark:bg-surface-l1 rounded-xl shadow-lg border border-border-l1",
-                        "z-10 p-1.5",
-                        width
+                        "rounded-2xl bg-surface-l4 border border-border-l1 p-1 shadow-sm shadow-black/5"
                     )}
                 >
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-px">
                         {options.map(option => (
                             <button
                                 key={option.value}
@@ -111,15 +109,17 @@ export const DropdownMenu = <V extends string = string>({
                                 }}
                                 className={clsx(
                                     "w-full text-left px-3 py-2",
-                                    "text-secondary focus:outline-none whitespace-nowrap",
-                                    "transition-colors duration-200",
-                                    "text-sm rounded-md",
-                                    option.value === value
-                                        ? "bg-button-ghost-hover text-primary"
-                                        : "hover:bg-button-ghost-hover hover:text-primary"
+                                    "focus:outline-none whitespace-nowrap",
+                                    "text-sm rounded-xl flex items-center justify-between",
+                                    "text-white hover:bg-button-ghost-hover"
                                 )}
                             >
-                                {option.label}
+                                <span>{option.label}</span>
+                                <span className="w-4 h-4 flex-shrink-0 ml-2">
+                                    {option.value === value && (
+                                        <Lucide name="Check" size={16} className="text-primary" />
+                                    )}
+                                </span>
                             </button>
                         ))}
                     </div>

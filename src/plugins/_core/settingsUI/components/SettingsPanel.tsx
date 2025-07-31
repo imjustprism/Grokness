@@ -13,7 +13,7 @@ import { NotificationBanner } from "@plugins/_core/settingsUI/components/Notific
 import { PluginCard } from "@plugins/_core/settingsUI/components/PluginCard";
 import { SearchInput } from "@plugins/_core/settingsUI/components/SearchInput";
 import { type IPlugin } from "@utils/types";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 
 /**
  * Available filter options for plugin display
@@ -59,6 +59,37 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     handlePluginToggle,
     handleRestartChange,
 }) => {
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isActive) {
+            return;
+        }
+
+        const element = panelRef.current;
+        if (!element) {
+            return;
+        }
+
+        const parentScroller = element.parentElement;
+
+        if (parentScroller && (parentScroller.classList.contains("overflow-scroll") || parentScroller.classList.contains("overflow-y-auto"))) {
+            const originalOverflow = parentScroller.style.overflow;
+            const originalPaddingRight = parentScroller.style.paddingRight;
+            const originalPaddingLeft = parentScroller.style.paddingLeft;
+
+            parentScroller.style.overflow = "hidden";
+            parentScroller.style.paddingRight = "0px";
+            parentScroller.style.paddingLeft = "0px";
+
+            return () => {
+                parentScroller.style.overflow = originalOverflow;
+                parentScroller.style.paddingRight = originalPaddingRight;
+                parentScroller.style.paddingLeft = originalPaddingLeft;
+            };
+        }
+    }, [isActive]);
+
     const filterOptions: DropdownOption<FilterOption>[] = useMemo(() => [
         { label: "Show All", value: "show_all" },
         { label: "Show Enabled", value: "show_enabled" },
@@ -67,12 +98,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
     return (
         <div
+            ref={panelRef}
             data-grokness-panel
-            className="flex-1 w-full h-full pl-4 pr-4 pb-32 md:pr-4 overflow-y-auto focus:outline-none"
+            className="flex-1 w-full h-full pl-4 pb-32 overflow-y-auto focus:outline-none"
             style={{ display: isActive ? "flex" : "none" }}
         >
             {isActive && (
-                <div className="flex flex-col w-full gap-4 min-h-full">
+                <div className="flex flex-col w-full gap-4 min-h-full pr-4">
                     {Object.keys(pendingChanges).length > 0 && (
                         <NotificationBanner
                             title="Restart Required!"

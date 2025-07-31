@@ -31,35 +31,25 @@ export const SearchInput: React.FC<SearchInputProps> = ({
     ...props
 }) => (
     <div
-        data-sidebar="menu-button"
-        data-active="false"
-        tabIndex={-1}
         className={clsx(
-            "peer/menu-button flex items-center gap-2 overflow-hidden text-left outline-none",
-            "ring-sidebar-ring transition-[width,height,padding] focus-visible:ring-1",
-            "group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 [&>span:last-child]:truncate [&>svg]:shrink-0",
-            "hover:text-primary text-sm hover:bg-button-ghost-hover",
-            "data-[state=open]:hover:bg-button-ghost-hover active:bg-button-ghost-active",
-            "data-[active=true]:bg-button-ghost-active py-2.5 ps-[11px] pe-[11px]",
-            "rounded-xl border border-border-l1 bg-surface-l1 justify-between text-secondary",
-            "h-[2.5rem] relative flex-[3]",
+            "flex items-center gap-2 px-3",
+            "h-10 flex-[3] rounded-xl border border-border-l1 bg-surface-l1 text-secondary",
+            "hover:bg-button-ghost-hover active:bg-button-ghost-active",
             className
         )}
     >
+        <Lucide name="Search" size={16} strokeWidth={2} className="flex-shrink-0" />
         <input
             value={value}
             onChange={e => onChange(e.target.value)}
             type="text"
             placeholder={placeholder}
             className={clsx(
-                "bg-transparent text-fg-secondary placeholder:text-fg-secondary",
-                "focus:outline-none focus:border-none",
-                "text-sm w-full pr-8"
+                "h-full w-full bg-transparent text-sm",
+                "text-fg-secondary placeholder:text-fg-secondary",
+                "focus:outline-none"
             )}
             {...props}
         />
-        <div className="absolute right-5 top-1/2 -translate-y-1/2">
-            <Lucide name="Search" size={18} strokeWidth={2} />
-        </div>
     </div>
 );
