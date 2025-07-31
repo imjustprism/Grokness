@@ -9,17 +9,15 @@ import type { RateLimitData } from "@api/interfaces";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
 import {
-    type ElementFinderConfig,
     findElement,
     MutationObserverManager,
     querySelector,
-    querySelectorAll,
     waitForElementByConfig,
 } from "@utils/dom";
 import { Logger } from "@utils/logger";
 import { definePluginSettings } from "@utils/settings";
 import { definePlugin, type IPatch } from "@utils/types";
-import { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 const logger = new Logger("RateLimitDisplay", "#a6d189");
@@ -34,32 +32,20 @@ const settings = definePluginSettings({
 });
 
 const MODEL_MAP: Record<string, string> = {
-    "Grok 4": "grok-4",
-    "Grok 3": "grok-3",
-    "Grok 4 Heavy": "grok-4-heavy",
-    "Expert": "grok-4",
-    "Fast": "grok-3",
     "Auto": "grok-4-auto",
+    "Fast": "grok-3",
+    "Expert": "grok-4",
     "Heavy": "grok-4-heavy",
 };
 
-const DEFAULT_MODEL = "grok-4";
+const DEFAULT_MODEL = "grok-3";
 const DEFAULT_KIND = "DEFAULT";
-const RATE_LIMIT_CONTAINER_ID = "grok-rate-limit-container";
 
 const commonSelectors = {
     queryBar: ".query-bar",
-    oldUiModelSpan: ".query-bar button span.inline-block.text-primary",
     textarea: ".query-bar textarea",
 };
 
-const attachButtonFinder: ElementFinderConfig = {
-    selector: `${commonSelectors.queryBar} button`,
-    classContains: ["group/attach-button"],
-    svgPartialD: "M10 9V15",
-};
-
-const cachedRateLimits: Record<string, Record<string, RateLimitData | undefined>> = {};
 const observerManager = new MutationObserverManager();
 
 type EffortLevel = "high" | "low" | "both";
@@ -78,34 +64,36 @@ function getCurrentModelFromUI(): string {
         return DEFAULT_MODEL;
     }
 
-    let newUiEl: HTMLElement | null = null;
-    const buttons = querySelectorAll("button", queryBar);
-    for (const btn of buttons) {
-        const hasNewUiIcon = btn.querySelector("svg.lucide-rocket, svg > path[d^='M5 14.25']");
-        if (hasNewUiIcon) {
-            newUiEl = querySelector("span > span.text-primary", btn);
-            if (newUiEl) {
-                break;
-            }
-        }
+    const modelButton = findElement({
+        selector: 'button[role="combobox"]',
+        root: queryBar,
+        filter: el => !!el.querySelector('svg.lucide-rocket, svg > path[d*="M5 14.25"], svg > path[d*="M19 9C19"]')
+    });
+
+    if (!modelButton) {
+        return DEFAULT_MODEL;
     }
 
-    const oldUiEl = querySelector(commonSelectors.oldUiModelSpan, queryBar);
-    const rawName = (newUiEl?.textContent ?? oldUiEl?.textContent)?.trim() ?? "";
-    return (MODEL_MAP[rawName] ?? rawName.toLowerCase().replace(/\s+/g, "-")) || DEFAULT_MODEL;
+    const modelNameSpan = querySelector("span.font-semibold", modelButton);
+    const rawName = modelNameSpan?.textContent?.trim() ?? "";
+
+    return MODEL_MAP[rawName] || rawName.toLowerCase().replace(/\s+/g, "-") || DEFAULT_MODEL;
 }
 
 async function fetchRateLimit(modelName: string, requestKind: string, force: boolean = false): Promise<RateLimitData | null> {
-    if (!force && cachedRateLimits[modelName]?.[requestKind] !== undefined) {
-        return cachedRateLimits[modelName][requestKind] ?? null;
+    const cacheKey = `${modelName}-${requestKind}`;
+    if (!force && sessionStorage.getItem(cacheKey)) {
+        try {
+            return JSON.parse(sessionStorage.getItem(cacheKey)!);
+        } catch { /* ignore parsing error */ }
     }
     try {
         const data = await grokAPI.rateLimits.get({ requestKind, modelName });
-        cachedRateLimits[modelName] = { ...cachedRateLimits[modelName], [requestKind]: data };
+        sessionStorage.setItem(cacheKey, JSON.stringify(data));
         return data;
     } catch (error) {
         logger.error(`Failed to fetch rate limit for ${modelName} (${requestKind}):`, error);
-        cachedRateLimits[modelName] = { ...cachedRateLimits[modelName], [requestKind]: undefined };
+        sessionStorage.removeItem(cacheKey);
         return null;
     }
 }
@@ -137,21 +125,17 @@ function processRateLimitData(data: RateLimitData | null, effortLevel: EffortLev
 
 function useCurrentModel(): string {
     const [model, setModel] = useState<string>(getCurrentModelFromUI);
-
     useEffect(() => {
         const queryBar = querySelector(commonSelectors.queryBar);
         if (!queryBar) {
             return;
         }
-
         const updateModel = () => setModel(getCurrentModelFromUI());
-
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: queryBar,
             options: { childList: true, subtree: true, characterData: true },
             callback: updateModel,
         });
-
         updateModel();
         observe();
         return disconnect;
@@ -160,7 +144,7 @@ function useCurrentModel(): string {
 }
 
 function useCurrentRequestKind(currentModel: string): string {
-    const getInitialRequestKind = (): string => {
+    const getInitialRequestKind = useCallback((): string => {
         if (currentModel !== "grok-3") {
             return DEFAULT_KIND;
         }
@@ -169,21 +153,23 @@ function useCurrentRequestKind(currentModel: string): string {
             return DEFAULT_KIND;
         }
 
-        const think = findElement({ selector: `${commonSelectors.queryBar} button`, ariaLabel: "Think", root: queryBar });
-        const search = findElement({ selector: `${commonSelectors.queryBar} button`, ariaLabelRegex: /Deep(er)?Search/i, root: queryBar });
+        const findButtonPressed = (label: string) =>
+            findElement({ selector: `button[aria-label="${label}"]`, root: queryBar })?.getAttribute("aria-pressed") === "true";
 
-        if (think?.getAttribute("aria-pressed") === "true") {
+        if (findButtonPressed("Think")) {
             return "REASONING";
         }
-        if (search?.getAttribute("aria-pressed") === "true") {
-            const label = search.getAttribute("aria-label") ?? "";
-            return /deeper/i.test(label) ? "DEEPERSEARCH" : "DEEPSEARCH";
+        if (findButtonPressed("DeeperSearch")) {
+            return "DEEPERSEARCH";
         }
+        if (findButtonPressed("DeepSearch")) {
+            return "DEEPSEARCH";
+        }
+
         return DEFAULT_KIND;
-    };
+    }, [currentModel]);
 
     const [requestKind, setRequestKind] = useState<string>(getInitialRequestKind);
-
     useEffect(() => {
         if (currentModel !== "grok-3") {
             setRequestKind(DEFAULT_KIND);
@@ -193,19 +179,16 @@ function useCurrentRequestKind(currentModel: string): string {
         if (!queryBar) {
             return;
         }
-
         const updateKind = () => setRequestKind(getInitialRequestKind());
-
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: queryBar,
-            options: { attributes: true, attributeFilter: ["aria-pressed"], subtree: true, childList: true },
+            options: { attributes: true, attributeFilter: ["aria-pressed"], subtree: true },
             callback: updateKind,
         });
-
         updateKind();
         observe();
         return disconnect;
-    }, [currentModel]);
+    }, [currentModel, getInitialRequestKind]);
     return requestKind;
 }
 
@@ -216,7 +199,7 @@ function RateLimitComponent() {
     const [isLoading, setIsLoading] = useState(true);
     const [waitTimeCountdown, setWaitTimeCountdown] = useState<number | null>(null);
 
-    const updateRateLimit = async (force: boolean = false) => {
+    const updateRateLimit = useCallback(async (force: boolean = false) => {
         setIsLoading(true);
         const effortLevel = currentModel === "grok-4-auto" ? "both" : currentModel === "grok-3" ? "low" : "high";
         const data = await fetchRateLimit(currentModel, currentRequestKind, force);
@@ -226,7 +209,7 @@ function RateLimitComponent() {
             setWaitTimeCountdown(processed.waitTimeSeconds);
         }
         setIsLoading(false);
-    };
+    }, [currentModel, currentRequestKind]);
 
     const formatCountdown = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -250,14 +233,13 @@ function RateLimitComponent() {
             }, 1000);
         }
         return () => clearInterval(timer);
-    }, [waitTimeCountdown]);
+    }, [waitTimeCountdown, updateRateLimit]);
 
     useEffect(() => {
         updateRateLimit();
         let interval: number;
         if (settings.store.autoRefresh) {
-            const intervalMs = 60000;
-            interval = window.setInterval(() => updateRateLimit(), intervalMs);
+            interval = window.setInterval(() => updateRateLimit(), 60000);
         }
         const onVisibilityChange = () => document.visibilityState === "visible" && updateRateLimit();
         document.addEventListener("visibilitychange", onVisibilityChange);
@@ -265,7 +247,7 @@ function RateLimitComponent() {
             clearInterval(interval);
             document.removeEventListener("visibilitychange", onVisibilityChange);
         };
-    }, [currentModel, currentRequestKind, settings.store.autoRefresh]);
+    }, [updateRateLimit]);
 
     useEffect(() => {
         const setupSubmitListener = async () => {
@@ -287,7 +269,7 @@ function RateLimitComponent() {
         return () => {
             cleanupPromise.then(cleanup => cleanup?.());
         };
-    }, []);
+    }, [updateRateLimit]);
 
     const { isBoth, highRemaining, lowRemaining, waitTimeSeconds } = !rateLimit || "error" in rateLimit
         ? { isBoth: false, highRemaining: 0, lowRemaining: 0, waitTimeSeconds: 0 }
@@ -319,41 +301,59 @@ function RateLimitComponent() {
 
 const rateLimitPatch: IPatch = (() => {
     let root: Root | null = null;
-    let container: HTMLDivElement | null = null;
+    let container: HTMLElement | null = null;
+    let currentQueryBar: HTMLElement | null = null;
     let observerDisconnect: (() => void) | null = null;
 
-    const mount = () => {
-        if (document.getElementById(RATE_LIMIT_CONTAINER_ID)) {
+    const mount = (queryBar: HTMLElement) => {
+        if (currentQueryBar === queryBar || container) {
             return;
         }
 
-        const attachButton = findElement(attachButtonFinder);
-        if (!attachButton) {
+        const attachButton = findElement({
+            selector: "button",
+            classContains: ["group/attach-button"],
+            svgPartialD: "M10 9V15",
+            root: queryBar
+        });
+
+        if (!attachButton || !attachButton.parentElement) {
+            logger.warn("Could not find the attach button to mount the rate limit display.");
             return;
         }
 
         container = document.createElement("div");
-        container.id = RATE_LIMIT_CONTAINER_ID;
+        container.id = "rate-limit-display-container";
         attachButton.insertAdjacentElement("afterend", container);
+
         root = createRoot(container);
         root.render(<RateLimitComponent />);
+        currentQueryBar = queryBar;
+        logger.log("RateLimitComponent mounted.");
     };
 
     const unmount = () => {
-        root?.unmount();
-        container?.remove();
-        root = null;
-        container = null;
+        if (root) {
+            root.unmount();
+            root = null;
+        }
+        if (container) {
+            container.remove();
+            container = null;
+        }
+        currentQueryBar = null;
+        logger.log("RateLimitComponent unmounted.");
     };
 
     return {
         apply() {
-            document.getElementById(RATE_LIMIT_CONTAINER_ID)?.remove();
-
             const observerCallback = () => {
-                if (querySelector(commonSelectors.queryBar)) {
-                    mount();
-                } else {
+                const queryBar = querySelector(commonSelectors.queryBar);
+
+                if (queryBar && queryBar !== currentQueryBar) {
+                    unmount();
+                    mount(queryBar);
+                } else if (!queryBar && currentQueryBar) {
                     unmount();
                 }
             };
@@ -362,10 +362,11 @@ const rateLimitPatch: IPatch = (() => {
                 target: document.body,
                 options: { childList: true, subtree: true },
                 callback: observerCallback,
+                debounceDelay: 200,
             });
 
-            observe();
             observerDisconnect = disconnect;
+            observe();
             observerCallback();
         },
         remove() {
