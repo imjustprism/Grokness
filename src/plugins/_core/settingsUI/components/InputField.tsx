@@ -45,7 +45,7 @@ export const InputField: React.FC<InputFieldProps> = ({
     className,
 }) => {
     const commonClass = clsx(
-        "h-10 py-2 px-3.5 text-sm bg-surface-l1 dark:bg-surface-l1 focus:outline-none text-primary rounded-xl border border-border-l1",
+        "h-10 px-3.5 flex items-center text-sm bg-surface-l1 dark:bg-surface-l1 focus:outline-none text-primary rounded-xl border border-border-l1",
         "transition-colors duration-200",
         "w-full",
         className
