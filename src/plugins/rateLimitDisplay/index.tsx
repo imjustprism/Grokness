@@ -32,12 +32,16 @@ const settings = definePluginSettings({
 });
 
 const MODEL_MAP: Record<string, string> = {
+    // New Model Selector //
     "Auto": "grok-4-auto",
     "Fast": "grok-3",
     "Expert": "grok-4",
     "Heavy": "grok-4-heavy",
+    // Old Model Selector //
+    "Grok 3": "grok-3",
+    "Grok 4": "grok-4",
+    "Grok 4 Heavy": "grok-4-heavy",
 };
-
 const DEFAULT_MODEL = "grok-3";
 const DEFAULT_KIND = "DEFAULT";
 
@@ -64,20 +68,36 @@ function getCurrentModelFromUI(): string {
         return DEFAULT_MODEL;
     }
 
+    const selectElement = querySelector("select[aria-hidden='true']", queryBar) as HTMLSelectElement | null;
+    if (selectElement) {
+        const modelValue = selectElement.value;
+        if (modelValue) {
+            if (modelValue.startsWith("grok-")) {
+                return modelValue;
+            }
+            const mapKey = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === modelValue);
+            if (mapKey) {
+                return MODEL_MAP[mapKey]!;
+            }
+        }
+    }
+
     const modelButton = findElement({
         selector: 'button[role="combobox"]',
         root: queryBar,
-        filter: el => !!el.querySelector('svg.lucide-rocket, svg > path[d*="M5 14.25"], svg > path[d*="M19 9C19"]')
+        filter: el => !!el.querySelector("span"),
     });
 
-    if (!modelButton) {
-        return DEFAULT_MODEL;
+    if (modelButton) {
+        const modelNameSpan = querySelector("span", modelButton);
+        const rawName = modelNameSpan?.textContent?.trim() ?? "";
+
+        if (MODEL_MAP[rawName]) {
+            return MODEL_MAP[rawName];
+        }
     }
 
-    const modelNameSpan = querySelector("span.font-semibold", modelButton);
-    const rawName = modelNameSpan?.textContent?.trim() ?? "";
-
-    return MODEL_MAP[rawName] || rawName.toLowerCase().replace(/\s+/g, "-") || DEFAULT_MODEL;
+    return DEFAULT_MODEL;
 }
 
 async function fetchRateLimit(modelName: string, requestKind: string, force: boolean = false): Promise<RateLimitData | null> {
@@ -102,8 +122,10 @@ function processRateLimitData(data: RateLimitData | null, effortLevel: EffortLev
     if (!data) {
         return { error: true };
     }
+
     const high = data.highEffortRateLimits;
     const low = data.lowEffortRateLimits;
+
     if (effortLevel === "both") {
         return {
             isBoth: true,
@@ -114,6 +136,7 @@ function processRateLimitData(data: RateLimitData | null, effortLevel: EffortLev
             waitTimeSeconds: data.waitTimeSeconds ?? 0,
         };
     }
+
     const limits = effortLevel === "high" ? high : low;
     return {
         isBoth: false,
@@ -125,21 +148,27 @@ function processRateLimitData(data: RateLimitData | null, effortLevel: EffortLev
 
 function useCurrentModel(): string {
     const [model, setModel] = useState<string>(getCurrentModelFromUI);
+
     useEffect(() => {
         const queryBar = querySelector(commonSelectors.queryBar);
         if (!queryBar) {
             return;
         }
+
         const updateModel = () => setModel(getCurrentModelFromUI());
+
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: queryBar,
             options: { childList: true, subtree: true, characterData: true },
             callback: updateModel,
         });
+
         updateModel();
         observe();
+
         return disconnect;
     }, []);
+
     return model;
 }
 
@@ -170,25 +199,32 @@ function useCurrentRequestKind(currentModel: string): string {
     }, [currentModel]);
 
     const [requestKind, setRequestKind] = useState<string>(getInitialRequestKind);
+
     useEffect(() => {
         if (currentModel !== "grok-3") {
             setRequestKind(DEFAULT_KIND);
             return;
         }
+
         const queryBar = querySelector(commonSelectors.queryBar);
         if (!queryBar) {
             return;
         }
+
         const updateKind = () => setRequestKind(getInitialRequestKind());
+
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: queryBar,
             options: { attributes: true, attributeFilter: ["aria-pressed"], subtree: true },
             callback: updateKind,
         });
+
         updateKind();
         observe();
+
         return disconnect;
     }, [currentModel, getInitialRequestKind]);
+
     return requestKind;
 }
 
@@ -241,8 +277,10 @@ function RateLimitComponent() {
         if (settings.store.autoRefresh) {
             interval = window.setInterval(() => updateRateLimit(), 60000);
         }
+
         const onVisibilityChange = () => document.visibilityState === "visible" && updateRateLimit();
         document.addEventListener("visibilitychange", onVisibilityChange);
+
         return () => {
             clearInterval(interval);
             document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -265,7 +303,9 @@ function RateLimitComponent() {
                 logger.error("Could not find textarea to attach submit listener.", error);
             }
         };
+
         const cleanupPromise = setupSubmitListener();
+
         return () => {
             cleanupPromise.then(cleanup => cleanup?.());
         };
@@ -276,7 +316,6 @@ function RateLimitComponent() {
         : rateLimit;
 
     const isLimited = (isBoth ? highRemaining === 0 && (lowRemaining ?? 0) === 0 : highRemaining === 0) && waitTimeSeconds > 0;
-
     const highText = highRemaining.toString();
     const lowText = (lowRemaining ?? 0).toString();
 
@@ -349,7 +388,6 @@ const rateLimitPatch: IPatch = (() => {
         apply() {
             const observerCallback = () => {
                 const queryBar = querySelector(commonSelectors.queryBar);
-
                 if (queryBar && queryBar !== currentQueryBar) {
                     unmount();
                     mount(queryBar);
