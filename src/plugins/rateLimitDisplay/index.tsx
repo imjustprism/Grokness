@@ -42,17 +42,20 @@ const MODEL_MAP: Record<string, string> = {
     "Grok 4": "grok-4",
     "Grok 4 Heavy": "grok-4-heavy",
 };
+
 const DEFAULT_MODEL = "grok-3";
+
 const DEFAULT_KIND = "DEFAULT";
 
 const commonSelectors = {
     queryBar: ".query-bar",
-    textarea: ".query-bar textarea",
+    inputElement: ".query-bar .tiptap.ProseMirror",
 };
 
 const observerManager = new MutationObserverManager();
 
 type EffortLevel = "high" | "low" | "both";
+
 type ProcessedRateLimit = { error: true; } | {
     isBoth: boolean;
     highRemaining: number;
@@ -91,7 +94,6 @@ function getCurrentModelFromUI(): string {
     if (modelButton) {
         const modelNameSpan = querySelector("span", modelButton);
         const rawName = modelNameSpan?.textContent?.trim() ?? "";
-
         if (MODEL_MAP[rawName]) {
             return MODEL_MAP[rawName];
         }
@@ -107,6 +109,7 @@ async function fetchRateLimit(modelName: string, requestKind: string, force: boo
             return JSON.parse(sessionStorage.getItem(cacheKey)!);
         } catch { /* ignore parsing error */ }
     }
+
     try {
         const data = await grokAPI.rateLimits.get({ requestKind, modelName });
         sessionStorage.setItem(cacheKey, JSON.stringify(data));
@@ -154,7 +157,6 @@ function useCurrentModel(): string {
         if (!queryBar) {
             return;
         }
-
         const updateModel = () => setModel(getCurrentModelFromUI());
 
         const { observe, disconnect } = observerManager.createDebouncedObserver({
@@ -165,7 +167,6 @@ function useCurrentModel(): string {
 
         updateModel();
         observe();
-
         return disconnect;
     }, []);
 
@@ -177,6 +178,7 @@ function useCurrentRequestKind(currentModel: string): string {
         if (currentModel !== "grok-3") {
             return DEFAULT_KIND;
         }
+
         const queryBar = querySelector(commonSelectors.queryBar);
         if (!queryBar) {
             return DEFAULT_KIND;
@@ -188,9 +190,11 @@ function useCurrentRequestKind(currentModel: string): string {
         if (findButtonPressed("Think")) {
             return "REASONING";
         }
+
         if (findButtonPressed("DeeperSearch")) {
             return "DEEPERSEARCH";
         }
+
         if (findButtonPressed("DeepSearch")) {
             return "DEEPSEARCH";
         }
@@ -221,7 +225,6 @@ function useCurrentRequestKind(currentModel: string): string {
 
         updateKind();
         observe();
-
         return disconnect;
     }, [currentModel, getInitialRequestKind]);
 
@@ -277,10 +280,8 @@ function RateLimitComponent() {
         if (settings.store.autoRefresh) {
             interval = window.setInterval(() => updateRateLimit(), 60000);
         }
-
         const onVisibilityChange = () => document.visibilityState === "visible" && updateRateLimit();
         document.addEventListener("visibilitychange", onVisibilityChange);
-
         return () => {
             clearInterval(interval);
             document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -290,22 +291,20 @@ function RateLimitComponent() {
     useEffect(() => {
         const setupSubmitListener = async () => {
             try {
-                const textarea = await waitForElementByConfig({ selector: commonSelectors.textarea });
+                const inputElement = await waitForElementByConfig({ selector: commonSelectors.inputElement });
                 const handleKeyDown = (e: KeyboardEvent) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                         setIsLoading(true);
                         setTimeout(() => updateRateLimit(true), 1500);
                     }
                 };
-                textarea.addEventListener("keydown", handleKeyDown);
-                return () => textarea.removeEventListener("keydown", handleKeyDown);
+                inputElement.addEventListener("keydown", handleKeyDown);
+                return () => inputElement.removeEventListener("keydown", handleKeyDown);
             } catch (error) {
-                logger.error("Could not find textarea to attach submit listener.", error);
+                logger.error("Could not find input element to attach submit listener.", error);
             }
         };
-
         const cleanupPromise = setupSubmitListener();
-
         return () => {
             cleanupPromise.then(cleanup => cleanup?.());
         };
@@ -318,7 +317,6 @@ function RateLimitComponent() {
     const isLimited = (isBoth ? highRemaining === 0 && (lowRemaining ?? 0) === 0 : highRemaining === 0) && waitTimeSeconds > 0;
     const highText = highRemaining.toString();
     const lowText = (lowRemaining ?? 0).toString();
-
     const content = isLimited ? formatCountdown(waitTimeCountdown ?? waitTimeSeconds) : isBoth ? `${highText} | ${lowText}` : highText;
     const tooltip = isLimited ? `Reset in ${content}` : isBoth ? `High: ${highRemaining} | Low: ${lowRemaining ?? 0}` : `${highRemaining} queries left`;
 
@@ -348,23 +346,19 @@ const rateLimitPatch: IPatch = (() => {
         if (currentQueryBar === queryBar || container) {
             return;
         }
-
         const attachButton = findElement({
             selector: "button",
             classContains: ["group/attach-button"],
             svgPartialD: "M10 9V15",
             root: queryBar
         });
-
         if (!attachButton || !attachButton.parentElement) {
             logger.warn("Could not find the attach button to mount the rate limit display.");
             return;
         }
-
         container = document.createElement("div");
         container.id = "rate-limit-display-container";
         attachButton.insertAdjacentElement("afterend", container);
-
         root = createRoot(container);
         root.render(<RateLimitComponent />);
         currentQueryBar = queryBar;
@@ -395,14 +389,12 @@ const rateLimitPatch: IPatch = (() => {
                     unmount();
                 }
             };
-
             const { observe, disconnect } = observerManager.createDebouncedObserver({
                 target: document.body,
                 options: { childList: true, subtree: true },
                 callback: observerCallback,
                 debounceDelay: 200,
             });
-
             observerDisconnect = disconnect;
             observe();
             observerCallback();
