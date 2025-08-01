@@ -1,5 +1,3 @@
-![Banner](https://media.discordapp.net/attachments/1310947549510762577/1394395883881107547/grokness-banner.png?ex=6878a21d&is=6877509d&hm=5a28008bc2fc589019d84ce8864e2ca667f5b8856df4dc5535eb1b6f2f3e89d5&=&width=1525&height=858)
-
 # Grokness
 
 [![License](https://img.shields.io/github/license/imjustprism/grokness?style=for-the-badge)](LICENSE) [![Version](https://img.shields.io/github/package-json/v/imjustprism/grokness?style=for-the-badge)](https://github.com/imjustprism/grokness/blob/main/package.json) [![Maintenance](https://img.shields.io/maintenance/yes/2025?style=for-the-badge)]()
