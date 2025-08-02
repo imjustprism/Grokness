@@ -6,7 +6,6 @@
 
 import { type IDeveloper } from "@utils/constants";
 import { type ElementFinderConfig } from "@utils/dom";
-import { codePatcher } from "@utils/patcher";
 import { PluginHelper } from "@utils/pluginHelper";
 import { getPluginSetting, initializePluginSettings } from "@utils/settings";
 import React from "react";
@@ -149,11 +148,6 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
                 return getPluginSetting(id, key, options);
             },
         }) as StoreType;
-    }
-
-    const codePatches = (def.patches?.filter(p => "find" in p && "replacement" in p) as IPluginCodePatch[]) ?? [];
-    if (codePatches.length > 0) {
-        codePatcher.add(...codePatches);
     }
 
     const plugin: IPlugin = {

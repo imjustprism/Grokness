@@ -362,7 +362,6 @@ const rateLimitPatch: IPatch = (() => {
         root = createRoot(container);
         root.render(<RateLimitComponent />);
         currentQueryBar = queryBar;
-        logger.log("RateLimitComponent mounted.");
     };
 
     const unmount = () => {
@@ -375,7 +374,6 @@ const rateLimitPatch: IPatch = (() => {
             container = null;
         }
         currentQueryBar = null;
-        logger.log("RateLimitComponent unmounted.");
     };
 
     return {

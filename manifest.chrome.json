@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Grokness",
-    "version": "1.2.5",
+    "version": "1.2.6",
     "description": "A cute Grok extension",
     "icons": {
         "16": "assets/logo-16.png",
@@ -17,11 +17,5 @@
         }
     ],
     "permissions": ["storage", "cookies"],
-    "host_permissions": ["*://grok.com/*", "*://*.grok.com/*"],
-    "web_accessible_resources": [
-        {
-            "resources": ["injector.js"],
-            "matches": ["*://grok.com/*"]
-        }
-    ]
+    "host_permissions": ["*://grok.com/*", "*://*.grok.com/*"]
 }

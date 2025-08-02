@@ -7,7 +7,6 @@
 export * from "./constants";
 export * from "./dom";
 export * from "./logger";
-export * from "./patcher";
 export * from "./pluginHelper";
 export * from "./settings";
 export * from "./types";

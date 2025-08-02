@@ -5,10 +5,7 @@
  */
 
 import { Logger } from "@utils/logger";
-import { codePatcher } from "@utils/patcher";
 import { type IPlugin, type IPluginContext, plugins as staticPlugins } from "@utils/types";
-
-codePatcher.initialize();
 
 declare const process: {
     env: {
