@@ -22,8 +22,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ isActive, onClick, ico
         variant="ghost"
         color="default"
         size="md"
-        rounded={false}
-        className="min-w-40 gap-3 px-4"
+        className="min-w-40 justify-start gap-3 border-none hover:bg-card-hover"
         data-grokness-tab
     >
         Grokness

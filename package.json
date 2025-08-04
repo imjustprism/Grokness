@@ -45,13 +45,10 @@
         "lint:fix": "bun eslint \"src/**/*.{ts,tsx,js,mjs}\" --fix"
     },
     "dependencies": {
-        "@radix-ui/react-dialog": "^1.1.14",
         "@radix-ui/react-dropdown-menu": "^2.1.15",
         "@radix-ui/react-switch": "^1.2.5",
         "@radix-ui/react-tooltip": "^1.2.7",
-        "@types/jszip": "^3.4.1",
         "clsx": "^2.1.1",
-        "jszip": "^3.10.1",
         "lucide-react": "^0.511.0",
         "react": "^19.1.1",
         "react-dom": "^19.1.1",

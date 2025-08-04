@@ -11,12 +11,6 @@ import clsx from "clsx";
 import React, { type ElementType, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-/**
- * @typedef {object} IconProps - Properties for a custom icon component.
- * @property {string} [className] - Additional CSS classes for the icon.
- * @property {number} [size] - The size of the icon in pixels.
- * @property {number} [strokeWidth] - The stroke width of the icon.
- */
 type IconProps = {
     className?: string;
     size?: number;
@@ -30,81 +24,25 @@ export interface DropdownMenuItem {
     disabled?: boolean;
 }
 
-/**
- * @interface ButtonProps
- * @extends React.ButtonHTMLAttributes<HTMLButtonElement>
- * @description Defines the props for the Button component.
- */
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    /**
-     * @property {ElementType} [as="button"] - The HTML element or React component to render as.
-     * @example <Button as="a" href="/link">Link Button</Button>
-     */
     as?: ElementType;
-    /**
-     * @property {React.ReactNode} [children] - The content to be displayed inside the button.
-     */
     children?: React.ReactNode;
-    /**
-     * @property {string} [className] - Additional CSS classes to apply to the button.
-     */
     className?: string;
-    /**
-     * @property {"outline" | "solid" | "ghost"} [variant="outline"] - The visual style of the button.
-     */
     variant?: "outline" | "solid" | "ghost";
-    /**
-     * @property {"sm" | "md" | "lg" | "icon"} [size="md"] - The size of the button. 'icon' is for buttons that only contain an icon.
-     */
     size?: "sm" | "md" | "lg" | "icon";
-    /**
-     * @property {"default" | "danger" | "warning"} [color="default"] - The color scheme of the button, affecting text, icons, and hover states.
-     */
     color?: "default" | "danger" | "warning";
-    /**
-     * @property {boolean} [rounded=true] - If true, the button will have fully rounded corners. If false, it will have slightly rounded corners.
-     */
     rounded?: boolean;
-    /**
-     * @property {boolean} [isActive=false] - If true, applies an active state style to the button.
-     */
     isActive?: boolean;
-    /**
-     * @property {boolean} [loading=false] - If true, displays a loading spinner instead of the icon and disables the button.
-     */
     loading?: boolean;
-    /**
-     * @property {LucideIconName | React.ComponentType<IconProps>} [icon] - The icon to display. Can be a string name from Lucide icons or a custom React component.
-     */
     icon?: LucideIconName | React.ComponentType<IconProps>;
-    /**
-     * @property {number} [iconSize=18] - The size of the icon in pixels.
-     */
     iconSize?: number;
-    /**
-     * @property {"left" | "right"} [iconPosition="left"] - The position of the icon relative to the children content.
-     */
     iconPosition?: "left" | "right";
-    /**
-     * @property {React.ReactNode} [tooltip] - If provided, wraps the button in a tooltip that shows this content on hover.
-     */
     tooltip?: React.ReactNode;
-    /**
-     * @property {DropdownMenuItem[]} [dropdownItems] - If provided, the button will act as a dropdown trigger, displaying these items in a menu.
-     */
     dropdownItems?: DropdownMenuItem[];
-    /**
-     * @property {'start' | 'center' | 'end'} [dropdownAlign='center'] - The alignment of the dropdown menu relative to the trigger.
-     */
     dropdownAlign?: "start" | "center" | "end";
-    /**
-     * @property {boolean} [rotateIcon=false] - If true and dropdownItems is provided, rotates the icon when the dropdown is open.
-     */
     rotateIcon?: boolean;
-    /**
-     * @property {boolean} [manualDropdown=false] - If true and dropdownItems is provided, uses manual fixed positioning for the dropdown (useful in transformed containers like modals).
-     */
     manualDropdown?: boolean;
+    disableIconHover?: boolean;
 }
 
 const composeRefs = <T extends HTMLElement>(...refs: Array<React.Ref<T> | null>) => (el: T | null) => {
@@ -120,14 +58,6 @@ const composeRefs = <T extends HTMLElement>(...refs: Array<React.Ref<T> | null>)
     });
 };
 
-/**
- * A versatile and themeable button component with support for icons, different styles, sizes, and states.
- * It is built with accessibility in mind and can be wrapped in a tooltip or act as a dropdown menu.
- *
- * @param {ButtonProps} props - The properties for the Button component.
- * @param {React.Ref<HTMLElement>} ref - Forwarded ref to the underlying button element.
- * @returns {React.ReactElement} The rendered button component.
- */
 export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     (
         {
@@ -137,7 +67,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             variant = "outline",
             size = "md",
             color = "default",
-            rounded = true,
+            rounded = false,
             isActive = false,
             loading = false,
             icon,
@@ -149,11 +79,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             dropdownAlign = "center",
             rotateIcon = false,
             manualDropdown = false,
+            disableIconHover = false,
             ...props
         },
         ref
     ) => {
-        const [isHovered, setIsHovered] = useState(false);
         const [isOpen, setIsOpen] = useState(false);
         const buttonRef = useRef<HTMLElement>(null);
         const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number; } | null>(null);
@@ -167,11 +97,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                 } else if (dropdownAlign === "end") {
                     left += rect.width - 200;
                 }
-                setDropdownPosition({
-                    top: rect.bottom + 8,
-                    left,
-                    width: rect.width,
-                });
+                setDropdownPosition({ top: rect.bottom + 8, left, width: rect.width });
             }
         }, [isOpen, manualDropdown, dropdownAlign]);
 
@@ -179,7 +105,6 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             if (!manualDropdown || !isOpen) {
                 return;
             }
-
             const handleClickOutside = (event: MouseEvent) => {
                 const target = event.target as HTMLElement;
                 if (buttonRef.current?.contains(target)) {
@@ -190,25 +115,24 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                 }
                 setIsOpen(false);
             };
-
             document.addEventListener("mousedown", handleClickOutside);
             return () => document.removeEventListener("mousedown", handleClickOutside);
         }, [manualDropdown, isOpen]);
 
         const baseClasses = [
             "inline-flex items-center gap-2",
-            "whitespace-nowrap font-medium cursor-pointer",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "whitespace-nowrap font-medium leading-[normal]",
+            "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "disabled:opacity-60 disabled:cursor-not-allowed",
             "transition-colors duration-100",
-            "[&_svg]:shrink-0 select-none border",
+            "[&_svg]:shrink-0 select-none group",
         ];
 
         const sizeClasses = {
             sm: "h-8 px-3 text-xs",
-            md: "h-10 px-3.5 text-sm",
+            md: "h-10 px-4 py-2 text-sm",
             lg: "h-12 px-5 text-base",
-            icon: "p-0",
+            icon: "h-10 w-10 p-0",
         };
 
         const iconOnlySizeClasses = {
@@ -218,57 +142,50 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             icon: "h-10 w-10",
         };
 
-        const variantClasses = {
-            outline: "border-border-l2",
-            solid: "border-transparent",
-            ghost: "border-transparent",
+        const variantColorClasses = {
+            solid: {
+                default: "border-transparent bg-primary text-background hover:bg-primary/90",
+                danger: "border-transparent bg-red-500 text-white hover:bg-red-600",
+                warning: "border-transparent bg-yellow-500 text-white hover:bg-yellow-600",
+            },
+            outline: {
+                default: `border-border-l2 text-fg-primary hover:bg-button-ghost-hover ${isActive ? "bg-button-ghost-hover text-primary" : ""}`,
+                danger: `border-border-l2 text-red-400 hover:bg-red-400/10 dark:text-red-200 hover:text-red-500 ${isActive ? "bg-red-400/10" : ""}`,
+                warning: `border-border-l2 text-yellow-400 hover:bg-yellow-400/10 ${isActive ? "bg-yellow-400/10" : ""}`,
+            },
+            ghost: {
+                default: `border-transparent text-fg-primary hover:bg-button-ghost-hover ${isActive ? "bg-button-ghost-hover text-primary" : ""}`,
+                danger: `border-transparent text-red-400 hover:bg-red-400/10 dark:text-red-200 hover:text-red-500 ${isActive ? "bg-red-400/10" : ""}`,
+                warning: `border-transparent text-yellow-400 hover:bg-yellow-400/10 ${isActive ? "bg-yellow-400/10" : ""}`,
+            },
         };
-
-        const containerStateClasses = {
-            default: "hover:bg-button-ghost-hover",
-            danger: "hover:bg-red-400/10",
-            warning: "hover:bg-yellow-400/10",
-        };
-
-        let textClasses = "";
-        let iconClasses = "";
-
-        if (isActive) {
-            textClasses = "text-primary";
-            iconClasses = "text-primary";
-        } else {
-            switch (color) {
-                case "danger":
-                    textClasses = "text-red-400 dark:text-red-200";
-                    iconClasses = "text-red-400 dark:text-red-200";
-                    break;
-                case "warning":
-                    textClasses = "text-yellow-400 dark:text-yellow-200";
-                    iconClasses = "text-yellow-400 dark:text-yellow-200";
-                    break;
-                case "default":
-                default:
-                    textClasses = "text-fg-primary";
-                    iconClasses = isHovered && !disabled ? "text-primary" : "text-secondary";
-                    break;
-            }
-        }
-
-        const activeContainerClasses = isActive ? "bg-button-ghost-hover" : "";
 
         const finalClass = clsx(
             baseClasses,
-            rounded ? "rounded-full" : "rounded-xl",
             sizeClasses[size],
-            children ? "justify-start" : ["justify-center", iconOnlySizeClasses[size]],
-            variantClasses[variant],
-            !isActive && containerStateClasses[color],
-            activeContainerClasses,
+            children ? "justify-start" : "justify-center",
+            !children && iconOnlySizeClasses[size],
+            variant !== "solid" && "border",
+            rounded ? "rounded-full" : "rounded-xl",
+            variantColorClasses[variant][color],
             className
         );
 
+        let iconClasses = "";
+        if (isActive) {
+            iconClasses = "text-primary";
+        } else if (variant === "solid" && color !== "default") {
+            iconClasses = "text-white";
+        } else if (color === "danger") {
+            iconClasses = "text-red-400 dark:text-red-200 group-hover:text-red-500";
+        } else if (color === "warning") {
+            iconClasses = "text-yellow-400 group-hover:text-yellow-500";
+        } else {
+            iconClasses = clsx("text-secondary", !disableIconHover && "group-hover:text-primary");
+        }
+
         const iconNode = loading ? (
-            <Lucide name="Loader2" size={iconSize} className={clsx(iconClasses, "animate-spin")} />
+            <Lucide name="Loader2" size={iconSize} className={clsx("animate-spin", iconClasses)} />
         ) : icon && typeof icon === "string" ? (
             <Lucide name={icon} size={iconSize} className={iconClasses} />
         ) : icon ? (
@@ -294,31 +211,22 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                 className={finalClass}
                 disabled={disabled || loading}
                 aria-selected={isActive}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
                 onClick={manualDropdown && dropdownItems ? () => setIsOpen(prev => !prev) : props.onClick}
                 {...props}
             >
                 {leftIconNode}
-                {children && <span className={textClasses}>{children}</span>}
+                {children}
                 {rightIconNode}
             </Component>
-        );
-
-        const dropdownContentClass = clsx(
-            "z-[1002] min-w-[12rem] overflow-hidden rounded-xl border border-border-l1 bg-surface-l1 p-1.5 shadow-lg",
-            "animate-in fade-in-0 zoom-in-95"
-        );
-
-        const dropdownItemClass = clsx(
-            "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-sm text-secondary outline-none transition-colors w-full",
-            "hover:bg-button-ghost-hover hover:text-primary disabled:pointer-events-none disabled:opacity-50"
         );
 
         const renderDropdown = () => {
             if (!dropdownItems) {
                 return buttonNode;
             }
+
+            const dropdownContentClasses = "z-[1002] min-w-[12rem] overflow-hidden rounded-xl border border-border-l1 bg-surface-l1 p-1.5 shadow-lg animate-in fade-in-0 zoom-in-95";
+            const dropdownItemClasses = "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-sm text-secondary outline-none transition-colors w-full hover:bg-button-ghost-hover hover:text-primary disabled:pointer-events-none disabled:opacity-50";
 
             if (manualDropdown) {
                 return (
@@ -332,7 +240,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                                     top: `${dropdownPosition.top}px`,
                                     left: `${dropdownPosition.left}px`,
                                 }}
-                                className={dropdownContentClass}
+                                className={dropdownContentClasses}
                             >
                                 {dropdownItems.map((item, index) => (
                                     <button
@@ -342,7 +250,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                                             setIsOpen(false);
                                         }}
                                         disabled={item.disabled}
-                                        className={dropdownItemClass}
+                                        className={dropdownItemClasses}
                                     >
                                         {item.icon && <Lucide name={item.icon} className="mr-2 h-4 w-4" />}
                                         <span>{item.label}</span>
@@ -363,7 +271,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                                 align={dropdownAlign}
                                 sideOffset={8}
                                 className={clsx(
-                                    dropdownContentClass,
+                                    dropdownContentClasses,
                                     "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
                                 )}
                             >
@@ -372,7 +280,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                                         key={index}
                                         onSelect={item.onSelect}
                                         disabled={item.disabled}
-                                        className={dropdownItemClass}
+                                        className={dropdownItemClasses}
                                     >
                                         {item.icon && <Lucide name={item.icon} className="mr-2 h-4 w-4" />}
                                         <span>{item.label}</span>
@@ -405,9 +313,9 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             </Tooltip.Provider>
         );
 
-        const content = dropdownItems ? renderDropdown() : buttonNode;
+        const finalContent = dropdownItems ? renderDropdown() : buttonNode;
 
-        return tooltip ? renderTooltip(content) : content;
+        return tooltip ? renderTooltip(finalContent) : finalContent;
     }
 );
 
