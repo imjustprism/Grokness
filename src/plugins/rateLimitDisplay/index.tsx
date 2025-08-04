@@ -323,6 +323,7 @@ function RateLimitComponent() {
     return (
         <Button
             id="grok-rate-limit"
+            className="rate-limit-display-button"
             variant="outline"
             size="md"
             loading={isLoading}
@@ -330,6 +331,7 @@ function RateLimitComponent() {
             onClick={() => updateRateLimit(true)}
             tooltip={tooltip}
             color={isLimited ? "danger" : "default"}
+            rounded={true}
         >
             {isLoading && !rateLimit ? <span>&nbsp;</span> : content}
         </Button>
@@ -410,6 +412,14 @@ export default definePlugin({
     authors: [Devs.blankspeaker, Devs.CursedAtom, Devs.Prism],
     category: "chat",
     tags: ["rate-limit", "queries"],
+    styles: `
+        .query-bar.group:hover .rate-limit-display-button svg {
+            color: hsl(var(--secondary));
+        }
+        .rate-limit-display-button:hover svg {
+            color: white !important;
+        }
+    `,
     settings,
     patches: [rateLimitPatch],
 });
