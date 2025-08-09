@@ -5,244 +5,169 @@
  */
 
 import { ErrorBoundary } from "@components/ErrorBoundary";
-import { type ElementFinderConfig, findElement, MutationObserverManager, querySelectorAll } from "@utils/dom";
-import { Logger } from "@utils/logger";
-import { type IPluginUIPatch } from "@utils/types";
+import { type ElementFinderConfig, querySelectorAll } from "@utils/dom";
+import { type InjectedComponentProps, type IPluginUIPatch } from "@utils/types";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-const helperLogger = new Logger("PluginHelper", "#89b4fa");
+type Mount = {
+    container: HTMLElement;
+    root: Root;
+    target: HTMLElement;
+};
+
+type ActiveUIPatch = {
+    observer: MutationObserver;
+    mounts: Map<HTMLElement, Mount>;
+    patch: IPluginUIPatch;
+};
 
 export class PluginHelper {
-    private observerManager = new MutationObserverManager();
-    private styleElements = new Map<string, HTMLStyleElement>();
-    private singleRoots = new Map<string, Root>();
-    private singleContainers = new Map<string, HTMLElement>();
-    private multiRootMaps = new Map<string, Map<HTMLElement, Root>>();
-    private multiElementMaps = new Map<string, Map<HTMLElement, HTMLElement>>();
-    private activeUIPatches = new Set<string>();
+    private styleIds = new Set<string>();
+    private activeUIPatches = new Map<string, ActiveUIPatch>();
 
-    /**
-     * Cleans up the DOM elements for a single UI patch without deactivating it.
-     * This is used for temporary removals, allowing re-injection later.
-     */
-    private cleanupSingleUIPatch(pluginId: string): void {
-        try {
-            this.singleRoots.get(pluginId)?.unmount();
-            this.singleContainers.get(pluginId)?.remove();
-            this.singleRoots.delete(pluginId);
-            this.singleContainers.delete(pluginId);
-        } catch (error) {
-            helperLogger.error(`[${pluginId}] Error cleaning up single UI patch:`, error);
+    applyStyles(pluginId: string, css: string) {
+        const id = `grokness-style-${pluginId}`;
+        if (this.styleIds.has(id)) {
+            return;
+        }
+        const tag = document.createElement("style");
+        tag.id = id;
+        tag.textContent = css;
+        document.head.appendChild(tag);
+        this.styleIds.add(id);
+    }
+
+    removeStyles(pluginId: string) {
+        const id = `grokness-style-${pluginId}`;
+        const tag = document.getElementById(id);
+        if (tag) {
+            tag.remove();
+            this.styleIds.delete(id);
         }
     }
 
-    public applySingleUIPatch(pluginId: string, patch: IPluginUIPatch): void {
-        this.activeUIPatches.add(pluginId);
+    applyUIPatch(pluginId: string, patch: IPluginUIPatch) {
+        this.removeUIPatch(pluginId);
 
-        try {
-            const targetFinder: ElementFinderConfig = typeof patch.target === "string" ? { selector: patch.target } : patch.target;
+        const mounts = new Map<HTMLElement, Mount>();
 
-            const handleInjection = (rootElement: HTMLElement) => {
-                if (!this.activeUIPatches.has(pluginId) || this.singleContainers.has(pluginId)) {
-                    return;
+        const scan = () => {
+            const targets = this.findTargets(patch);
+
+            for (const [t, m] of mounts) {
+                if (!document.contains(t)) {
+                    m.root.unmount();
+                    m.container.remove();
+                    mounts.delete(t);
+                }
+            }
+
+            for (const t of targets) {
+                if (patch.predicate && !patch.predicate(t)) {
+                    continue;
+                }
+                if (mounts.has(t) && document.contains(mounts.get(t)!.container)) {
+                    continue;
+                }
+
+                const parent = patch.getTargetParent ? patch.getTargetParent(t) : t.parentElement;
+                if (!parent) {
+                    continue;
                 }
 
                 const container = document.createElement("div");
-                container.id = `${pluginId}-container`;
-                this.singleContainers.set(pluginId, container);
+                container.setAttribute("data-grokness-ui", pluginId);
 
-                const targetParent = patch.getTargetParent?.(rootElement) ?? rootElement;
-                const referenceNode = patch.referenceNode?.(targetParent, rootElement);
-                targetParent.insertBefore(container, referenceNode ?? null);
+                const refNode = patch.referenceNode?.(parent, t) ?? null;
+                if (refNode && refNode.parentNode === parent) {
+                    parent.insertBefore(container, refNode.nextSibling);
+                } else {
+                    parent.appendChild(container);
+                }
 
                 const root = createRoot(container);
+                const Component = patch.component as React.ComponentType<InjectedComponentProps>;
+
                 root.render(
                     React.createElement(
-                        ErrorBoundary, {
-                        pluginId,
-                        children: React.createElement(patch.component, { rootElement })
-                    }
+                        ErrorBoundary as unknown as React.ComponentType<{ pluginId: string; children?: React.ReactNode; }>,
+                        { pluginId },
+                        React.createElement(Component, { rootElement: t })
                     )
                 );
-                this.singleRoots.set(pluginId, root);
-            };
 
-            const observerCallback = () => {
-                const element = findElement(targetFinder);
-                if (element && !this.singleContainers.has(pluginId)) {
-                    handleInjection(element);
-                } else if (!element && this.singleContainers.has(pluginId)) {
-                    this.cleanupSingleUIPatch(pluginId);
-                }
-            };
-
-            const useDebounce = patch.observerDebounce !== false;
-            const debounceDelay = typeof patch.observerDebounce === "number" ? patch.observerDebounce : undefined;
-            const observerCreator = useDebounce ? this.observerManager.createDebouncedObserver : this.observerManager.createObserver;
-
-            const { observe, disconnect } = observerCreator({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: observerCallback,
-                debounceDelay,
-            });
-
-            patch.disconnect = () => disconnect();
-
-            const initialElement = findElement(targetFinder);
-            if (initialElement) {
-                handleInjection(initialElement);
+                mounts.set(t, { container, root, target: t });
             }
+        };
 
-            observe();
-        } catch (error) {
-            helperLogger.error(`[${pluginId}] Error applying single UI patch:`, error);
-        }
+        const observer = new MutationObserver(() => {
+            scan();
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            characterData: false,
+        });
+
+        scan();
+
+        this.activeUIPatches.set(pluginId, { observer, mounts, patch });
     }
 
-    public applyMultiUIPatch(pluginId: string, patch: IPluginUIPatch): void {
-        this.activeUIPatches.add(pluginId);
-
-        try {
-            const targetSelector = typeof patch.target === "string" ? patch.target : patch.target.selector;
-            const instanceRoots = new Map<HTMLElement, Root>();
-            const elementToContainer = new Map<HTMLElement, HTMLElement>();
-            const processedElements = new Set<HTMLElement>();
-            this.multiRootMaps.set(pluginId, instanceRoots);
-            this.multiElementMaps.set(pluginId, elementToContainer);
-
-            const injectIntoElement = (element: HTMLElement) => {
-                if (!this.activeUIPatches.has(pluginId) || processedElements.has(element)) {
-                    return;
-                }
-
-                processedElements.add(element);
-                const container = document.createElement("div");
-                container.id = `${pluginId}-${Math.random().toString(36).substring(2, 9)}`;
-                const targetParent = patch.getTargetParent?.(element) ?? element;
-                const referenceNode = patch.referenceNode?.(targetParent, element);
-                if (!targetParent) {
-                    return;
-                }
-                targetParent.insertBefore(container, referenceNode ?? null);
-                const root = createRoot(container);
-                root.render(
-                    React.createElement(
-                        ErrorBoundary, {
-                        pluginId,
-                        children: React.createElement(patch.component, { rootElement: element })
-                    }
-                    )
-                );
-                instanceRoots.set(container, root);
-                elementToContainer.set(element, container);
-            };
-
-            const removeFromElement = (element: HTMLElement) => {
-                const container = elementToContainer.get(element);
-                if (container) {
-                    const root = instanceRoots.get(container);
-                    root?.unmount();
-                    container.remove();
-                    instanceRoots.delete(container);
-                    elementToContainer.delete(element);
-                    processedElements.delete(element);
-                }
-            };
-
-            querySelectorAll(targetSelector).forEach(el => injectIntoElement(el as HTMLElement));
-
-            const observerCallback = (mutations: MutationRecord[]) => {
-                if (!this.activeUIPatches.has(pluginId)) {
-                    return;
-                }
-
-                for (const mutation of mutations) {
-                    if (mutation.type === "childList") {
-                        mutation.addedNodes.forEach(node => {
-                            if (node instanceof HTMLElement) {
-                                if (node.matches(targetSelector)) {
-                                    injectIntoElement(node);
-                                }
-                                node.querySelectorAll(targetSelector).forEach(el => injectIntoElement(el as HTMLElement));
-                            }
-                        });
-                        mutation.removedNodes.forEach(node => {
-                            if (node instanceof HTMLElement && processedElements.has(node)) {
-                                removeFromElement(node);
-                            }
-                        });
-                    } else if (mutation.type === "attributes" && mutation.target instanceof HTMLElement) {
-                        const nowMatches = mutation.target.matches(targetSelector);
-                        const wasProcessed = processedElements.has(mutation.target);
-                        if (nowMatches && !wasProcessed) {
-                            injectIntoElement(mutation.target);
-                        } else if (!nowMatches && wasProcessed) {
-                            removeFromElement(mutation.target);
-                        }
-                    }
-                }
-            };
-
-            const { observe, disconnect } = this.observerManager.createObserver({
-                target: document.body,
-                options: { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] },
-                callback: observerCallback
-            });
-
-            patch.disconnect = () => disconnect();
-            observe();
-        } catch (error) {
-            helperLogger.error(`[${pluginId}] Error applying multi UI patch:`, error);
+    removeUIPatch(pluginId: string) {
+        const active = this.activeUIPatches.get(pluginId);
+        if (!active) {
+            return;
         }
-    }
-
-    public removeSingleUIPatch(pluginId: string): void {
+        active.observer.disconnect();
+        for (const { root, container } of active.mounts.values()) {
+            root.unmount();
+            container.remove();
+        }
         this.activeUIPatches.delete(pluginId);
-        this.cleanupSingleUIPatch(pluginId);
     }
 
-    public removeMultiUIPatch(pluginId: string): void {
-        this.activeUIPatches.delete(pluginId);
-        try {
-            const instanceRoots = this.multiRootMaps.get(pluginId);
-            if (instanceRoots) {
-                instanceRoots.forEach((root, container) => {
-                    root.unmount();
-                    container.remove();
-                });
+    applyMultiUIPatch(pluginId: string, patch: IPluginUIPatch) {
+        this.applyUIPatch(pluginId, { ...patch, forEach: true });
+    }
+    applySingleUIPatch(pluginId: string, patch: IPluginUIPatch) {
+        this.applyUIPatch(pluginId, { ...patch, forEach: false });
+    }
+    removeMultiUIPatch(pluginId: string) {
+        this.removeUIPatch(pluginId);
+    }
+    removeSingleUIPatch(pluginId: string) {
+        this.removeUIPatch(pluginId);
+    }
+
+    private findTargets(patch: IPluginUIPatch): HTMLElement[] {
+        if (typeof patch.target === "string") {
+            const all = querySelectorAll<HTMLElement>(patch.target);
+            return patch.forEach ? all : (all.length ? [all[0]!] : []);
+        }
+        const cfg: ElementFinderConfig = patch.target;
+        const all = querySelectorAll<HTMLElement>(cfg.selector, cfg.root ?? document);
+        const filtered = all.filter(el => {
+            if (cfg.classContains && cfg.classContains.length > 0) {
+                const ok = cfg.classContains.every(c => el.classList.contains(c));
+                if (!ok) {
+                    return false;
+                }
             }
-            this.multiRootMaps.delete(pluginId);
-            this.multiElementMaps.delete(pluginId);
-        } catch (error) {
-            helperLogger.error(`[${pluginId}] Error removing multi UI patch:`, error);
-        }
-    }
-
-    public applyStyles(pluginId: string, css: string): void {
-        try {
-            if (this.styleElements.has(pluginId)) {
-                return;
+            if (cfg.svgPartialD) {
+                const p = el.querySelector("svg path[d]") as SVGPathElement | null;
+                if (!p || !p.getAttribute("d")?.includes(cfg.svgPartialD)) {
+                    return false;
+                }
             }
-            const style = document.createElement("style");
-            style.id = `${pluginId}-styles`;
-            style.textContent = css;
-            document.head.appendChild(style);
-            this.styleElements.set(pluginId, style);
-        } catch (error) {
-            helperLogger.error(`[${pluginId}] Error applying styles:`, error);
-        }
-    }
-
-    public removeStyles(pluginId: string): void {
-        try {
-            this.styleElements.get(pluginId)?.remove();
-            this.styleElements.delete(pluginId);
-        } catch (error) {
-            helperLogger.error(`[${pluginId}] Error removing styles:`, error);
-        }
+            if (cfg.filter && !cfg.filter(el)) {
+                return false;
+            }
+            return true;
+        });
+        return patch.forEach ? filtered : (filtered.length ? [filtered[0]!] : []);
     }
 }
-
-export const pluginHelper = new PluginHelper();

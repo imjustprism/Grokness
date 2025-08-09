@@ -7,7 +7,6 @@
 import { type IDeveloper } from "@utils/constants";
 import { type ElementFinderConfig } from "@utils/dom";
 import { PluginHelper } from "@utils/pluginHelper";
-import { getPluginSetting, initializePluginSettings } from "@utils/settings";
 import React from "react";
 
 export enum PluginCategory {
@@ -45,9 +44,14 @@ export type InferOptionType<O extends PluginOptionBase> =
     O["type"] extends "select" ? O["options"] extends readonly { value: infer V; }[] ? V : unknown :
     unknown;
 
-export interface InjectedComponentProps {
-    rootElement?: HTMLElement;
+export interface ISettingsManager<T extends PluginOptions = PluginOptions> {
+    definition: T;
+    store: { [K in keyof T]: InferOptionType<T[K]> };
 }
+
+export type InjectedComponentProps = {
+    rootElement?: HTMLElement;
+};
 
 export interface IPatch {
     apply?(): void;
@@ -62,20 +66,17 @@ export interface IPluginUIPatch extends IPatch {
     getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
     referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
     observerDebounce?: boolean | number;
+    /** Optional predicate to decide whether a found target should be mounted into */
+    predicate?: (foundElement: HTMLElement) => boolean;
 }
 
 export interface IPluginCodePatch {
     find: string | RegExp;
     replacement: {
         match: RegExp;
-        replace: string | ((substring: string, ...args: any[]) => string);
+        replace: string | ((substring: string, ...args: unknown[]) => string);
     };
     predicate?: () => boolean;
-}
-
-export interface ISettingsManager<T extends PluginOptions = PluginOptions> {
-    definition: T;
-    store: { [K in keyof T]: InferOptionType<T[K]> };
 }
 
 export interface IPluginContext {
@@ -126,6 +127,7 @@ export interface IPlugin {
 }
 
 export const plugins: IPlugin[] = [];
+
 const pluginHelper = new PluginHelper();
 
 function toKebabCase(str: string): string {
@@ -135,6 +137,118 @@ function toKebabCase(str: string): string {
         .replace(/^-+|-+$/g, "")
         .toLowerCase();
 }
+
+/** ===== Settings runtime (merged from settings.ts) ===== */
+
+const settingsStore = new Map<string, Record<string, unknown>>();
+
+export function definePluginSettings<T extends PluginOptions>(definition: T): ISettingsManager<T> {
+    return {
+        definition,
+        store: {} as { [K in keyof T]: InferOptionType<T[K]> },
+    };
+}
+
+export function getPluginSettings(pluginId: string): Record<string, unknown> {
+    if (!settingsStore.has(pluginId)) {
+        const stored = localStorage.getItem(`plugin-settings:${pluginId}`);
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored) as Record<string, unknown>;
+                settingsStore.set(pluginId, parsed);
+                return parsed;
+            } catch {
+                // ignore parse error
+            }
+        }
+        settingsStore.set(pluginId, {});
+    }
+    return settingsStore.get(pluginId)!;
+}
+
+export function setPluginSetting(pluginId: string, key: string, value: unknown): void {
+    const settings = getPluginSettings(pluginId);
+    settings[key] = value;
+    localStorage.setItem(`plugin-settings:${pluginId}`, JSON.stringify(settings));
+    settingsStore.set(pluginId, settings);
+    window.dispatchEvent(
+        new CustomEvent("grok-settings-updated", {
+            detail: { pluginId, key, value },
+        })
+    );
+}
+
+export function getPluginSetting<T extends PluginOptions, K extends keyof T & string>(
+    pluginId: string,
+    key: K,
+    options: T,
+    defaultValue?: InferOptionType<T[K]>
+): InferOptionType<T[K]> {
+    const settings = getPluginSettings(pluginId);
+    const option = options[key];
+
+    if (settings[key] !== undefined) {
+        return settings[key] as InferOptionType<T[K]>;
+    }
+
+    if (option?.default !== undefined) {
+        return option.default as InferOptionType<T[K]>;
+    }
+
+    return defaultValue as InferOptionType<T[K]>;
+}
+
+export function initializePluginSettings(pluginId: string, options: PluginOptions): void {
+    const settings = getPluginSettings(pluginId);
+    let hasChanges = false;
+
+    for (const [key, option] of Object.entries(options)) {
+        if (settings[key] === undefined) {
+            if (option.default !== undefined) {
+                settings[key] = option.default;
+                hasChanges = true;
+            }
+        } else {
+            const stored = settings[key];
+            const expectedType = option.type;
+            const ok =
+                (expectedType === "boolean" && typeof stored === "boolean") ||
+                (expectedType === "number" && typeof stored === "number") ||
+                (expectedType === "string" && typeof stored === "string") ||
+                (expectedType === "select" && option.options?.some(o => o.value === stored));
+
+            if (!ok) {
+                settings[key] = option.default;
+                hasChanges = true;
+            }
+        }
+    }
+
+    if (hasChanges) {
+        localStorage.setItem(`plugin-settings:${pluginId}`, JSON.stringify(settings));
+        settingsStore.set(pluginId, settings);
+    }
+}
+
+export function useSetting<T extends PluginOptions, K extends keyof T & string>(
+    pluginId: string,
+    key: K
+): [InferOptionType<T[K]>, (value: InferOptionType<T[K]>) => void] {
+    const [value, setValue] = React.useState(getPluginSetting(pluginId, key, {} as T));
+    React.useEffect(() => {
+        const listener = (e: CustomEvent<{ pluginId: string; key: string; value: unknown; }>) => {
+            if (e.detail.pluginId === pluginId && e.detail.key === key) {
+                setValue(e.detail.value as InferOptionType<T[K]>);
+            }
+        };
+        window.addEventListener("grok-settings-updated", listener as unknown as EventListener);
+        return () => window.removeEventListener("grok-settings-updated", listener as unknown as EventListener);
+    }, [pluginId, key]);
+    const setter = (newValue: InferOptionType<T[K]>) => setPluginSetting(pluginId, key, newValue);
+    return [value, setter];
+}
+
+/** ===== Plugin registration (unchanged API) ===== */
 
 export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
     const id = def.id || toKebabCase(def.name);
