@@ -4,21 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { grokAPI } from "@api/api";
-import type { RateLimitData } from "@api/interfaces";
+import { ApiClient, createApiServices, type RateLimitData } from "@api/index";
 import { Button } from "@components/Button";
+import { Lucide } from "@components/Lucide";
 import { Devs } from "@utils/constants";
-import {
-    findElement,
-    MutationObserverManager,
-    querySelector,
-    waitForElementByConfig,
-} from "@utils/dom";
+import { findElement, MutationObserverManager, querySelector } from "@utils/dom";
 import { Logger } from "@utils/logger";
-import { definePluginSettings } from "@utils/settings";
-import { definePlugin, type IPatch } from "@utils/types";
-import React, { useCallback, useEffect, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { definePlugin, definePluginSettings, type IPluginUIPatch } from "@utils/types";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const logger = new Logger("RateLimitDisplay", "#a6d189");
 
@@ -26,229 +19,269 @@ const settings = definePluginSettings({
     autoRefresh: {
         type: "boolean",
         displayName: "Auto Refresh",
-        description: "Automatically refresh rate limit display periodically.",
-        default: true,
-    },
+        description: "Automatically refresh rate limit display every 60 seconds.",
+        default: true
+    }
 });
 
 const MODEL_MAP: Record<string, string> = {
-    // New Model Selector //
-    "Auto": "grok-4-auto",
-    "Fast": "grok-3",
-    "Expert": "grok-4",
-    "Heavy": "grok-4-heavy",
-    // Old Model Selector //
+    Auto: "grok-4-auto",
+    Fast: "grok-3",
+    Expert: "grok-4",
+    Heavy: "grok-4-heavy",
     "Grok 3": "grok-3",
     "Grok 4": "grok-4",
-    "Grok 4 Heavy": "grok-4-heavy",
+    "Grok 4 Heavy": "grok-4-heavy"
 };
-
 const DEFAULT_MODEL = "grok-3";
-
 const DEFAULT_KIND = "DEFAULT";
-
-const commonSelectors = {
-    queryBar: ".query-bar",
-    inputElement: ".query-bar .tiptap.ProseMirror",
-};
-
+const QUERY_BAR_SELECTOR = ".query-bar";
 const observerManager = new MutationObserverManager();
 
-type EffortLevel = "high" | "low" | "both";
+const api = ApiClient.fromWindow();
+const apiServices = createApiServices(api);
 
-type ProcessedRateLimit = { error: true; } | {
-    isBoth: boolean;
-    highRemaining: number;
-    highTotal: number;
-    lowRemaining?: number;
-    lowTotal?: number;
-    waitTimeSeconds: number;
+type RateLimitPayload = {
+    highEffortRateLimits?: { remainingQueries?: number; };
+    lowEffortRateLimits?: { remainingQueries?: number; };
+    waitTimeSeconds?: number;
+    remainingQueries?: number;
 };
+type RateLimitResponse = RateLimitData & RateLimitPayload;
 
 function getCurrentModelFromUI(): string {
-    const queryBar = querySelector(commonSelectors.queryBar);
+    const queryBar = querySelector(QUERY_BAR_SELECTOR);
     if (!queryBar) {
         return DEFAULT_MODEL;
     }
 
-    const selectElement = querySelector("select[aria-hidden='true']", queryBar) as HTMLSelectElement | null;
-    if (selectElement) {
-        const modelValue = selectElement.value;
-        if (modelValue) {
-            if (modelValue.startsWith("grok-")) {
-                return modelValue;
-            }
-            const mapKey = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === modelValue);
-            if (mapKey) {
-                return MODEL_MAP[mapKey]!;
-            }
-        }
-    }
-
-    const modelButton = findElement({
-        selector: 'button[role="combobox"]',
-        root: queryBar,
-        filter: el => !!el.querySelector("span"),
-    });
-
+    const modelButton = findElement({ selector: "button[aria-label='Model select']", root: queryBar });
     if (modelButton) {
-        const modelNameSpan = querySelector("span", modelButton);
+        const modelNameSpan = querySelector("span.font-semibold", modelButton);
         const rawName = modelNameSpan?.textContent?.trim() ?? "";
         if (MODEL_MAP[rawName]) {
             return MODEL_MAP[rawName];
         }
     }
 
+    const selectElement = querySelector("select[aria-hidden='true']", queryBar) as HTMLSelectElement | null;
+    if (selectElement?.value) {
+        const modelValue = selectElement.value;
+        if (modelValue.startsWith("grok-")) {
+            return modelValue;
+        }
+        const mapKey = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === modelValue);
+        if (mapKey) {
+            return MODEL_MAP[mapKey]!;
+        }
+    }
+
     return DEFAULT_MODEL;
 }
 
-async function fetchRateLimit(modelName: string, requestKind: string, force: boolean = false): Promise<RateLimitData | null> {
-    const cacheKey = `${modelName}-${requestKind}`;
-    if (!force && sessionStorage.getItem(cacheKey)) {
-        try {
-            return JSON.parse(sessionStorage.getItem(cacheKey)!);
-        } catch { /* ignore parsing error */ }
-    }
-
+async function fetchRateLimit(modelName: string, requestKind: string): Promise<RateLimitResponse | null> {
     try {
-        const data = await grokAPI.rateLimits.get({ requestKind, modelName });
-        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        const data = (await apiServices.rateLimits.post({ requestKind, modelName })) as RateLimitResponse;
         return data;
     } catch (error) {
         logger.error(`Failed to fetch rate limit for ${modelName} (${requestKind}):`, error);
-        sessionStorage.removeItem(cacheKey);
         return null;
     }
 }
 
-function processRateLimitData(data: RateLimitData | null, effortLevel: EffortLevel): ProcessedRateLimit {
-    if (!data) {
-        return { error: true };
-    }
-
-    const high = data.highEffortRateLimits;
-    const low = data.lowEffortRateLimits;
-
-    if (effortLevel === "both") {
-        return {
-            isBoth: true,
-            highRemaining: high?.remainingQueries ?? 0,
-            highTotal: high?.totalQueries ?? data.totalQueries ?? 0,
-            lowRemaining: low?.remainingQueries ?? 0,
-            lowTotal: low?.totalQueries ?? data.totalQueries ?? 0,
-            waitTimeSeconds: data.waitTimeSeconds ?? 0,
-        };
-    }
-
-    const limits = effortLevel === "high" ? high : low;
-    return {
-        isBoth: false,
-        highRemaining: limits?.remainingQueries ?? data.remainingQueries ?? 0,
-        highTotal: limits?.totalQueries ?? data.totalQueries ?? 0,
-        waitTimeSeconds: data.waitTimeSeconds ?? 0,
-    };
-}
-
 function useCurrentModel(): string {
     const [model, setModel] = useState<string>(getCurrentModelFromUI);
-
     useEffect(() => {
-        const queryBar = querySelector(commonSelectors.queryBar);
+        const queryBar = querySelector(QUERY_BAR_SELECTOR);
         if (!queryBar) {
             return;
         }
         const updateModel = () => setModel(getCurrentModelFromUI());
-
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: queryBar,
             options: { childList: true, subtree: true, characterData: true },
-            callback: updateModel,
+            callback: updateModel
         });
-
         updateModel();
         observe();
         return disconnect;
     }, []);
-
     return model;
 }
 
 function useCurrentRequestKind(currentModel: string): string {
-    const getInitialRequestKind = useCallback((): string => {
+    const getKind = useCallback((): string => {
         if (currentModel !== "grok-3") {
             return DEFAULT_KIND;
         }
-
-        const queryBar = querySelector(commonSelectors.queryBar);
+        const queryBar = querySelector(QUERY_BAR_SELECTOR);
         if (!queryBar) {
             return DEFAULT_KIND;
         }
-
-        const findButtonPressed = (label: string) =>
+        const isPressed = (label: string) =>
             findElement({ selector: `button[aria-label="${label}"]`, root: queryBar })?.getAttribute("aria-pressed") === "true";
-
-        if (findButtonPressed("Think")) {
+        if (isPressed("Think")) {
             return "REASONING";
         }
-
-        if (findButtonPressed("DeeperSearch")) {
-            return "DEEPERSEARCH";
-        }
-
-        if (findButtonPressed("DeepSearch")) {
+        if (isPressed("DeeperSearch") || isPressed("DeepSearch")) {
             return "DEEPSEARCH";
         }
-
         return DEFAULT_KIND;
     }, [currentModel]);
 
-    const [requestKind, setRequestKind] = useState<string>(getInitialRequestKind);
-
+    const [requestKind, setRequestKind] = useState<string>(getKind);
     useEffect(() => {
         if (currentModel !== "grok-3") {
             setRequestKind(DEFAULT_KIND);
             return;
         }
-
-        const queryBar = querySelector(commonSelectors.queryBar);
+        const queryBar = querySelector(QUERY_BAR_SELECTOR);
         if (!queryBar) {
             return;
         }
-
-        const updateKind = () => setRequestKind(getInitialRequestKind());
-
+        const updateKind = () => setRequestKind(getKind());
         const { observe, disconnect } = observerManager.createDebouncedObserver({
             target: queryBar,
             options: { attributes: true, attributeFilter: ["aria-pressed"], subtree: true },
-            callback: updateKind,
+            callback: updateKind
         });
-
         updateKind();
         observe();
         return disconnect;
-    }, [currentModel, getInitialRequestKind]);
-
+    }, [currentModel, getKind]);
     return requestKind;
 }
 
-function RateLimitComponent() {
+type ProcessedRateLimit =
+    | { error: true; }
+    | {
+        isBoth: boolean;
+        highRemaining: number;
+        lowRemaining?: number;
+        waitTimeSeconds: number;
+    };
+
+function RateLimitDisplay() {
     const currentModel = useCurrentModel();
     const currentRequestKind = useCurrentRequestKind(currentModel);
+
+    const modelRef = useRef(currentModel);
+    const kindRef = useRef(currentRequestKind);
+
     const [rateLimit, setRateLimit] = useState<ProcessedRateLimit | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [waitTimeCountdown, setWaitTimeCountdown] = useState<number | null>(null);
+    const [countdown, setCountdown] = useState<number | null>(null);
 
-    const updateRateLimit = useCallback(async (force: boolean = false) => {
+    const fetchNow = useCallback(async () => {
         setIsLoading(true);
-        const effortLevel = currentModel === "grok-4-auto" ? "both" : currentModel === "grok-3" ? "low" : "high";
-        const data = await fetchRateLimit(currentModel, currentRequestKind, force);
-        const processed = processRateLimitData(data, effortLevel);
-        setRateLimit(processed);
-        if (!("error" in processed) && processed.waitTimeSeconds > 0) {
-            setWaitTimeCountdown(processed.waitTimeSeconds);
+        const model = modelRef.current;
+        const kind = kindRef.current;
+        const data = await fetchRateLimit(model, kind);
+        if (!data) {
+            setRateLimit({ error: true });
+        } else {
+            let processed: ProcessedRateLimit;
+            if (model === "grok-4-auto") {
+                processed = {
+                    isBoth: true,
+                    highRemaining: data.highEffortRateLimits?.remainingQueries ?? 0,
+                    lowRemaining: data.lowEffortRateLimits?.remainingQueries ?? 0,
+                    waitTimeSeconds: data.waitTimeSeconds ?? 0
+                };
+            } else {
+                const limits = model === "grok-3" ? data.lowEffortRateLimits : data.highEffortRateLimits;
+                processed = {
+                    isBoth: false,
+                    highRemaining: limits?.remainingQueries ?? data.remainingQueries ?? 0,
+                    waitTimeSeconds: data.waitTimeSeconds ?? 0
+                };
+            }
+            setRateLimit(processed);
+            if (processed.waitTimeSeconds > 0) {
+                setCountdown(processed.waitTimeSeconds);
+            }
         }
         setIsLoading(false);
-    }, [currentModel, currentRequestKind]);
+    }, []);
+
+    useEffect(() => {
+        modelRef.current = currentModel;
+        kindRef.current = currentRequestKind;
+        fetchNow();
+    }, [currentModel, currentRequestKind, fetchNow]);
+
+    useEffect(() => {
+        fetchNow();
+        let interval: number | undefined;
+        if (settings.store.autoRefresh) {
+            interval = window.setInterval(() => fetchNow(), 60000);
+        }
+        const onVisibilityChange = () => document.visibilityState === "visible" && fetchNow();
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            if (interval) {
+                clearInterval(interval);
+            }
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
+    }, [fetchNow]);
+
+    useEffect(() => {
+        if (countdown === null || countdown <= 0) {
+            return;
+        }
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                const newTime = (prev ?? 1) - 1;
+                if (newTime <= 0) {
+                    clearInterval(timer);
+                    fetchNow();
+                    return null;
+                }
+                return newTime;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [countdown, fetchNow]);
+
+    useEffect(() => {
+        const root = querySelector(QUERY_BAR_SELECTOR);
+        if (!root) {
+            return;
+        }
+
+        const trigger = () => {
+            setIsLoading(true);
+            window.setTimeout(() => fetchNow(), 1500);
+        };
+
+        const onKeyDown = (ev: KeyboardEvent) => {
+            if (ev.isComposing) {
+                return;
+            }
+            if (ev.key !== "Enter" || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey) {
+                return;
+            }
+            const target = ev.target as HTMLElement | null;
+            if (!target) {
+                return;
+            }
+            const inEditor = !!target.closest(".tiptap.ProseMirror");
+            if (inEditor) {
+                trigger();
+            }
+        };
+
+        const onSubmitCapture = () => trigger();
+
+        root.addEventListener("keydown", onKeyDown, true);
+        root.addEventListener("submit", onSubmitCapture, true);
+
+        return () => {
+            root.removeEventListener("keydown", onKeyDown, true);
+            root.removeEventListener("submit", onSubmitCapture, true);
+        };
+    }, [fetchNow]);
 
     const formatCountdown = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -257,169 +290,119 @@ function RateLimitComponent() {
         return [h > 0 ? `${h}h` : "", m > 0 ? `${m}m` : "", `${s}s`].filter(Boolean).join(" ");
     };
 
-    useEffect(() => {
-        let timer: number;
-        if (waitTimeCountdown !== null && waitTimeCountdown > 0) {
-            timer = window.setInterval(() => {
-                setWaitTimeCountdown(prev => {
-                    const newTime = (prev ?? 1) - 1;
-                    if (newTime <= 0) {
-                        updateRateLimit(true);
-                        return null;
-                    }
-                    return newTime;
-                });
-            }, 1000);
-        }
-        return () => clearInterval(timer);
-    }, [waitTimeCountdown, updateRateLimit]);
+    if (isLoading && !rateLimit) {
+        return (
+            <Button
+                variant="outline"
+                size="md"
+                loading
+                icon="Loader2"
+                tooltip="Fetching rate limits…"
+                color="default"
+                rounded
+                className="rate-limit-display-button"
+            />
+        );
+    }
 
-    useEffect(() => {
-        updateRateLimit();
-        let interval: number;
-        if (settings.store.autoRefresh) {
-            interval = window.setInterval(() => updateRateLimit(), 60000);
-        }
-        const onVisibilityChange = () => document.visibilityState === "visible" && updateRateLimit();
-        document.addEventListener("visibilitychange", onVisibilityChange);
-        return () => {
-            clearInterval(interval);
-            document.removeEventListener("visibilitychange", onVisibilityChange);
-        };
-    }, [updateRateLimit]);
+    if (!rateLimit || "error" in rateLimit) {
+        return (
+            <Button
+                variant="outline"
+                size="md"
+                loading={false}
+                icon="AlertTriangle"
+                tooltip="Error fetching rate limits"
+                color="danger"
+                rounded
+                className="rate-limit-display-button"
+                onClick={() => fetchNow()}
+            />
+        );
+    }
 
-    useEffect(() => {
-        const setupSubmitListener = async () => {
-            try {
-                const inputElement = await waitForElementByConfig({ selector: commonSelectors.inputElement });
-                const handleKeyDown = (e: KeyboardEvent) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                        setIsLoading(true);
-                        setTimeout(() => updateRateLimit(true), 1500);
-                    }
-                };
-                inputElement.addEventListener("keydown", handleKeyDown);
-                return () => inputElement.removeEventListener("keydown", handleKeyDown);
-            } catch (error) {
-                logger.error("Could not find input element to attach submit listener.", error);
-            }
-        };
-        const cleanupPromise = setupSubmitListener();
-        return () => {
-            cleanupPromise.then(cleanup => cleanup?.());
-        };
-    }, [updateRateLimit]);
-
-    const { isBoth, highRemaining, lowRemaining, waitTimeSeconds } = !rateLimit || "error" in rateLimit
-        ? { isBoth: false, highRemaining: 0, lowRemaining: 0, waitTimeSeconds: 0 }
-        : rateLimit;
-
+    const { isBoth, highRemaining, lowRemaining, waitTimeSeconds } = rateLimit;
     const isLimited = (isBoth ? highRemaining === 0 && (lowRemaining ?? 0) === 0 : highRemaining === 0) && waitTimeSeconds > 0;
-    const highText = highRemaining.toString();
-    const lowText = (lowRemaining ?? 0).toString();
-    const content = isLimited ? formatCountdown(waitTimeCountdown ?? waitTimeSeconds) : isBoth ? `${highText} | ${lowText}` : highText;
-    const tooltip = isLimited ? `Reset in ${content}` : isBoth ? `High: ${highRemaining} | Low: ${lowRemaining ?? 0}` : `${highRemaining} queries left`;
+
+    const content = isLimited ? (
+        formatCountdown(countdown ?? waitTimeSeconds)
+    ) : isBoth ? (
+        <span className="flex items-center justify-center">
+            {highRemaining}
+            <Lucide name="Dot" size={16} className="rate-limit-separator mx-px" />
+            {lowRemaining ?? 0}
+        </span>
+    ) : (
+        highRemaining.toString()
+    );
+
+    const tooltip = isLoading
+        ? "Refreshing…"
+        : isLimited
+            ? `Reset in ${formatCountdown(countdown ?? waitTimeSeconds)}`
+            : isBoth
+                ? `High: ${highRemaining} | Low: ${lowRemaining ?? 0}`
+                : `${highRemaining} queries left`;
 
     return (
         <Button
-            id="grok-rate-limit"
-            className="rate-limit-display-button"
             variant="outline"
             size="md"
             loading={isLoading}
-            icon={isLimited ? "Clock" : "Gauge"}
-            onClick={() => updateRateLimit(true)}
+            icon={isLimited ? "Clock" : "Droplet"}
+            onClick={() => fetchNow()}
             tooltip={tooltip}
             color={isLimited ? "danger" : "default"}
-            rounded={true}
+            isActive={isLimited}
+            disableIconHover
+            rounded
+            className="rate-limit-display-button"
         >
-            {isLoading && !rateLimit ? <span>&nbsp;</span> : content}
+            {content}
         </Button>
     );
 }
 
-const rateLimitPatch: IPatch = (() => {
-    let root: Root | null = null;
-    let container: HTMLElement | null = null;
-    let currentQueryBar: HTMLElement | null = null;
-    let observerDisconnect: (() => void) | null = null;
+const projectButtonSelector = { selector: "button", svgPartialD: "M3.33965 17L11.9999 22L20.6602 17V7" };
+const attachButtonSelector = { selector: "button[aria-label='Attach']" };
 
-    const mount = (queryBar: HTMLElement) => {
-        if (currentQueryBar === queryBar || container) {
-            return;
+const patch: IPluginUIPatch = {
+    target: QUERY_BAR_SELECTOR,
+    component: RateLimitDisplay,
+    getTargetParent: queryBar => {
+        const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
+        if (projectButton) {
+            return projectButton.parentElement;
         }
-        const attachButton = findElement({
-            selector: "button",
-            classContains: ["group/attach-button"],
-            svgPartialD: "M10 9V15",
-            root: queryBar
-        });
-        if (!attachButton || !attachButton.parentElement) {
-            logger.warn("Could not find the attach button to mount the rate limit display.");
-            return;
+        const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
+        return attachButton?.parentElement ?? null;
+    },
+    referenceNode: parent => {
+        const projectButton = findElement({ ...projectButtonSelector, root: parent });
+        if (projectButton) {
+            return projectButton;
         }
-        container = document.createElement("div");
-        container.id = "rate-limit-display-container";
-        attachButton.insertAdjacentElement("afterend", container);
-        root = createRoot(container);
-        root.render(<RateLimitComponent />);
-        currentQueryBar = queryBar;
-    };
-
-    const unmount = () => {
-        if (root) {
-            root.unmount();
-            root = null;
-        }
-        if (container) {
-            container.remove();
-            container = null;
-        }
-        currentQueryBar = null;
-    };
-
-    return {
-        apply() {
-            const observerCallback = () => {
-                const queryBar = querySelector(commonSelectors.queryBar);
-                if (queryBar && queryBar !== currentQueryBar) {
-                    unmount();
-                    mount(queryBar);
-                } else if (!queryBar && currentQueryBar) {
-                    unmount();
-                }
-            };
-            const { observe, disconnect } = observerManager.createDebouncedObserver({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: observerCallback,
-                debounceDelay: 200,
-            });
-            observerDisconnect = disconnect;
-            observe();
-            observerCallback();
-        },
-        remove() {
-            observerDisconnect?.();
-            unmount();
-        },
-    };
-})();
+        return findElement({ ...attachButtonSelector, root: parent });
+    }
+};
 
 export default definePlugin({
     name: "Rate Limit Display",
     description: "Displays the remaining queries for the current model in the chat bar.",
     authors: [Devs.blankspeaker, Devs.CursedAtom, Devs.Prism],
     category: "chat",
-    tags: ["rate-limit", "queries"],
+    tags: ["rate-limit", "queries", "usage"],
     styles: `
-        .query-bar.group:hover .rate-limit-display-button svg {
-            color: hsl(var(--secondary));
-        }
-        .rate-limit-display-button:hover svg {
+        .rate-limit-display-button:not([class*="text-red-400"]) > svg {
             color: white !important;
+        }
+        .rate-limit-display-button > svg {
+            stroke-width: 2 !important;
+        }
+        .rate-limit-separator {
+            color: #3a3c3e !important;
         }
     `,
     settings,
-    patches: [rateLimitPatch],
+    patches: [patch]
 });

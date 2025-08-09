@@ -6,8 +6,7 @@
 
 import { Devs } from "@utils/constants";
 import { querySelector } from "@utils/dom";
-import { definePluginSettings } from "@utils/settings";
-import { definePlugin } from "@utils/types";
+import { definePlugin, definePluginSettings } from "@utils/types";
 
 const settings = definePluginSettings({
     enterBehavior: {
@@ -23,57 +22,47 @@ const settings = definePluginSettings({
     },
 });
 
-let trackedTextarea: HTMLTextAreaElement | null = null;
-let observer: MutationObserver | null = null;
+let tracked: HTMLTextAreaElement | null = null;
+let mo: MutationObserver | null = null;
+
 const selector = "div.query-bar textarea";
 
-const handleDocumentKeyDown = (event: KeyboardEvent): void => {
-    if (event.target !== trackedTextarea || event.key !== "Enter") {
+const onKey = (e: KeyboardEvent): void => {
+    if (e.target !== tracked || e.key !== "Enter") {
         return;
     }
-
     const behavior = settings.store.enterBehavior;
-
     if (behavior === "default") {
         return;
     }
+    const ta = e.target as HTMLTextAreaElement;
 
-    const currentTextarea = event.target as HTMLTextAreaElement;
-
-    const sendMessage = () => {
-        const form = currentTextarea.closest("form");
-        form?.requestSubmit();
-    };
-
-    const addNewLine = () => {
-        const { selectionStart, selectionEnd, value } = currentTextarea;
-        const newValue = `${value.substring(0, selectionStart)}\n${value.substring(selectionEnd)}`;
-
-        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")
-            ?.set?.call(currentTextarea, newValue);
-
-        currentTextarea.dispatchEvent(new Event("input", { bubbles: true }));
-
-        const newPosition = selectionStart + 1;
-        currentTextarea.selectionStart = newPosition;
-        currentTextarea.selectionEnd = newPosition;
+    const send = () => ta.closest("form")?.requestSubmit();
+    const newline = () => {
+        const { selectionStart, selectionEnd, value } = ta;
+        const next = `${value.substring(0, selectionStart)}\n${value.substring(selectionEnd)}`;
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set?.call(ta, next);
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        const pos = selectionStart + 1;
+        ta.selectionStart = pos;
+        ta.selectionEnd = pos;
     };
 
     if (behavior === "swap") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (event.shiftKey) {
-            sendMessage();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.shiftKey) {
+            send();
         } else {
-            addNewLine();
+            newline();
         }
     } else if (behavior === "ctrlEnter") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (event.ctrlKey) {
-            sendMessage();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.ctrlKey) {
+            send();
         } else {
-            addNewLine();
+            newline();
         }
     }
 };
@@ -88,20 +77,18 @@ export default definePlugin({
     settings,
 
     start() {
-        document.addEventListener("keydown", handleDocumentKeyDown, { capture: true });
-
-        const observerCallback = () => {
-            trackedTextarea = querySelector(selector) as HTMLTextAreaElement | null;
+        document.addEventListener("keydown", onKey, { capture: true });
+        const update = () => {
+            tracked = querySelector(selector) as HTMLTextAreaElement | null;
         };
-
-        observer = new MutationObserver(observerCallback);
-        observer.observe(document.body, { childList: true, subtree: true });
-        observerCallback();
+        mo = new MutationObserver(update);
+        mo.observe(document.body, { childList: true, subtree: true });
+        update();
     },
 
     stop() {
-        document.removeEventListener("keydown", handleDocumentKeyDown, { capture: true });
-        observer?.disconnect();
-        trackedTextarea = null;
+        document.removeEventListener("keydown", onKey, { capture: true });
+        mo?.disconnect();
+        tracked = null;
     },
 });

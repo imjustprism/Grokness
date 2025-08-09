@@ -8,9 +8,8 @@ import { Button } from "@components/Button";
 import styles from "@plugins/collapseLongPrompt/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/logger";
-import { definePluginSettings, useSetting } from "@utils/settings";
-import { definePlugin } from "@utils/types";
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { definePlugin, definePluginSettings, useSetting } from "@utils/types";
+import React from "react";
 
 const logger = new Logger("CollapseLongPrompt", "#f2d5cf");
 
@@ -39,29 +38,28 @@ const CollapsePrompt: React.FC<{ rootElement?: HTMLElement; }> = ({ rootElement 
     const [maxVisibleHeight] = useSetting<typeof settings.definition, "maxVisibleHeight">("collapse-long-prompt", "maxVisibleHeight");
 
     if (!rootElement) {
-        logger.warn("No root element provided for CollapsePrompt");
+        logger.warn("no root");
         return null;
     }
 
     const content = rootElement.querySelector(PROMPT_CONTENT_SELECTOR) as HTMLElement | null;
     if (!content) {
-        logger.warn("No content span found in prompt bubble");
         return null;
     }
 
-    const length = content.textContent?.length ?? 0;
-    if (length <= characterLimit) {
+    const len = content.textContent?.length ?? 0;
+    if (len <= characterLimit) {
         return null;
     }
 
-    const [collapsed, setCollapsed] = useState(true);
-    const originalPaddingRight = useRef<string | null>(null);
-    const originalDisplay = useRef<string | null>(null);
-    const originalWidth = useRef<string | null>(null);
+    const [collapsed, setCollapsed] = React.useState(true);
+    const originalPaddingRight = React.useRef<string | null>(null);
+    const originalDisplay = React.useRef<string | null>(null);
+    const originalWidth = React.useRef<string | null>(null);
 
-    const contentStyle = useMemo(() => window.getComputedStyle(content), [content]);
+    const contentStyle = React.useMemo(() => window.getComputedStyle(content), [content]);
 
-    useLayoutEffect(() => {
+    React.useLayoutEffect(() => {
         if (originalPaddingRight.current === null) {
             originalPaddingRight.current = rootElement.style.paddingRight;
             rootElement.style.paddingRight = `calc(${originalPaddingRight.current || "1rem"} + ${PROMPT_PADDING_RIGHT})`;
@@ -73,7 +71,6 @@ const CollapsePrompt: React.FC<{ rootElement?: HTMLElement; }> = ({ rootElement 
         if (originalWidth.current === null) {
             originalWidth.current = rootElement.style.width;
         }
-
         return () => {
             if (originalPaddingRight.current !== null) {
                 rootElement.style.paddingRight = originalPaddingRight.current;
@@ -88,7 +85,7 @@ const CollapsePrompt: React.FC<{ rootElement?: HTMLElement; }> = ({ rootElement 
         };
     }, [rootElement, content]);
 
-    useLayoutEffect(() => {
+    React.useLayoutEffect(() => {
         if (collapsed) {
             rootElement.style.maxHeight = maxVisibleHeight;
             rootElement.style.overflow = "hidden";
@@ -130,14 +127,14 @@ const CollapsePrompt: React.FC<{ rootElement?: HTMLElement; }> = ({ rootElement 
                 size="icon"
                 variant="ghost"
                 iconSize={20}
-                onClick={() => setCollapsed(prev => !prev)}
+                onClick={() => setCollapsed(p => !p)}
                 tooltip={collapsed ? "Expand prompt" : "Collapse prompt"}
             />
         </>
     );
 };
 
-const collapsePromptPatch = {
+const patch = {
     component: CollapsePrompt,
     target: USER_PROMPT_SELECTOR,
     forEach: true,
@@ -153,5 +150,5 @@ export default definePlugin({
     tags: ["prompt", "collapse", "user", "optimize"],
     styles,
     settings,
-    patches: [collapsePromptPatch],
+    patches: [patch],
 });

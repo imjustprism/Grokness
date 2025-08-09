@@ -4,8 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { grokAPI } from "@api/api";
-import { getBestSubscriptionTier, getFriendlyPlanName } from "@api/interfaces";
+import {
+    ApiClient,
+    createApiServices,
+    isActiveSubscription,
+    normalizeTier,
+    Tier
+} from "@api/index";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { querySelector } from "@utils/dom";
@@ -22,83 +27,112 @@ const TOGGLE_ICON_SELECTOR = '[data-sidebar="trigger"] svg';
 const DEFAULT_USER_NAME = "User";
 const DEFAULT_PLAN = "Free";
 
-let cachedUserPlanData: { name: string; plan: string; } | null = null;
+const api = ApiClient.fromWindow();
+const apiServices = createApiServices(api);
 
-async function fetchUserPlanData(): Promise<{ name: string; plan: string; }> {
-    if (cachedUserPlanData) {
-        return cachedUserPlanData;
+type MinimalUser = {
+    givenName?: string | null;
+    familyName?: string | null;
+    email?: string | null;
+    xSubscriptionType?: string | null;
+};
+
+type SubscriptionLike = {
+    tier?: unknown;
+    status?: unknown;
+    enterprise?: boolean | null;
+};
+
+const normalizeSubs = (raw: unknown): ReadonlyArray<SubscriptionLike> => {
+    if (Array.isArray(raw)) {
+        return raw as ReadonlyArray<SubscriptionLike>;
     }
+    if (raw && typeof raw === "object") {
+        const o = raw as Record<string, unknown>;
+        if (Array.isArray(o.subscriptions)) {
+            return o.subscriptions as ReadonlyArray<SubscriptionLike>;
+        }
+        return [raw as SubscriptionLike];
+    }
+    return [];
+};
 
+const computePlan = (user: MinimalUser, subs: ReadonlyArray<SubscriptionLike>): string => {
+    const isSuperGrokProUser = subs.some(s => normalizeTier(s.tier) === Tier.SuperGrokPro && isActiveSubscription(s.status));
+    const isSuperGrokUser = subs.some(s => normalizeTier(s.tier) === Tier.GrokPro && isActiveSubscription(s.status));
+    const isEnterpriseUser = subs.some(s => !!s.enterprise && isActiveSubscription(s.status));
+    const isXPremiumPlus = (user.xSubscriptionType ?? "").trim() === "PremiumPlus";
+
+    if (isSuperGrokProUser) {
+        return "SuperGrok Pro";
+    }
+    if (isSuperGrokUser || isXPremiumPlus) {
+        return "SuperGrok";
+    }
+    if (isEnterpriseUser) {
+        return "Enterprise";
+    }
+    return DEFAULT_PLAN;
+};
+
+let cached: { name: string; plan: string; } | null = null;
+
+async function getUserPlan(): Promise<{ name: string; plan: string; }> {
+    if (cached) {
+        return cached;
+    }
     try {
-        const user = await grokAPI.auth.getUser();
-        const subscriptions = await grokAPI.subscriptions.getSubscriptions();
-        const tier = getBestSubscriptionTier(subscriptions);
-
+        const [userRaw, subsRaw] = await Promise.all([apiServices.auth.getUser(), apiServices.subscriptions.get()]);
+        const user = userRaw as MinimalUser;
+        const subs = normalizeSubs(subsRaw);
         const name = (`${user.givenName ?? ""} ${user.familyName ?? ""}`.trim() || user.email?.split("@")[0] || DEFAULT_USER_NAME);
-        const plan = getFriendlyPlanName(tier);
-
-        cachedUserPlanData = { name, plan };
-        return cachedUserPlanData;
-    } catch (error) {
-        logger.error("Failed to fetch user plan data:", error);
+        const plan = computePlan(user, subs);
+        cached = { name, plan };
+        return cached;
+    } catch (e) {
+        logger.error("fetch failed:", e);
         return { name: DEFAULT_USER_NAME, plan: DEFAULT_PLAN };
     }
 }
 
-function useIsSidebarCollapsed(): boolean {
-    const [isCollapsed, setIsCollapsed] = useState(false);
-
+function useCollapsed(): boolean {
+    const [isCollapsed, set] = useState(false);
     useEffect(() => {
-        const toggleIcon = querySelector(TOGGLE_ICON_SELECTOR);
-        if (!toggleIcon) {
-            logger.warn("Sidebar toggle icon not found.");
+        const icon = querySelector(TOGGLE_ICON_SELECTOR);
+        if (!icon) {
             return;
         }
-
-        const updateCollapseState = () => {
-            setIsCollapsed(!toggleIcon.classList.contains("rotate-180"));
-        };
-
-        updateCollapseState();
-        const observer = new MutationObserver(updateCollapseState);
-        observer.observe(toggleIcon, { attributes: true, attributeFilter: ["class"] });
-
-        return () => observer.disconnect();
+        const update = () => set(!icon.classList.contains("rotate-180"));
+        update();
+        const mo = new MutationObserver(update);
+        mo.observe(icon, { attributes: true, attributeFilter: ["class"] });
+        return () => mo.disconnect();
     }, []);
-
     return isCollapsed;
 }
 
 function SidebarUserInfo() {
-    const [userPlanData, setUserPlanData] = useState<{ name: string; plan: string; } | null>(null);
-    const isCollapsed = useIsSidebarCollapsed();
-
+    const [data, setData] = useState<{ name: string; plan: string; } | null>(null);
+    const collapsed = useCollapsed();
     useEffect(() => {
-        fetchUserPlanData().then(setUserPlanData);
+        getUserPlan().then(setData);
     }, []);
-
-    if (!userPlanData || isCollapsed) {
+    if (!data || collapsed) {
         return null;
     }
-
     return (
         <div className="sidebar-user-info">
-            <div className="display-name">{userPlanData.name}</div>
-            <div className="plan text-secondary truncate">{userPlanData.plan}</div>
+            <div className="display-name">{data.name}</div>
+            <div className="plan text-secondary truncate">{data.plan}</div>
         </div>
     );
 }
 
-const betterSidebarPatch: IPluginUIPatch = {
+const patch: IPluginUIPatch = {
     component: SidebarUserInfo,
-    target: {
-        selector: SIDEBAR_FOOTER_SELECTOR,
-    },
-    getTargetParent: footerElement =>
-        footerElement.querySelector(`${AVATAR_BUTTON_SELECTOR}`)?.parentElement ?? footerElement,
-
-    referenceNode: parentElement =>
-        parentElement.querySelector(AVATAR_BUTTON_SELECTOR)?.nextSibling ?? null,
+    target: SIDEBAR_FOOTER_SELECTOR,
+    getTargetParent: footer => footer.querySelector(`${AVATAR_BUTTON_SELECTOR}`)?.parentElement ?? footer,
+    referenceNode: parent => parent.querySelector(AVATAR_BUTTON_SELECTOR)?.nextSibling ?? null
 };
 
 export default definePlugin({
@@ -108,5 +142,5 @@ export default definePlugin({
     category: "appearance",
     tags: ["sidebar", "user-info"],
     styles,
-    patches: [betterSidebarPatch],
+    patches: [patch]
 });

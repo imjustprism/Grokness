@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { getPluginSetting, setPluginSetting } from "@utils/settings";
-import { type IPlugin } from "@utils/types";
+import { getPluginSetting, type IPlugin, setPluginSetting } from "@utils/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const areSettingsEqual = (settingsA: Record<string, unknown>, settingsB: Record<string, unknown>): boolean => {

@@ -1,0 +1,11 @@
+div.upsell-small[role="button"]:has(svg[viewBox="0 0 92 18"]) {
+    display: none !important;
+}
+
+div[role="button"]:has(svg[width="124"]):has(button.bg-button-filled) {
+    display: none !important;
+}
+
+div[role="menuitem"][data-orientation="vertical"]:has(svg[width="35"]) {
+    display: none !important;
+}

@@ -4,81 +4,114 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { grokAPI } from "@api/api";
-import type { Asset } from "@api/interfaces";
+import { ApiClient, createApiServices, type ListAssetsResponse } from "@api/index";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
-import { type ElementFinderConfig, findElement, MutationObserverManager } from "@utils/dom";
-import { Logger } from "@utils/logger";
-import { definePlugin, type IPatch } from "@utils/types";
-import React, { useEffect, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { definePlugin, type IPluginUIPatch } from "@utils/types";
+import React, { useEffect, useRef, useState } from "react";
 
-const logger = new Logger("DeleteAllAssets", "#ef4444");
+const api = ApiClient.fromWindow();
+const apiServices = createApiServices(api);
 
-const TOOLBAR_FINDER_CONFIG: ElementFinderConfig = {
-    selector: "div.flex.gap-2",
-    filter: (el: HTMLElement) => {
-        const buttonTexts = Array.from(el.querySelectorAll("button")).map(btn => btn.textContent || "");
-        const hasFilterButton = buttonTexts.some(text => text.includes("Filter"));
-        const hasSortButton = buttonTexts.some(text => text.includes("Sort"));
-        return hasFilterButton && hasSortButton;
-    },
+type AssetItem = ListAssetsResponse["assets"][number];
+
+const pickAssetId = (a: AssetItem): string | null => {
+    const x = a as unknown as { assetId?: string; id?: string; rootAssetId?: string; };
+    return x.assetId ?? x.id ?? x.rootAssetId ?? null;
 };
 
-async function fetchAllAssets(): Promise<Asset[]> {
-    try {
-        let allAssets: Asset[] = [];
-        let pageToken: string | undefined = undefined;
-        do {
-            const response = await grokAPI.assetRepository.listAssets({
-                pageSize: 100,
-                source: "SOURCE_ANY",
-                isLatest: true,
-                pageToken,
-            });
-            allAssets = allAssets.concat(response.assets);
-            pageToken = response.nextPageToken;
-        } while (pageToken);
-        return allAssets;
-    } catch (error) {
-        logger.error("Failed to fetch all assets:", error);
-        throw error;
+async function fetchAllAssets(signal?: AbortSignal): Promise<AssetItem[]> {
+    const out: AssetItem[] = [];
+    let token: string | undefined = undefined;
+    do {
+        const res = await apiServices.assets.list(
+            { pageSize: 100, source: "SOURCE_ANY", isLatest: true, pageToken: token },
+            signal
+        );
+        out.push(...res.assets);
+        token = res.nextPageToken ?? undefined;
+    } while (token && !(signal?.aborted ?? false));
+    return out;
+}
+
+async function deleteInBatches(items: ReadonlyArray<AssetItem>, signal?: AbortSignal): Promise<void> {
+    const ids = items.map(pickAssetId).filter((v): v is string => typeof v === "string" && v.length > 0);
+    const size = 6;
+    for (let i = 0; i < ids.length; i += size) {
+        const slice = ids.slice(i, i + size);
+        await Promise.all(slice.map(id => apiServices.assets.delete({ assetId: id }, signal)));
     }
 }
 
+const suppressAbortErrorsDuringReload = (delayMs: number = 50) => {
+    const isBenign = (msg: string | undefined): boolean => {
+        if (!msg) {
+            return false;
+        }
+        const m = msg.toLowerCase();
+        return m.includes("networkerror") || m.includes("the user aborted a request") || m.includes("load failed");
+    };
+
+    const onRejection = (e: PromiseRejectionEvent) => {
+        const msg = (e.reason && (e.reason.message || String(e.reason))) as string | undefined;
+        if (isBenign(msg)) {
+            e.preventDefault();
+        }
+    };
+
+    const onError = (e: ErrorEvent) => {
+        if (isBenign(e.message)) {
+            e.preventDefault();
+        }
+    };
+
+    window.addEventListener("unhandledrejection", onRejection, true);
+    window.addEventListener("error", onError, true);
+
+    window.setTimeout(() => {
+        window.removeEventListener("unhandledrejection", onRejection, true);
+        window.removeEventListener("error", onError, true);
+        window.location.reload();
+    }, delayMs);
+};
+
 const DeleteAllAssetsButton: React.FC = () => {
-    const [isConfirming, setIsConfirming] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    const [confirming, setConfirming] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const abortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
-        if (isConfirming) {
-            const timer = setTimeout(() => setIsConfirming(false), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [isConfirming]);
-
-    const handleClick = async () => {
-        if (isLoading) {
+        if (!confirming) {
             return;
         }
+        const t = setTimeout(() => setConfirming(false), 5000);
+        return () => clearTimeout(t);
+    }, [confirming]);
 
-        if (isConfirming) {
-            setIsLoading(true);
-            try {
-                const assets = await fetchAllAssets();
-                if (assets.length > 0) {
-                    await Promise.all(
-                        assets.map(asset => grokAPI.assetRepository.deleteAsset({ assetId: asset.assetId }))
-                    );
-                }
-            } catch (error) {
-                logger.error("Failed to delete assets:", error);
-            } finally {
-                window.location.reload();
+    useEffect(() => () => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+    }, []);
+
+    const onClick = async () => {
+        if (loading) {
+            return;
+        }
+        if (!confirming) {
+            setConfirming(true);
+            return;
+        }
+        setLoading(true);
+        abortRef.current?.abort();
+        const ac = new AbortController();
+        abortRef.current = ac;
+        try {
+            const assets = await fetchAllAssets(ac.signal);
+            if (assets.length > 0) {
+                await deleteInBatches(assets, ac.signal);
             }
-        } else {
-            setIsConfirming(true);
+        } finally {
+            suppressAbortErrorsDuringReload(80);
         }
     };
 
@@ -87,78 +120,41 @@ const DeleteAllAssetsButton: React.FC = () => {
             id="grok-delete-all"
             variant="outline"
             size="sm"
-            loading={isLoading}
-            icon={isLoading ? "Loader2" : "Trash"}
+            loading={loading}
+            icon={loading ? "Loader2" : "Trash"}
             iconSize={15}
-            onClick={handleClick}
+            onClick={onClick}
             aria-label="Delete All Assets"
             className="h-8 px-3 text-xs flex-shrink-0"
-            color={isConfirming ? "danger" : "default"}
-            rounded={true}
-            disableIconHover={true}
+            color={confirming ? "danger" : "default"}
+            rounded
+            disableIconHover
+            disabled={loading}
+            tooltip={loading ? "Deleting…" : confirming ? "Click again to confirm" : "Delete all uploaded assets"}
         >
-            <span className="hidden @[160px]:inline-block">{isConfirming ? "Sure?" : "Delete All"}</span>
+            <span className="hidden @[160px]:inline-block">{confirming ? "Sure?" : "Delete All"}</span>
         </Button>
     );
 };
 
-const deleteAllPatch: IPatch = (() => {
-    const roots = new Map<HTMLElement, Root>();
-    const observerManager = new MutationObserverManager();
-    let observerDisconnect: (() => void) | null = null;
-
-    const attachToToolbar = (toolbar: HTMLElement) => {
-        if (toolbar.querySelector("#grok-delete-all-container")) {
-            return;
+const patch: IPluginUIPatch = {
+    component: DeleteAllAssetsButton,
+    target: {
+        selector: "div.flex.gap-2",
+        filter: (el: HTMLElement) => {
+            const texts = Array.from(el.querySelectorAll("button")).map(b => b.textContent || "");
+            const hasFilter = texts.some(t => t.includes("Filter"));
+            const hasSort = texts.some(t => t.includes("Sort"));
+            return hasFilter && hasSort;
         }
-        const container = document.createElement("div");
-        container.id = "grok-delete-all-container";
-        const allButtons = Array.from(toolbar.querySelectorAll("button"));
-        const sortButton = allButtons.find(btn => btn.textContent?.includes("Sort"));
-        const referenceNode = sortButton ? sortButton.nextSibling : null;
-        toolbar.insertBefore(container, referenceNode);
-        const root = createRoot(container);
-        root.render(<DeleteAllAssetsButton />);
-        roots.set(toolbar, root);
-    };
-
-    const detachFromToolbar = (toolbar: HTMLElement) => {
-        const root = roots.get(toolbar);
-        if (root) {
-            root.unmount();
-            roots.delete(toolbar);
-            toolbar.querySelector("#grok-delete-all-container")?.remove();
-        }
-    };
-
-    return {
-        apply() {
-            const { observe, disconnect } = observerManager.createObserver({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: () => {
-                    const toolbar = findElement(TOOLBAR_FINDER_CONFIG);
-                    if (toolbar && !roots.has(toolbar)) {
-                        attachToToolbar(toolbar);
-                    } else if (!toolbar && roots.size > 0) {
-                        roots.forEach((_, el) => detachFromToolbar(el));
-                    }
-                },
-            });
-            observerDisconnect = disconnect;
-            observe();
-            const initialToolbar = findElement(TOOLBAR_FINDER_CONFIG);
-            if (initialToolbar) {
-                attachToToolbar(initialToolbar);
-            }
-        },
-        remove() {
-            observerDisconnect?.();
-            roots.forEach((_, toolbar) => detachFromToolbar(toolbar));
-            roots.clear();
-        },
-    };
-})();
+    },
+    getTargetParent: el => el,
+    referenceNode: parent => {
+        const buttons = Array.from(parent.querySelectorAll("button"));
+        const sortBtn = buttons.find(b => b.textContent?.includes("Sort")) ?? null;
+        return sortBtn;
+    }
+};
 
 export default definePlugin({
     name: "Delete All Assets",
@@ -166,5 +162,5 @@ export default definePlugin({
     authors: [Devs.Prism],
     category: "utility",
     tags: ["assets", "delete", "files"],
-    patches: [deleteAllPatch],
+    patches: [patch]
 });

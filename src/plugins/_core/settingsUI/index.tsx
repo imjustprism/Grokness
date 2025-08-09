@@ -9,161 +9,87 @@ import { SettingsTab } from "@plugins/_core/settingsUI/components/SettingsTab";
 import { useSettingsLogic } from "@plugins/_core/settingsUI/hooks/useSettingsLogic";
 import styles from "@plugins/_core/settingsUI/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { MutationObserverManager, querySelector, querySelectorAll } from "@utils/dom";
-import { Logger } from "@utils/logger";
+import { querySelector } from "@utils/dom";
 import { definePlugin, type IPatch } from "@utils/types";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { createRoot, type Root } from "react-dom/client";
 
-const settingsLogger = new Logger("Settings", "#10b981");
+const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({ rootElement }) => {
+    const [active, setActive] = useState(false);
+    const logic = useSettingsLogic();
 
-const SettingsUIComponent: React.FC<{ dialogElement: HTMLElement; }> = ({ dialogElement }) => {
-    const settingsLogic = useSettingsLogic();
-    const [isGroknessActive, setIsGroknessActive] = useState(false);
+    if (!rootElement) {
+        return null;
+    }
 
-    const contentAreaElement = querySelector('div[class*="overflow-scroll"]', dialogElement);
-    const sidebarAreaElement = querySelector('div[class*="pl-3 pb-3"]', dialogElement);
+    const contentArea = querySelector('div[class*="overflow-scroll"]', rootElement);
+    const sidebarArea = querySelector('div[class*="pl-3 pb-3"]', rootElement);
 
     useEffect(() => {
-        if (!sidebarAreaElement) {
+        if (!sidebarArea) {
             return;
         }
-
-        const handleTabClick = (event: MouseEvent) => {
-            const targetTabButton = (event.target as HTMLElement).closest("button");
-            if (!targetTabButton || !sidebarAreaElement.contains(targetTabButton)) {
+        const onClick = (e: MouseEvent) => {
+            const btn = (e.target as HTMLElement).closest("button");
+            if (!btn || !sidebarArea.contains(btn)) {
                 return;
             }
-
-            const isGrokness = targetTabButton.hasAttribute("data-grokness-tab");
-            setIsGroknessActive(isGrokness);
-
-            sidebarAreaElement.querySelectorAll("button").forEach(sidebarButton => {
-                const active = sidebarButton === targetTabButton;
-                sidebarButton.setAttribute("aria-selected", String(active));
-
-                if (sidebarButton.hasAttribute("data-grokness-tab")) {
+            const isGrokness = btn.hasAttribute("data-grokness-tab");
+            setActive(isGrokness);
+            sidebarArea.querySelectorAll("button").forEach(b => {
+                const activeBtn = b === btn;
+                b.setAttribute("aria-selected", String(activeBtn));
+                if (b.hasAttribute("data-grokness-tab")) {
                     return;
                 }
-
-                if (active) {
-                    sidebarButton.classList.add("text-primary", "bg-button-ghost-hover");
-                    sidebarButton.classList.remove("text-fg-primary");
+                if (activeBtn) {
+                    b.classList.add("text-primary", "bg-button-ghost-hover");
+                    b.classList.remove("text-fg-primary");
                 } else {
-                    sidebarButton.classList.remove("text-primary", "bg-button-ghost-hover", "[&>svg]:text-primary");
-                    sidebarButton.classList.add("text-fg-primary");
+                    b.classList.remove("text-primary", "bg-button-ghost-hover", "[&>svg]:text-primary");
+                    b.classList.add("text-fg-primary");
                 }
-
-                const svg = sidebarButton.querySelector("svg");
+                const svg = b.querySelector("svg");
                 if (svg) {
-                    svg.classList.toggle("text-primary", active);
-                    svg.classList.toggle("text-secondary", !active);
+                    svg.classList.toggle("text-primary", activeBtn);
+                    svg.classList.toggle("text-secondary", !activeBtn);
                 }
             });
         };
-
-        sidebarAreaElement.addEventListener("click", handleTabClick as EventListener);
-        return () => sidebarAreaElement.removeEventListener("click", handleTabClick as EventListener);
-    }, [sidebarAreaElement]);
+        sidebarArea.addEventListener("click", onClick as EventListener);
+        return () => sidebarArea.removeEventListener("click", onClick as EventListener);
+    }, [sidebarArea]);
 
     useEffect(() => {
-        if (!contentAreaElement) {
+        if (!contentArea) {
             return;
         }
-
-        Array.from(contentAreaElement.children).forEach(childNode => {
-            const childElement = childNode as HTMLElement;
-            if (childElement.hasAttribute("data-grokness-panel")) {
-                childElement.style.display = isGroknessActive ? "flex" : "none";
+        Array.from(contentArea.children).forEach(n => {
+            const el = n as HTMLElement;
+            if (el.hasAttribute("data-grokness-panel")) {
+                el.style.display = active ? "flex" : "none";
             } else {
-                childElement.style.display = isGroknessActive ? "none" : "flex";
+                el.style.display = active ? "none" : "flex";
             }
         });
-    }, [isGroknessActive, contentAreaElement]);
+    }, [active, contentArea]);
 
-    if (!contentAreaElement || !sidebarAreaElement) {
+    if (!contentArea || !sidebarArea) {
         return null;
     }
 
     return (
         <>
-            {createPortal(<SettingsTab isActive={isGroknessActive} onClick={() => setIsGroknessActive(true)} />, sidebarAreaElement)}
-            {createPortal(<SettingsPanel isActive={isGroknessActive} {...settingsLogic} />, contentAreaElement)}
+            {createPortal(<SettingsTab isActive={active} onClick={() => setActive(true)} />, sidebarArea)}
+            {createPortal(<SettingsPanel isActive={active} {...logic} />, contentArea)}
         </>
     );
 };
 
-const settingsPatch: IPatch = (() => {
-    const rootsMap = new Map<HTMLElement, Root>();
-    const observerManager = new MutationObserverManager();
-    let observerDisconnect: (() => void) | null = null;
-    let styleElement: HTMLStyleElement | null = null;
-
-    const attachToDialog = (dialog: HTMLElement) => {
-        if (dialog.querySelector("#grokness-root")) {
-            return;
-        }
-
-        const rootContainer = document.createElement("div");
-        rootContainer.id = "grokness-root";
-        dialog.appendChild(rootContainer);
-
-        try {
-            const root = createRoot(rootContainer);
-            root.render(<SettingsUIComponent dialogElement={dialog} />);
-            rootsMap.set(dialog, root);
-        } catch (err) {
-            settingsLogger.warn("mount failed:", err);
-        }
-    };
-
-    const detachFromDialog = (dialog: HTMLElement) => {
-        const root = rootsMap.get(dialog);
-        if (root) {
-            root.unmount();
-            rootsMap.delete(dialog);
-            dialog.querySelector("#grokness-root")?.remove();
-        }
-    };
-
-    return {
-        apply() {
-            styleElement = document.createElement("style");
-            styleElement.id = "settings-ui-styles";
-            styleElement.textContent = styles;
-            document.head.appendChild(styleElement);
-
-            const { observe, disconnect } = observerManager.createObserver({
-                target: document.body,
-                options: { childList: true, subtree: true },
-                callback: records => {
-                    for (const record of records) {
-                        record.addedNodes.forEach(node => {
-                            if (node instanceof HTMLElement && node.matches('div[role="dialog"][data-state="open"]')) {
-                                attachToDialog(node);
-                            }
-                        });
-                        record.removedNodes.forEach(node => {
-                            if (node instanceof HTMLElement && node.matches('div[role="dialog"]')) {
-                                detachFromDialog(node);
-                            }
-                        });
-                    }
-                },
-            });
-
-            observerDisconnect = disconnect;
-            observe();
-            querySelectorAll('div[role="dialog"][data-state="open"]').forEach(attachToDialog);
-        },
-        remove() {
-            styleElement?.remove();
-            observerDisconnect?.();
-            rootsMap.forEach((root, dialog) => detachFromDialog(dialog));
-        }
-    };
-})();
+const settingsPatch: IPatch = {
+    apply() { },
+    remove() { },
+};
 
 export default definePlugin({
     name: "Settings UI",
@@ -173,5 +99,15 @@ export default definePlugin({
     hidden: true,
     category: "utility",
     tags: ["settings", "ui", "core"],
-    patches: [settingsPatch],
+    styles,
+    patches: [
+        {
+            component: SettingsUIComponent,
+            target: 'div[role="dialog"][data-state="open"]',
+            forEach: true,
+            getTargetParent: el => el,
+            referenceNode: () => null,
+        },
+        settingsPatch,
+    ],
 });
