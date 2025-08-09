@@ -5,7 +5,6 @@
  */
 
 import { Button } from "@components/Button";
-import { createFocusTrap } from "@utils/dom";
 import clsx from "clsx";
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -76,6 +75,63 @@ interface ModalProps {
      * @default false
      */
     usePortal?: boolean;
+}
+
+function createFocusTrap(container: HTMLElement): () => void {
+    const FOCUSABLE =
+        'a[href], area[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [contenteditable], [tabindex]:not([tabindex="-1"])';
+
+    const getFocusable = (): HTMLElement[] =>
+        Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE))
+            .filter(el => !el.hasAttribute("inert") && el.offsetParent !== null);
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key !== "Tab") {
+            return;
+        }
+        const focusables = getFocusable();
+        if (focusables.length === 0) {
+            e.preventDefault();
+            container.focus();
+            return;
+        }
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1]!;
+        const active = document.activeElement as HTMLElement | null;
+
+        if (e.shiftKey) {
+            if (!active || active === first || !container.contains(active)) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (!active || active === last || !container.contains(active)) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    };
+
+    const onFocusIn = (e: FocusEvent) => {
+        if (!container.contains(e.target as Node)) {
+            const focusables = getFocusable();
+            (focusables[0] ?? container).focus();
+        }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("focusin", onFocusIn, true);
+
+    const initialTargets = getFocusable();
+    (initialTargets[0] ?? container).focus();
+
+    return () => {
+        document.removeEventListener("keydown", onKeyDown, true);
+        document.removeEventListener("focusin", onFocusIn, true);
+        previouslyFocused?.focus?.();
+    };
 }
 
 export const Modal: React.FC<ModalProps> = ({
