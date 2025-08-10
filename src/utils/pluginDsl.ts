@@ -4,21 +4,21 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { type ElementFinderConfig, querySelector } from "@utils/dom";
+import { type AnySelector, selectOne } from "@utils/dom";
 import { definePlugin, type IPluginDefinition, type IPluginUIPatch } from "@utils/types";
 import type React from "react";
 
 type ParentSpec =
-    | string
+    | AnySelector
     | ((foundElement: HTMLElement) => HTMLElement | null)
     | undefined;
 
 type InsertSpec =
     | { append: true; }
-    | { after: string | ((parent: HTMLElement, found: HTMLElement) => Node | null); };
+    | { after: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null); };
 
 export type SimpleUIPatch = {
-    target: string | ElementFinderConfig;
+    target: AnySelector;
     component: React.ComponentType<{ rootElement?: HTMLElement; }> | (() => React.ReactElement | null);
     each?: boolean;
     parent?: ParentSpec;
@@ -31,8 +31,8 @@ function resolveParent(parent: ParentSpec, found: HTMLElement): HTMLElement | nu
     if (!parent) {
         return found.parentElement;
     }
-    if (typeof parent === "string") {
-        return querySelector(parent, found) ?? found;
+    if (typeof parent === "string" || typeof parent === "object") {
+        return selectOne(parent as AnySelector, found) ?? found;
     }
     return parent(found);
 }
@@ -50,8 +50,8 @@ function resolveReference(
     }
     if ("after" in insert) {
         const ref = insert.after;
-        if (typeof ref === "string") {
-            const el = querySelector(ref, parent);
+        if (typeof ref === "string" || typeof ref === "object") {
+            const el = selectOne(ref as AnySelector, parent);
             return el ?? null;
         }
         return ref(parent, found);

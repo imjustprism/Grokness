@@ -8,7 +8,8 @@ import { ApiClient, createApiServices, type RateLimitData } from "@api/index";
 import { Button } from "@components/Button";
 import { Lucide } from "@components/Lucide";
 import { Devs } from "@utils/constants";
-import { findElement, MutationObserverManager, querySelector } from "@utils/dom";
+import { findElement, MutationObserverManager, selectOne } from "@utils/dom";
+import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
 import { ui } from "@utils/pluginDsl";
 import { definePlugin, definePluginSettings } from "@utils/types";
@@ -57,7 +58,7 @@ const MODEL_MAP: Record<string, string> = {
 };
 const DEFAULT_MODEL = "grok-3";
 const DEFAULT_KIND = "DEFAULT";
-const QUERY_BAR_SELECTOR = ".query-bar";
+const QUERY_BAR_SELECTOR = LOCATORS.QUERY_BAR.root;
 const observerManager = new MutationObserverManager();
 
 const api = ApiClient.fromWindow();
@@ -72,21 +73,21 @@ type RateLimitPayload = {
 type RateLimitResponse = RateLimitData & RateLimitPayload;
 
 function getCurrentModelFromUI(): string {
-    const queryBar = querySelector(QUERY_BAR_SELECTOR);
+    const queryBar = selectOne(QUERY_BAR_SELECTOR);
     if (!queryBar) {
         return DEFAULT_MODEL;
     }
 
-    const modelButton = findElement({ selector: "button[aria-label='Model select']", root: queryBar });
+    const modelButton = selectOne(LOCATORS.QUERY_BAR.modelButton, queryBar);
     if (modelButton) {
-        const modelNameSpan = querySelector("span.font-semibold", modelButton);
+        const modelNameSpan = selectOne(LOCATORS.QUERY_BAR.modelNameSpan, modelButton);
         const rawName = modelNameSpan?.textContent?.trim() ?? "";
         if (MODEL_MAP[rawName]) {
             return MODEL_MAP[rawName];
         }
     }
 
-    const selectElement = querySelector("select[aria-hidden='true']", queryBar) as HTMLSelectElement | null;
+    const selectElement = selectOne(LOCATORS.QUERY_BAR.hiddenModelSelect, queryBar) as HTMLSelectElement | null;
     if (selectElement?.value) {
         const modelValue = selectElement.value;
         if (modelValue.startsWith("grok-")) {
@@ -114,7 +115,7 @@ async function fetchRateLimit(modelName: string, requestKind: string): Promise<R
 function useCurrentModel(): string {
     const [model, setModel] = useState<string>(getCurrentModelFromUI);
     useEffect(() => {
-        const queryBar = querySelector(QUERY_BAR_SELECTOR);
+        const queryBar = selectOne(QUERY_BAR_SELECTOR);
         if (!queryBar) {
             return;
         }
@@ -136,16 +137,15 @@ function useCurrentRequestKind(currentModel: string): string {
         if (currentModel !== "grok-3") {
             return DEFAULT_KIND;
         }
-        const queryBar = querySelector(QUERY_BAR_SELECTOR);
+        const queryBar = selectOne(QUERY_BAR_SELECTOR);
         if (!queryBar) {
             return DEFAULT_KIND;
         }
-        const isPressed = (label: string) =>
-            findElement({ selector: `button[aria-label="${label}"]`, root: queryBar })?.getAttribute("aria-pressed") === "true";
-        if (isPressed("Think")) {
+        const isPressed = (sel: string | { selector: string; }) => findElement(typeof sel === "string" ? { selector: sel, root: queryBar } : { ...sel, root: queryBar })?.getAttribute("aria-pressed") === "true";
+        if (isPressed(LOCATORS.QUERY_BAR.thinkButton)) {
             return "REASONING";
         }
-        if (isPressed("DeeperSearch") || isPressed("DeepSearch")) {
+        if (isPressed("button[aria-label=\"DeeperSearch\"]") || isPressed("button[aria-label=\"DeepSearch\"]")) {
             return "DEEPSEARCH";
         }
         return DEFAULT_KIND;
@@ -157,7 +157,7 @@ function useCurrentRequestKind(currentModel: string): string {
             setRequestKind(DEFAULT_KIND);
             return;
         }
-        const queryBar = querySelector(QUERY_BAR_SELECTOR);
+        const queryBar = selectOne(QUERY_BAR_SELECTOR);
         if (!queryBar) {
             return;
         }
@@ -284,7 +284,7 @@ function RateLimitDisplay() {
     }, [countdown, fetchNow]);
 
     useEffect(() => {
-        const root = querySelector(QUERY_BAR_SELECTOR);
+        const root = selectOne(QUERY_BAR_SELECTOR);
         if (!root) {
             return;
         }
@@ -401,8 +401,8 @@ function RateLimitDisplay() {
     );
 }
 
-const projectButtonSelector = { selector: "button", svgPartialD: "M3.33965 17L11.9999 22L20.6602 17V7" };
-const attachButtonSelector = { selector: "button[aria-label='Attach']" };
+const projectButtonSelector = LOCATORS.QUERY_BAR.projectButton as { selector: string; svgPartialD: string; };
+const attachButtonSelector = LOCATORS.QUERY_BAR.attachButton as { selector: string; };
 
 const patch = ui({
     target: QUERY_BAR_SELECTOR,

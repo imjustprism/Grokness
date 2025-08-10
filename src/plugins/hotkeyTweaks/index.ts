@@ -5,7 +5,8 @@
  */
 
 import { Devs } from "@utils/constants";
-import { querySelector } from "@utils/dom";
+import { selectOne } from "@utils/dom";
+import { LOCATORS } from "@utils/locators";
 import { definePlugin, definePluginSettings } from "@utils/types";
 
 const settings = definePluginSettings({
@@ -25,7 +26,7 @@ const settings = definePluginSettings({
 let tracked: HTMLTextAreaElement | null = null;
 let mo: MutationObserver | null = null;
 
-const selector = "div.query-bar textarea";
+const { selector } = LOCATORS.QUERY_BAR.textarea;
 
 const onKey = (e: KeyboardEvent): void => {
     if (e.target !== tracked || e.key !== "Enter") {
@@ -79,7 +80,7 @@ export default definePlugin({
     start() {
         document.addEventListener("keydown", onKey, { capture: true });
         const update = () => {
-            tracked = querySelector(selector) as HTMLTextAreaElement | null;
+            tracked = selectOne(selector) as HTMLTextAreaElement | null;
         };
         mo = new MutationObserver(update);
         mo.observe(document.body, { childList: true, subtree: true });

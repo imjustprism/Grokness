@@ -4,17 +4,23 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+export type NodeRoot = ParentNode | Document | DocumentFragment | Element | null;
+
 export type ElementFinderConfig = {
     selector: string;
-    root?: ParentNode | Document | DocumentFragment | Element | null;
+    root?: NodeRoot;
     filter?: (el: HTMLElement) => boolean;
     classContains?: string[];
     svgPartialD?: string;
+    ariaLabel?: string | RegExp;
+    role?: string;
+    textIncludes?: string;
+    textMatches?: RegExp;
 };
 
 export function querySelector<T extends Element = HTMLElement>(
     selector: string,
-    root?: ParentNode | Document | DocumentFragment | Element | null
+    root?: NodeRoot
 ): T | null {
     const r = (root ?? document) as ParentNode;
     return (r.querySelector(selector) as T | null) ?? null;
@@ -22,7 +28,7 @@ export function querySelector<T extends Element = HTMLElement>(
 
 export function querySelectorAll<T extends Element = HTMLElement>(
     selector: string,
-    root?: ParentNode | Document | DocumentFragment | Element | null
+    root?: NodeRoot
 ): T[] {
     const r = (root ?? document) as ParentNode;
     return Array.from(r.querySelectorAll(selector)) as T[];
@@ -44,22 +50,67 @@ export function elementHasSvgPathWithD(el: Element, includesD?: string): boolean
     return !!(path && path.getAttribute("d")?.includes(includesD));
 }
 
-export function findElement(cfg: ElementFinderConfig): HTMLElement | null {
+function elementAriaMatches(el: Element, aria?: string | RegExp): boolean {
+    if (aria == null) {
+        return true;
+    }
+    const label = el.getAttribute("aria-label") ?? "";
+    return typeof aria === "string" ? label === aria : aria.test(label);
+}
+
+function elementRoleMatches(el: Element, role?: string): boolean {
+    if (!role) {
+        return true;
+    }
+    const r = el.getAttribute("role");
+    return r === role;
+}
+
+function elementTextMatches(el: Element, textIncludes?: string, textMatches?: RegExp): boolean {
+    if (!textIncludes && !textMatches) {
+        return true;
+    }
+    const text = (el.textContent ?? "").trim();
+    if (textIncludes && !text.includes(textIncludes)) {
+        return false;
+    }
+    if (textMatches && !textMatches.test(text)) {
+        return false;
+    }
+    return true;
+}
+
+export function matchElementByConfig(el: HTMLElement, cfg: ElementFinderConfig): boolean {
+    if (!elementMatchesAllClasses(el, cfg.classContains)) {
+        return false;
+    }
+    if (!elementHasSvgPathWithD(el, cfg.svgPartialD)) {
+        return false;
+    }
+    if (!elementAriaMatches(el, cfg.ariaLabel)) {
+        return false;
+    }
+    if (!elementRoleMatches(el, cfg.role)) {
+        return false;
+    }
+    if (!elementTextMatches(el, cfg.textIncludes, cfg.textMatches)) {
+        return false;
+    }
+    if (cfg.filter && !cfg.filter(el)) {
+        return false;
+    }
+    return true;
+}
+
+export function findElementsByConfig(cfg: ElementFinderConfig): HTMLElement[] {
     const root = (cfg.root ?? document) as ParentNode;
     const candidates = querySelectorAll<HTMLElement>(cfg.selector, root);
-    for (const el of candidates) {
-        if (!elementMatchesAllClasses(el, cfg.classContains)) {
-            continue;
-        }
-        if (!elementHasSvgPathWithD(el, cfg.svgPartialD)) {
-            continue;
-        }
-        if (cfg.filter && !cfg.filter(el)) {
-            continue;
-        }
-        return el;
-    }
-    return null;
+    return candidates.filter(el => matchElementByConfig(el, cfg));
+}
+
+export function findElement(cfg: ElementFinderConfig): HTMLElement | null {
+    const all = findElementsByConfig(cfg);
+    return all.length ? all[0]! : null;
 }
 
 export async function waitForElementByConfig(
@@ -91,6 +142,31 @@ export async function waitForElementByConfig(
         const rootNode = (cfg.root ?? document) as Node;
         observer.observe(rootNode, { childList: true, subtree: true, attributes: true, characterData: false });
     });
+}
+
+export type AnySelector = string | ElementFinderConfig;
+
+export function selectAll<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T[] {
+    if (typeof sel === "string") {
+        return querySelectorAll<T>(sel, root);
+    }
+    return findElementsByConfig({ ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root }) as unknown as T[];
+}
+
+export function selectOne<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T | null {
+    if (typeof sel === "string") {
+        return querySelector<T>(sel, root);
+    }
+    return findElement({ ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root }) as unknown as T | null;
+}
+
+export async function waitFor<T extends HTMLElement = HTMLElement>(sel: AnySelector, opts?: { timeoutMs?: number; root?: NodeRoot; }): Promise<T> {
+    if (typeof sel === "string") {
+        const cfg: ElementFinderConfig = { selector: sel, root: opts?.root };
+        return waitForElementByConfig(cfg) as Promise<T>;
+    }
+    const cfg = { ...sel, root: sel.root ?? opts?.root } as ElementFinderConfig & { timeoutMs?: number; };
+    return waitForElementByConfig(cfg) as Promise<T>;
 }
 
 export class MutationObserverManager {
@@ -284,7 +360,6 @@ export function liveElements<T extends HTMLElement = HTMLElement>(
         tracked.clear();
     };
 
-    // Initial pass
     rescan();
     observe();
 

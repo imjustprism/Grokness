@@ -5,19 +5,20 @@
  */
 
 import { Devs } from "@utils/constants";
-import { liveElements, querySelector } from "@utils/dom";
+import { liveElements, selectOne } from "@utils/dom";
+import { LOCATORS } from "@utils/locators";
 import { definePlugin } from "@utils/types";
 
-const BUBBLE = "div.message-bubble.bg-surface-l2";
+const BUBBLE = LOCATORS.CHAT.messageBubble.selector;
 const ATTR = "data-quick-actions-listener";
 
 const onDbl = (e: MouseEvent): void => {
     const bubble = e.currentTarget as HTMLElement;
-    const container = bubble.closest<HTMLElement>("div.relative.group");
+    const container = bubble.closest<HTMLElement>(LOCATORS.CHAT.messageContainer.selector);
     if (!container) {
         return;
     }
-    const edit = querySelector('button[aria-label="Edit"]', container) as HTMLButtonElement | null;
+    const edit = selectOne<HTMLButtonElement>(LOCATORS.CHAT.editButton, container);
     edit?.click();
 };
 

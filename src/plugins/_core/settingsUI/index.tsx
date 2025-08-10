@@ -9,7 +9,8 @@ import { SettingsTab } from "@plugins/_core/settingsUI/components/SettingsTab";
 import { useSettingsLogic } from "@plugins/_core/settingsUI/hooks/useSettingsLogic";
 import styles from "@plugins/_core/settingsUI/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { querySelector } from "@utils/dom";
+import { selectOne } from "@utils/dom";
+import { LOCATORS } from "@utils/locators";
 import { definePlugin, type IPatch } from "@utils/types";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -22,8 +23,9 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({ rootEle
         return null;
     }
 
-    const contentArea = querySelector('div[class*="overflow-scroll"]', rootElement);
-    const sidebarArea = querySelector('div[class*="pl-3 pb-3"]', rootElement);
+    const dialogRoot = selectOne(LOCATORS.SETTINGS_MODAL.dialog, rootElement) ?? rootElement;
+    const contentArea = selectOne(LOCATORS.SETTINGS_MODAL.contentArea, dialogRoot);
+    const sidebarArea = selectOne(LOCATORS.SETTINGS_MODAL.leftNavContainer, dialogRoot);
 
     useEffect(() => {
         if (!sidebarArea) {

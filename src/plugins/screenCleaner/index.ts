@@ -7,6 +7,7 @@
 import styles from "@plugins/screenCleaner/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { createDomElementHider, type ElementHideConfig } from "@utils/dom";
+import { LOCATORS } from "@utils/locators";
 import { definePlugin, definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
 
 const settings = definePluginSettings({
@@ -23,7 +24,7 @@ let off: (() => void) | null = null;
 
 const CONFIGS: ElementHideConfig[] = [
     {
-        selector: 'div[style*="opacity:"] > div.absolute.top-0.left-0.w-full.h-full',
+        selector: LOCATORS.EFFECTS.idleSparklesContainer.selector,
         description: "Idle sparkle effects",
         condition: (el: HTMLElement) => {
             if (!settings.store.hideScreensaver) {

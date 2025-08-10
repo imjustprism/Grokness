@@ -4,26 +4,21 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import {
-    ApiClient,
-    createApiServices,
-    isActiveSubscription,
-    normalizeTier,
-    Tier
-} from "@api/index";
+import { ApiClient, createApiServices, isActiveSubscription, normalizeTier, Tier } from "@api/index";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { querySelector } from "@utils/dom";
+import { selectOne } from "@utils/dom";
+import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
 import { defineUIPlugin, ui } from "@utils/pluginDsl";
-import React, { useEffect, useState } from "react";
 import clsx from "clsx";
+import React, { useEffect, useState } from "react";
 
 const logger = new Logger("BetterSidebar", "#f2d5cf");
 
-const SIDEBAR_FOOTER_SELECTOR = '[data-sidebar="footer"]';
-const AVATAR_BUTTON_SELECTOR = 'button[aria-haspopup="menu"]';
-const TOGGLE_ICON_SELECTOR = '[data-sidebar="trigger"] svg';
+const SIDEBAR_FOOTER_SELECTOR = LOCATORS.SIDEBAR.footer;
+const AVATAR_BUTTON_SELECTOR = LOCATORS.SIDEBAR.avatarButton;
+const TOGGLE_ICON_SELECTOR = LOCATORS.SIDEBAR.toggleIcon;
 
 const DEFAULT_USER_NAME = "User";
 const DEFAULT_PLAN = "Free";
@@ -99,7 +94,7 @@ async function getUserPlan(): Promise<{ name: string; plan: string; }> {
 function useCollapsed(): boolean {
     const [isCollapsed, set] = useState(false);
     useEffect(() => {
-        const icon = querySelector(TOGGLE_ICON_SELECTOR);
+        const icon = selectOne(TOGGLE_ICON_SELECTOR);
         if (!icon) {
             return;
         }
@@ -140,7 +135,7 @@ export default defineUIPlugin({
     ui: ui({
         component: SidebarUserInfo,
         target: SIDEBAR_FOOTER_SELECTOR,
-        parent: footer => footer.querySelector(`${AVATAR_BUTTON_SELECTOR}`)?.parentElement ?? footer,
+        parent: footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer,
         insert: { after: AVATAR_BUTTON_SELECTOR },
         observerDebounce: 50,
     })

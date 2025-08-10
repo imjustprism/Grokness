@@ -5,7 +5,7 @@
  */
 
 import { ErrorBoundary } from "@components/ErrorBoundary";
-import { type ElementFinderConfig, querySelectorAll } from "@utils/dom";
+import { type AnySelector, selectAll } from "@utils/dom";
 import { type InjectedComponentProps, type IPluginUIPatch } from "@utils/types";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -154,30 +154,7 @@ export class PluginHelper {
     }
 
     private findTargets(patch: IPluginUIPatch): HTMLElement[] {
-        if (typeof patch.target === "string") {
-            const all = querySelectorAll<HTMLElement>(patch.target);
-            return patch.forEach ? all : (all.length ? [all[0]!] : []);
-        }
-        const cfg: ElementFinderConfig = patch.target;
-        const all = querySelectorAll<HTMLElement>(cfg.selector, cfg.root ?? document);
-        const filtered = all.filter(el => {
-            if (cfg.classContains && cfg.classContains.length > 0) {
-                const ok = cfg.classContains.every(c => el.classList.contains(c));
-                if (!ok) {
-                    return false;
-                }
-            }
-            if (cfg.svgPartialD) {
-                const p = el.querySelector("svg path[d]") as SVGPathElement | null;
-                if (!p || !p.getAttribute("d")?.includes(cfg.svgPartialD)) {
-                    return false;
-                }
-            }
-            if (cfg.filter && !cfg.filter(el)) {
-                return false;
-            }
-            return true;
-        });
-        return patch.forEach ? filtered : (filtered.length ? [filtered[0]!] : []);
+        const all = selectAll<HTMLElement>(patch.target as unknown as AnySelector);
+        return patch.forEach ? all : (all.length ? [all[0]!] : []);
     }
 }

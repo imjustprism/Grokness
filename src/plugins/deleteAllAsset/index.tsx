@@ -143,9 +143,9 @@ const patch = ui({
     target: {
         selector: "div.flex.gap-2",
         filter: (el: HTMLElement) => {
-            const texts = Array.from(el.querySelectorAll("button")).map(b => b.textContent || "");
-            const hasFilter = texts.some(t => t.includes("Filter"));
-            const hasSort = texts.some(t => t.includes("Sort"));
+            const buttons = Array.from(el.querySelectorAll("button"));
+            const hasFilter = buttons.some(b => /filter/i.test(b.textContent ?? ""));
+            const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
             return hasFilter && hasSort;
         }
     },
