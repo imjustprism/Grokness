@@ -66,7 +66,6 @@ export interface IPluginUIPatch extends IPatch {
     getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
     referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
     observerDebounce?: boolean | number;
-    /** Optional predicate to decide whether a found target should be mounted into */
     predicate?: (foundElement: HTMLElement) => boolean;
 }
 
@@ -138,8 +137,6 @@ function toKebabCase(str: string): string {
         .toLowerCase();
 }
 
-/** ===== Settings runtime (merged from settings.ts) ===== */
-
 const settingsStore = new Map<string, Record<string, unknown>>();
 
 export function definePluginSettings<T extends PluginOptions>(definition: T): ISettingsManager<T> {
@@ -176,6 +173,21 @@ export function setPluginSetting(pluginId: string, key: string, value: unknown):
             detail: { pluginId, key, value },
         })
     );
+}
+
+export type SettingsUpdatedDetail = { pluginId: string; key: string; value: unknown; };
+
+export function onPluginSettingsUpdated(
+    pluginId: string,
+    handler: (detail: SettingsUpdatedDetail) => void
+): () => void {
+    const listener = (e: CustomEvent<SettingsUpdatedDetail>) => {
+        if (e.detail.pluginId === pluginId) {
+            handler(e.detail);
+        }
+    };
+    window.addEventListener("grok-settings-updated", listener as unknown as EventListener);
+    return () => window.removeEventListener("grok-settings-updated", listener as unknown as EventListener);
 }
 
 export function getPluginSetting<T extends PluginOptions, K extends keyof T & string>(
@@ -247,8 +259,6 @@ export function useSetting<T extends PluginOptions, K extends keyof T & string>(
     const setter = (newValue: InferOptionType<T[K]>) => setPluginSetting(pluginId, key, newValue);
     return [value, setter];
 }
-
-/** ===== Plugin registration (unchanged API) ===== */
 
 export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
     const id = def.id || toKebabCase(def.name);

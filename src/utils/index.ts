@@ -7,5 +7,6 @@
 export * from "./constants";
 export * from "./dom";
 export * from "./logger";
+export * from "./pluginDsl";
 export * from "./pluginHelper";
 export * from "./types";

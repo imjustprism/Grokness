@@ -10,10 +10,32 @@ import { Lucide } from "@components/Lucide";
 import { Devs } from "@utils/constants";
 import { findElement, MutationObserverManager, querySelector } from "@utils/dom";
 import { Logger } from "@utils/logger";
-import { definePlugin, definePluginSettings, type IPluginUIPatch } from "@utils/types";
+import { ui } from "@utils/pluginDsl";
+import { definePlugin, definePluginSettings } from "@utils/types";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const logger = new Logger("RateLimitDisplay", "#a6d189");
+
+const CACHE_TTL_MS = 30_000;
+type CacheEntry = { processed: ProcessedRateLimit; fetchedAt: number; };
+const rateLimitCache = new Map<string, CacheEntry>();
+
+function makeCacheKey(model: string, requestKind: string): string {
+    return `${location.pathname}::${model}::${requestKind}`;
+}
+
+function getCached(model: string, requestKind: string): CacheEntry | null {
+    const entry = rateLimitCache.get(makeCacheKey(model, requestKind));
+    return entry ?? null;
+}
+
+function setCached(model: string, requestKind: string, processed: ProcessedRateLimit): void {
+    rateLimitCache.set(makeCacheKey(model, requestKind), { processed, fetchedAt: Date.now() });
+}
+
+function cacheAgeMs(entry: CacheEntry): number {
+    return Date.now() - entry.fetchedAt;
+}
 
 const settings = definePluginSettings({
     autoRefresh: {
@@ -172,8 +194,10 @@ function RateLimitDisplay() {
     const [isLoading, setIsLoading] = useState(true);
     const [countdown, setCountdown] = useState<number | null>(null);
 
-    const fetchNow = useCallback(async () => {
-        setIsLoading(true);
+    const fetchNow = useCallback(async (opts?: { background?: boolean; }) => {
+        if (!opts?.background) {
+            setIsLoading(true);
+        }
         const model = modelRef.current;
         const kind = kindRef.current;
         const data = await fetchRateLimit(model, kind);
@@ -197,26 +221,41 @@ function RateLimitDisplay() {
                 };
             }
             setRateLimit(processed);
+            setCached(model, kind, processed);
             if (processed.waitTimeSeconds > 0) {
                 setCountdown(processed.waitTimeSeconds);
             }
         }
-        setIsLoading(false);
+        if (!opts?.background) {
+            setIsLoading(false);
+        }
     }, []);
 
     useEffect(() => {
         modelRef.current = currentModel;
         kindRef.current = currentRequestKind;
-        fetchNow();
+        const entry = getCached(currentModel, currentRequestKind);
+        if (entry) {
+            setRateLimit(entry.processed);
+            setIsLoading(false);
+            if (!("error" in entry.processed) && entry.processed.waitTimeSeconds > 0) {
+                setCountdown(entry.processed.waitTimeSeconds);
+            }
+            if (cacheAgeMs(entry) > CACHE_TTL_MS) {
+                fetchNow({ background: true });
+            }
+        } else {
+            fetchNow();
+        }
     }, [currentModel, currentRequestKind, fetchNow]);
 
     useEffect(() => {
-        fetchNow();
+        fetchNow({ background: true });
         let interval: number | undefined;
         if (settings.store.autoRefresh) {
-            interval = window.setInterval(() => fetchNow(), 60000);
+            interval = window.setInterval(() => fetchNow({ background: true }), 60000);
         }
-        const onVisibilityChange = () => document.visibilityState === "visible" && fetchNow();
+        const onVisibilityChange = () => document.visibilityState === "visible" && fetchNow({ background: true });
         document.addEventListener("visibilitychange", onVisibilityChange);
         return () => {
             if (interval) {
@@ -251,8 +290,7 @@ function RateLimitDisplay() {
         }
 
         const trigger = () => {
-            setIsLoading(true);
-            window.setTimeout(() => fetchNow(), 1500);
+            window.setTimeout(() => fetchNow({ background: true }), 1500);
         };
 
         const onKeyDown = (ev: KeyboardEvent) => {
@@ -366,10 +404,10 @@ function RateLimitDisplay() {
 const projectButtonSelector = { selector: "button", svgPartialD: "M3.33965 17L11.9999 22L20.6602 17V7" };
 const attachButtonSelector = { selector: "button[aria-label='Attach']" };
 
-const patch: IPluginUIPatch = {
+const patch = ui({
     target: QUERY_BAR_SELECTOR,
     component: RateLimitDisplay,
-    getTargetParent: queryBar => {
+    parent: queryBar => {
         const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
         if (projectButton) {
             return projectButton.parentElement;
@@ -377,14 +415,17 @@ const patch: IPluginUIPatch = {
         const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
         return attachButton?.parentElement ?? null;
     },
-    referenceNode: parent => {
-        const projectButton = findElement({ ...projectButtonSelector, root: parent });
-        if (projectButton) {
-            return projectButton;
+    insert: {
+        after: parent => {
+            const projectButton = findElement({ ...projectButtonSelector, root: parent });
+            if (projectButton) {
+                return projectButton;
+            }
+            return findElement({ ...attachButtonSelector, root: parent });
         }
-        return findElement({ ...attachButtonSelector, root: parent });
-    }
-};
+    },
+    observerDebounce: 50,
+});
 
 export default definePlugin({
     name: "Rate Limit Display",

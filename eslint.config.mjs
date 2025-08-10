@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import stylistic from "@stylistic/eslint-plugin";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
+import importPlugin from "eslint-plugin-import";
 import pathAliasPlugin from "eslint-plugin-path-alias";
 import reactPlugin from "eslint-plugin-react";
 import header from "eslint-plugin-simple-header";
@@ -18,6 +19,25 @@ export default [
         settings: {
             react: {
                 version: "18",
+            },
+            "import/ignore": ["\\?raw$"],
+            "import/resolver": {
+                typescript: {
+                    project: "./tsconfig.json",
+                    alwaysTryTypes: true,
+                },
+                node: {
+                    extensions: [
+                        ".js",
+                        ".mjs",
+                        ".ts",
+                        ".tsx",
+                        ".jsx",
+                        ".d.ts",
+                        ".json",
+                        ".css",
+                    ],
+                },
             },
         },
         plugins: {
@@ -47,6 +67,7 @@ export default [
         plugins: {
             "@typescript-eslint": tsPlugin,
             "@stylistic": stylistic,
+            import: importPlugin,
             "simple-header": header,
             "simple-import-sort": sortPlugin,
             "unused-imports": unusedPlugin,
@@ -89,6 +110,12 @@ export default [
             "simple-import-sort/imports": "error",
             "simple-import-sort/exports": "error",
             "unused-imports/no-unused-imports": "error",
+
+            "import/first": "error",
+            "import/newline-after-import": ["error", { count: 1 }],
+            "import/no-duplicates": "error",
+            "import/no-unresolved": "error",
+            "import/order": "off",
 
             "simple-header/header": [
                 "error",
@@ -135,7 +162,7 @@ export default [
             "no-unneeded-ternary": ["error", { defaultAssignment: false }],
             "no-invalid-regexp": "error",
             "no-constant-condition": ["error", { checkLoops: false }],
-            "no-duplicate-imports": "error",
+            "no-duplicate-imports": "off",
             "no-useless-escape": "error",
             "no-fallthrough": "error",
             "for-direction": "error",

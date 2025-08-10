@@ -102,7 +102,17 @@ export class PluginHelper {
         };
 
         const observer = new MutationObserver(() => {
-            scan();
+            if (typeof patch.observerDebounce === "number" && patch.observerDebounce > 0) {
+                if ((observer as unknown as { __t?: number | null; }).__t) {
+                    clearTimeout((observer as unknown as { __t?: number | null; }).__t!);
+                }
+                (observer as unknown as { __t?: number | null; }).__t = window.setTimeout(() => {
+                    (observer as unknown as { __t?: number | null; }).__t = null;
+                    scan();
+                }, patch.observerDebounce);
+            } else {
+                scan();
+            }
         });
 
         observer.observe(document.body, {

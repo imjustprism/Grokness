@@ -228,3 +228,65 @@ export function insertRangeBefore(parent: Node, nodes: Node[], before?: Node | n
         parent.appendChild(fragment);
     }
 }
+
+export function liveElements<T extends HTMLElement = HTMLElement>(
+    selector: string,
+    root: ParentNode | Document = document,
+    onEnter: (el: T) => void,
+    onExit?: (el: T) => void,
+    options?: { debounce?: number; }
+) {
+    const tracked = new Set<T>();
+    const debounceDelay = options?.debounce ?? 50;
+    let timeout: number | null = null;
+
+    const scanAdded = () => {
+        const nodes = querySelectorAll<T>(selector, root);
+        for (const el of nodes) {
+            if (!tracked.has(el)) {
+                tracked.add(el);
+                onEnter(el);
+            }
+        }
+    };
+
+    const removeMissing = () => {
+        for (const el of Array.from(tracked)) {
+            if (!document.contains(el)) {
+                tracked.delete(el);
+                onExit?.(el);
+            }
+        }
+    };
+
+    const rescan = () => {
+        removeMissing();
+        scanAdded();
+    };
+
+    const observer = new MutationObserver(() => {
+        if (timeout !== null) {
+            clearTimeout(timeout);
+        }
+        timeout = window.setTimeout(() => {
+            timeout = null;
+            rescan();
+        }, debounceDelay);
+    });
+
+    const observe = () => observer.observe(root as Node, { childList: true, subtree: true, attributes: false });
+    const disconnect = () => {
+        if (timeout !== null) {
+            clearTimeout(timeout);
+            timeout = null;
+        }
+        observer.disconnect();
+        tracked.clear();
+    };
+
+    // Initial pass
+    rescan();
+    observe();
+
+    return { disconnect, rescan };
+}

@@ -7,7 +7,7 @@
 import styles from "@plugins/streamerMode/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/logger";
-import { definePlugin, definePluginSettings } from "@utils/types";
+import { definePlugin, definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
 
 const logger = new Logger("StreamerMode", "#f2d5cf");
 
@@ -58,7 +58,7 @@ const settings = definePluginSettings({
     },
 });
 
-let onSettings: ((e: Event) => void) | null = null;
+let off: (() => void) | null = null;
 
 function apply() {
     try {
@@ -88,13 +88,7 @@ export default definePlugin({
 
     start() {
         apply();
-        onSettings = (e: Event) => {
-            const { pluginId } = (e as CustomEvent).detail as { pluginId: string; key: string; value: unknown; };
-            if (pluginId === "streamer-mode") {
-                apply();
-            }
-        };
-        window.addEventListener("grok-settings-updated", onSettings);
+        off = onPluginSettingsUpdated("streamer-mode", () => apply());
     },
 
     stop() {
@@ -109,9 +103,7 @@ export default definePlugin({
             "blur-task-titles",
             "blur-file-names"
         );
-        if (onSettings) {
-            window.removeEventListener("grok-settings-updated", onSettings);
-            onSettings = null;
-        }
+        off?.();
+        off = null;
     },
 });

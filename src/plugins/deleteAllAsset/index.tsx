@@ -7,7 +7,8 @@
 import { ApiClient, createApiServices, type ListAssetsResponse } from "@api/index";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
-import { definePlugin, type IPluginUIPatch } from "@utils/types";
+import { ui } from "@utils/pluginDsl";
+import { definePlugin } from "@utils/types";
 import React, { useEffect, useRef, useState } from "react";
 
 const api = ApiClient.fromWindow();
@@ -137,7 +138,7 @@ const DeleteAllAssetsButton: React.FC = () => {
     );
 };
 
-const patch: IPluginUIPatch = {
+const patch = ui({
     component: DeleteAllAssetsButton,
     target: {
         selector: "div.flex.gap-2",
@@ -148,13 +149,16 @@ const patch: IPluginUIPatch = {
             return hasFilter && hasSort;
         }
     },
-    getTargetParent: el => el,
-    referenceNode: parent => {
-        const buttons = Array.from(parent.querySelectorAll("button"));
-        const sortBtn = buttons.find(b => b.textContent?.includes("Sort")) ?? null;
-        return sortBtn;
-    }
-};
+    parent: el => el,
+    insert: {
+        after: parent => {
+            const buttons = Array.from(parent.querySelectorAll("button"));
+            const sortBtn = buttons.find(b => b.textContent?.includes("Sort")) ?? null;
+            return sortBtn;
+        }
+    },
+    observerDebounce: 50,
+});
 
 export default definePlugin({
     name: "Delete All Assets",

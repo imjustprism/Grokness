@@ -1,10 +1,10 @@
 .grok-code-highlight {
-    background-color: rgba(59, 130, 246, 0.3); /* A pleasant, semi-transparent blue */
+    background-color: rgba(59, 130, 246, 0.3);
     border-radius: 3px;
     transition: background-color 0.2s ease-in-out;
 }
 
 .grok-code-highlight-current {
-    background-color: rgba(59, 130, 246, 0.5); /* A more opaque version for the current match */
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.7); /* A subtle outline */
+    background-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.7);
 }

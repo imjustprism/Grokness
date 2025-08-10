@@ -5,7 +5,7 @@
  */
 
 import { Devs } from "@utils/constants";
-import { querySelector } from "@utils/dom";
+import { liveElements, querySelector } from "@utils/dom";
 import { definePlugin } from "@utils/types";
 
 const BUBBLE = "div.message-bubble.bg-surface-l2";
@@ -34,7 +34,7 @@ function detach(el: HTMLElement): void {
     el.removeEventListener("dblclick", onDbl);
 }
 
-let mo: MutationObserver | null = null;
+let detachLive: (() => void) | null = null;
 
 export default definePlugin({
     name: "Message Click Actions",
@@ -44,29 +44,13 @@ export default definePlugin({
     tags: ["edit", "double-click", "chat", "quality of life"],
 
     start() {
-        document.querySelectorAll<HTMLElement>(BUBBLE).forEach(attach);
-        mo = new MutationObserver(muts => {
-            for (const m of muts) {
-                m.addedNodes.forEach(n => {
-                    if (n instanceof HTMLElement) {
-                        if (n.matches(BUBBLE)) {
-                            attach(n);
-                        }
-                        n.querySelectorAll<HTMLElement>(BUBBLE).forEach(attach);
-                    }
-                });
-                m.removedNodes.forEach(n => {
-                    if (n instanceof HTMLElement && n.matches(BUBBLE)) {
-                        detach(n);
-                    }
-                });
-            }
-        });
-        mo.observe(document.body, { childList: true, subtree: true });
+        const { disconnect } = liveElements<HTMLElement>(BUBBLE, document, attach, detach, { debounce: 50 });
+        detachLive = disconnect;
     },
 
     stop() {
-        mo?.disconnect();
+        detachLive?.();
+        detachLive = null;
         document.querySelectorAll<HTMLElement>(BUBBLE).forEach(detach);
     },
 });

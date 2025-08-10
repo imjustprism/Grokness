@@ -7,7 +7,7 @@
 import styles from "@plugins/screenCleaner/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { createDomElementHider, type ElementHideConfig } from "@utils/dom";
-import { definePlugin, definePluginSettings } from "@utils/types";
+import { definePlugin, definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
 
 const settings = definePluginSettings({
     hideScreensaver: {
@@ -19,7 +19,7 @@ const settings = definePluginSettings({
 });
 
 let hider: ReturnType<typeof createDomElementHider> | null = null;
-let onSettings: ((e: Event) => void) | null = null;
+let off: (() => void) | null = null;
 
 const CONFIGS: ElementHideConfig[] = [
     {
@@ -48,21 +48,13 @@ export default definePlugin({
         hider = createDomElementHider(document.body, CONFIGS, { useRequestAnimationFrame: true });
         hider.hideImmediately();
         hider.startObserving();
-        onSettings = (e: Event) => {
-            const { pluginId } = (e as CustomEvent).detail as { pluginId: string; key: string; value: unknown; };
-            if (pluginId === "screen-cleaner") {
-                hider?.hideImmediately();
-            }
-        };
-        window.addEventListener("grok-settings-updated", onSettings);
+        off = onPluginSettingsUpdated("screen-cleaner", () => hider?.hideImmediately());
     },
 
     stop() {
         hider?.stopObserving();
         hider = null;
-        if (onSettings) {
-            window.removeEventListener("grok-settings-updated", onSettings);
-            onSettings = null;
-        }
+        off?.();
+        off = null;
     },
 });

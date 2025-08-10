@@ -15,8 +15,9 @@ import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { querySelector } from "@utils/dom";
 import { Logger } from "@utils/logger";
-import { definePlugin, type IPluginUIPatch } from "@utils/types";
+import { defineUIPlugin, ui } from "@utils/pluginDsl";
 import React, { useEffect, useState } from "react";
+import clsx from "clsx";
 
 const logger = new Logger("BetterSidebar", "#f2d5cf");
 
@@ -117,30 +118,30 @@ function SidebarUserInfo() {
     useEffect(() => {
         getUserPlan().then(setData);
     }, []);
-    if (!data || collapsed) {
+    if (!data) {
         return null;
     }
     return (
-        <div className="sidebar-user-info">
+        <div className={clsx("sidebar-user-info", collapsed && "is-collapsed")}
+        >
             <div className="display-name">{data.name}</div>
             <div className="plan text-secondary truncate">{data.plan}</div>
         </div>
     );
 }
 
-const patch: IPluginUIPatch = {
-    component: SidebarUserInfo,
-    target: SIDEBAR_FOOTER_SELECTOR,
-    getTargetParent: footer => footer.querySelector(`${AVATAR_BUTTON_SELECTOR}`)?.parentElement ?? footer,
-    referenceNode: parent => parent.querySelector(AVATAR_BUTTON_SELECTOR)?.nextSibling ?? null
-};
-
-export default definePlugin({
+export default defineUIPlugin({
     name: "Better Sidebar",
     description: "Enhances the sidebar by adding user information.",
     authors: [Devs.Prism],
     category: "appearance",
     tags: ["sidebar", "user-info"],
     styles,
-    patches: [patch]
+    ui: ui({
+        component: SidebarUserInfo,
+        target: SIDEBAR_FOOTER_SELECTOR,
+        parent: footer => footer.querySelector(`${AVATAR_BUTTON_SELECTOR}`)?.parentElement ?? footer,
+        insert: { after: AVATAR_BUTTON_SELECTOR },
+        observerDebounce: 50,
+    })
 });

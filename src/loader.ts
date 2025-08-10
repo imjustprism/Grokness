@@ -113,7 +113,14 @@ export class PluginManager {
                 return true;
             }
             const key = this.getStorageKey(plugin);
-            return !!localStorage.getItem(key);
+            const stored = localStorage.getItem(key);
+            if (stored === "1") {
+                return true;
+            }
+            if (stored === "0") {
+                return false;
+            }
+            return plugin.enabledByDefault ?? false;
         });
     }
 
