@@ -10,12 +10,20 @@ import * as React from "react";
 
 type Size = "default" | "small";
 
+/**
+ * Props for the Switch component
+ */
 export interface SwitchProps
     extends Omit<RadixSwitch.SwitchProps, "onChange" | "value"> {
+    /** Size of the switch */
     size?: Size;
+    /** Class names for the root */
     className?: string;
+    /** Class names for the thumb */
     thumbClassName?: string;
+    /** ID of the labelled-by element for a11y */
     ariaLabelledBy?: string;
+    /** string value for form integrations */
     value?: string;
 }
 

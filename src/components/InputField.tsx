@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { DropdownMenu, type DropdownOption } from "@plugins/_core/settingsUI/components/DropdownMenu";
+import { DropdownMenu, type DropdownOption } from "@components/DropdownMenu";
+import { Lucide, type LucideIconName } from "@components/Lucide";
 import clsx from "clsx";
 import React from "react";
 
@@ -23,7 +24,7 @@ export interface InputOption {
  */
 export interface InputFieldProps {
     /** Type of input field */
-    type: "text" | "number" | "select";
+    type: "text" | "number" | "select" | "search";
     /** Current value of the input */
     value: string | number;
     /** Callback fired when the value changes */
@@ -34,6 +35,10 @@ export interface InputFieldProps {
     options?: InputOption[];
     /** Additional CSS classes */
     className?: string;
+    /** Visual variant for text-like inputs */
+    variant?: "default" | "search";
+    /** Optional icon name for search variant (defaults to "Search") */
+    iconName?: LucideIconName;
 }
 
 export const InputField: React.FC<InputFieldProps> = ({
@@ -43,6 +48,8 @@ export const InputField: React.FC<InputFieldProps> = ({
     placeholder = "",
     options = [],
     className,
+    variant,
+    iconName,
 }) => {
     const commonClass = clsx(
         "h-10 px-3.5 flex items-center text-sm bg-surface-l1 dark:bg-surface-l1 focus:outline-none text-primary rounded-xl border border-border-l1",
@@ -68,10 +75,37 @@ export const InputField: React.FC<InputFieldProps> = ({
             <DropdownMenu
                 options={dropdownOptions}
                 value={value.toString()}
-                onChange={value => onChange(value)}
+                onChange={(next: string) => onChange(next)}
                 placeholder={placeholder || "Select..."}
                 width="w-full"
             />
+        );
+    }
+
+    // Search-style variant with leading icon and special container styling
+    if (type === "search" || variant === "search") {
+        return (
+            <div
+                className={clsx(
+                    "flex items-center gap-2 px-3",
+                    "h-10 rounded-xl border border-border-l1 bg-surface-l1 text-secondary",
+                    "hover:bg-button-ghost-hover active:bg-button-ghost-active",
+                    className
+                )}
+            >
+                <Lucide name={(iconName || "Search") as LucideIconName} size={16} strokeWidth={2} className="flex-shrink-0" />
+                <input
+                    value={value.toString()}
+                    onChange={e => onChange(e.target.value)}
+                    type="text"
+                    placeholder={placeholder || "Search..."}
+                    className={clsx(
+                        "h-full w-full bg-transparent text-sm",
+                        "text-fg-secondary placeholder:text-fg-secondary",
+                        "focus:outline-none"
+                    )}
+                />
+            </div>
         );
     }
 
@@ -86,3 +120,4 @@ export const InputField: React.FC<InputFieldProps> = ({
         />
     );
 };
+

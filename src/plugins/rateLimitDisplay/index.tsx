@@ -513,24 +513,31 @@ export default definePlugin({
     styles,
     settings,
     patches: [
-        Patch.ui(QUERY_BAR_SELECTOR)
-            .component(RateLimitDisplay)
-            .parent(queryBar => {
-                const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
-                if (projectButton) {
-                    return projectButton.parentElement;
+        (() => {
+            const patch = Patch.ui(QUERY_BAR_SELECTOR)
+                .component(RateLimitDisplay)
+                .parent(queryBar => {
+                    const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
+                    if (projectButton) {
+                        return projectButton.parentElement;
+                    }
+                    const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
+                    return attachButton?.parentElement ?? null;
+                })
+                .after(parent => {
+                    const projectButton = findElement({ ...projectButtonSelector, root: parent });
+                    if (projectButton) {
+                        return projectButton;
+                    }
+                    return findElement({ ...attachButtonSelector, root: parent });
+                })
+                .debounce(50)
+                .build();
+            return Object.assign(patch, {
+                disconnect: () => {
+                    document.querySelectorAll(".rate-limit-display-button").forEach(n => n.remove());
                 }
-                const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
-                return attachButton?.parentElement ?? null;
-            })
-            .after(parent => {
-                const projectButton = findElement({ ...projectButtonSelector, root: parent });
-                if (projectButton) {
-                    return projectButton;
-                }
-                return findElement({ ...attachButtonSelector, root: parent });
-            })
-            .debounce(50)
-            .build()
+            });
+        })()
     ]
 });

@@ -4,70 +4,78 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { getPluginSetting, type IPlugin, setPluginSetting } from "@utils/types";
+import { getPluginSetting, type IPlugin, setPluginSetting, type SettingsUpdatedDetail } from "@utils/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const areSettingsEqual = (settingsA: Record<string, unknown>, settingsB: Record<string, unknown>): boolean => {
-    const keysA = Object.keys(settingsA);
-    const keysB = Object.keys(settingsB);
-    if (keysA.length !== keysB.length) {
+/**
+ * Performs a shallow equality check on two settings maps
+ */
+const areSettingsEqual = (left: Record<string, unknown>, right: Record<string, unknown>): boolean => {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
         return false;
     }
-    return keysA.every(key => settingsA[key] === settingsB[key]);
+    for (const key of leftKeys) {
+        if (left[key] !== right[key]) {
+            return false;
+        }
+    }
+    return true;
 };
 
+/**
+ * React hook to read and update a plugin's settings with restart tracking.
+ *
+ * @param plugin - Plugin whose settings should be managed
+ * @param onRestartChange - Optional callback to inform the UI that a restart is required based on changes
+ */
 export const usePluginSettings = (
     plugin: IPlugin,
     onRestartChange?: (pluginName: string, requiresRestart: boolean, source: "settings") => void
 ) => {
-    const initialSettingsMap = useMemo(() => {
-        const settingsMap: Record<string, unknown> = {};
-        for (const settingKey in plugin.options) {
-            settingsMap[settingKey] = getPluginSetting(plugin.id, settingKey, plugin.options);
+    const initialSettings = useMemo(() => {
+        const map: Record<string, unknown> = {};
+        for (const optionKey in plugin.options) {
+            map[optionKey] = getPluginSetting(plugin.id, optionKey, plugin.options);
         }
-        return settingsMap;
+        return map;
     }, [plugin]);
 
-    const [currentSettings, setCurrentSettings] = useState(() => ({ ...initialSettingsMap }));
+    const [settings, setSettings] = useState<Record<string, unknown>>(() => ({ ...initialSettings }));
 
-    const updateSettingValue = useCallback(
-        (settingKey: string, newValue: unknown) => {
-            setPluginSetting(plugin.id, settingKey, newValue);
-            setCurrentSettings(prevSettings => {
-                const updatedSettings = { ...prevSettings, [settingKey]: newValue };
+    const handleSettingChange = useCallback(
+        (key: string, value: unknown): void => {
+            setPluginSetting(plugin.id, key, value);
+            setSettings(previous => {
+                const next = { ...previous, [key]: value };
                 if (onRestartChange && plugin.requiresRestart) {
-                    const isRestartRequired = !areSettingsEqual(updatedSettings, initialSettingsMap);
-                    onRestartChange(plugin.name, isRestartRequired, "settings");
+                    const requiresRestart = !areSettingsEqual(next, initialSettings);
+                    onRestartChange(plugin.name, requiresRestart, "settings");
                 }
-                return updatedSettings;
+                return next;
             });
         },
-        [plugin, onRestartChange, initialSettingsMap]
+        [plugin, onRestartChange, initialSettings]
     );
 
     useEffect(() => {
-        const handleSettingsUpdateEvent = (event: CustomEvent) => {
-            if (event.detail.pluginId === plugin.id) {
-                setCurrentSettings(prevSettings => {
-                    const updatedSettings = { ...prevSettings, [event.detail.key]: event.detail.value };
-                    if (onRestartChange && plugin.requiresRestart) {
-                        const isRestartRequired = !areSettingsEqual(updatedSettings, initialSettingsMap);
-                        onRestartChange(plugin.name, isRestartRequired, "settings");
-                    }
-                    return updatedSettings;
-                });
+        const listener = (event: CustomEvent<SettingsUpdatedDetail>): void => {
+            if (event.detail.pluginId !== plugin.id) {
+                return;
             }
+            setSettings(previous => {
+                const next = { ...previous, [event.detail.key]: event.detail.value };
+                if (onRestartChange && plugin.requiresRestart) {
+                    const requiresRestart = !areSettingsEqual(next, initialSettings);
+                    onRestartChange(plugin.name, requiresRestart, "settings");
+                }
+                return next;
+            });
         };
+        window.addEventListener("grok-settings-updated", listener as unknown as EventListener);
+        return () => window.removeEventListener("grok-settings-updated", listener as unknown as EventListener);
+    }, [plugin.id, onRestartChange, plugin.requiresRestart, initialSettings]);
 
-        window.addEventListener("grok-settings-updated", handleSettingsUpdateEvent as EventListener);
-
-        return () => {
-            window.removeEventListener("grok-settings-updated", handleSettingsUpdateEvent as EventListener);
-        };
-    }, [plugin.id, onRestartChange, initialSettingsMap]);
-
-    return {
-        settings: currentSettings,
-        handleSettingChange: updateSettingValue,
-    };
+    return { settings, handleSettingChange } as const;
 };

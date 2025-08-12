@@ -7,97 +7,87 @@
 import { type IPlugin, plugins as allPlugins } from "@utils/types";
 import { useCallback, useMemo, useState } from "react";
 
-type FilterOptionType = "show_all" | "show_enabled" | "show_disabled";
-type RestartSourceType = "toggle" | "settings";
+type FilterOption = "show_all" | "show_enabled" | "show_disabled";
+type RestartSource = "toggle" | "settings";
 
 export const useSettingsLogic = () => {
-    const [filterSearchText, setFilterSearchText] = useState("");
-    const [filterDisplayOption, setFilterDisplayOption] = useState<FilterOptionType>("show_all");
-    const [restartSourcesMap, setRestartSourcesMap] = useState<Record<string, Set<RestartSourceType>>>({});
-    const [disabledPluginsMap, setDisabledPluginsMap] = useState<Record<string, boolean>>(() => {
-        const initialDisabledMap: Record<string, boolean> = {};
-        allPlugins.forEach(pluginItem => {
-            initialDisabledMap[pluginItem.id] = pluginItem.required ? false : !Boolean(localStorage.getItem(`plugin-enabled:${pluginItem.id}`));
-        });
-        return initialDisabledMap;
+    const [searchText, setSearchText] = useState<string>("");
+    const [filterOption, setFilterOption] = useState<FilterOption>("show_all");
+    const [restartSourcesByPlugin, setRestartSourcesByPlugin] = useState<Record<string, Set<RestartSource>>>({});
+    const [isPluginDisabledById, setIsPluginDisabledById] = useState<Record<string, boolean>>(() => {
+        const initial: Record<string, boolean> = {};
+        for (const plugin of allPlugins) {
+            initial[plugin.id] = plugin.required ? false : !Boolean(localStorage.getItem(`plugin-enabled:${plugin.id}`));
+        }
+        return initial;
     });
 
-    const handleRestartStatusUpdate = useCallback((pluginName: string, requiresRestart: boolean, changeSource: RestartSourceType) => {
-        setRestartSourcesMap(previousMap => {
-            const updatedMap = { ...previousMap };
-            const currentSources = new Set(updatedMap[pluginName]);
+    const handleRestartStatusUpdate = useCallback((pluginName: string, requiresRestart: boolean, source: RestartSource) => {
+        setRestartSourcesByPlugin(previous => {
+            const next = { ...previous };
+            const current = new Set(next[pluginName]);
             if (requiresRestart) {
-                currentSources.add(changeSource);
+                current.add(source);
             } else {
-                currentSources.delete(changeSource);
+                current.delete(source);
             }
-            if (currentSources.size > 0) {
-                updatedMap[pluginName] = currentSources;
+            if (current.size > 0) {
+                next[pluginName] = current;
             } else {
-                delete updatedMap[pluginName];
+                delete next[pluginName];
             }
-            return updatedMap;
+            return next;
         });
     }, []);
 
     const handlePluginStatusToggle = useCallback((pluginName: string, isDisabled: boolean) => {
-        setDisabledPluginsMap(previousMap => ({
-            ...previousMap,
-            [pluginName]: isDisabled,
-        }));
+        setIsPluginDisabledById(previous => ({ ...previous, [pluginName]: isDisabled }));
     }, []);
 
-    const handleFilterOptionChange = useCallback((selectedOption: FilterOptionType) => {
-        setFilterDisplayOption(selectedOption);
-    }, []);
+    const handleFilterOptionChange = useCallback((option: FilterOption) => setFilterOption(option), []);
 
-    const visiblePlugins = useMemo(() => allPlugins.filter(pluginItem => pluginItem.visible !== false), []);
+    const visiblePlugins = useMemo<IPlugin[]>(() => allPlugins.filter(p => p.visible !== false), []);
 
-    const filteredPluginsList = useMemo(() => {
-        const searchLowerCase = filterSearchText.toLowerCase();
-        const searchResults = visiblePlugins.filter(pluginItem =>
-            pluginItem.name.toLowerCase().includes(searchLowerCase) ||
-            pluginItem.description.toLowerCase().includes(searchLowerCase)
-        );
-
-        if (filterDisplayOption === "show_all") {
-            return searchResults;
+    const filteredPlugins = useMemo<IPlugin[]>(() => {
+        const q = searchText.toLowerCase();
+        const matchesQuery = (p: IPlugin) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
+        const prelim = visiblePlugins.filter(matchesQuery);
+        if (filterOption === "show_all") {
+            return prelim;
         }
+        return prelim.filter(p => (filterOption === "show_enabled" ? !isPluginDisabledById[p.id] : isPluginDisabledById[p.id]));
+    }, [searchText, visiblePlugins, filterOption, isPluginDisabledById]);
 
-        return searchResults.filter(pluginItem => {
-            const disabledStatus = disabledPluginsMap[pluginItem.id];
-            return filterDisplayOption === "show_enabled" ? !disabledStatus : disabledStatus;
-        });
-    }, [filterSearchText, visiblePlugins, filterDisplayOption, disabledPluginsMap]);
-
-    const pluginSections = useMemo(() => {
-        const optionalPlugins = filteredPluginsList.filter(pluginItem => !pluginItem.required).sort((a, b) => a.name.localeCompare(b.name));
-        const requiredPluginsList = filteredPluginsList.filter(pluginItem => pluginItem.required).sort((a, b) => a.name.localeCompare(b.name));
-
+    const sections = useMemo(() => {
+        const compareByName = (a: IPlugin, b: IPlugin): number => {
+            const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true });
+            if (byName !== 0) {
+                return byName;
+            }
+            return a.id.localeCompare(b.id);
+        };
+        const optional = filteredPlugins.filter(p => !p.required).sort(compareByName);
+        const required = filteredPlugins.filter(p => p.required).sort(compareByName);
         return [
             { title: "Filters", items: [] as IPlugin[] },
-            { title: "Plugins", items: optionalPlugins },
-            { title: "Required Plugins", items: requiredPluginsList },
-        ].filter(sectionItem => sectionItem.title === "Filters" || sectionItem.items.length > 0);
-    }, [filteredPluginsList]);
+            { title: "Plugins", items: optional },
+            { title: "Required Plugins", items: required },
+        ].filter(s => s.title === "Filters" || s.items.length > 0);
+    }, [filteredPlugins]);
 
-    const pendingRestartMap = useMemo(
-        () =>
-            Object.keys(restartSourcesMap).reduce((accumulator, key) => {
-                accumulator[key] = true;
-                return accumulator;
-            }, {} as Record<string, boolean>),
-        [restartSourcesMap]
+    const pendingChanges = useMemo<Record<string, boolean>>(
+        () => Object.fromEntries(Object.keys(restartSourcesByPlugin).map(k => [k, true])),
+        [restartSourcesByPlugin]
     );
 
     return {
-        filterText: filterSearchText,
-        setFilterText: setFilterSearchText,
-        filterOption: filterDisplayOption,
+        filterText: searchText,
+        setFilterText: setSearchText,
+        filterOption,
         setFilterOption: handleFilterOptionChange,
-        pendingChanges: pendingRestartMap,
-        sections: pluginSections,
+        pendingChanges,
+        sections,
         handleRestartChange: handleRestartStatusUpdate,
         handlePluginToggle: handlePluginStatusToggle,
-    };
+    } as const;
 };

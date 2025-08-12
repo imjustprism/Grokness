@@ -144,22 +144,29 @@ export default definePlugin({
     category: "utility",
     tags: ["assets", "delete", "files"],
     patches: [
-        Patch.ui({
-            selector: "div.flex.gap-2",
-            filter: (el: HTMLElement) => {
-                const buttons = Array.from(el.querySelectorAll("button"));
-                const hasFilter = buttons.some(b => /filter/i.test(b.textContent ?? ""));
-                const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
-                return hasFilter && hasSort;
-            }
-        })
-            .component(DeleteAllAssetsButton)
-            .parent(el => el)
-            .after(parent => {
-                const buttons = Array.from(parent.querySelectorAll("button"));
-                return buttons.find(b => b.textContent?.includes("Sort")) ?? null;
+        (() => {
+            const patch = Patch.ui({
+                selector: "div.flex.gap-2",
+                filter: (el: HTMLElement) => {
+                    const buttons = Array.from(el.querySelectorAll("button"));
+                    const hasFilter = buttons.some(b => /filter/i.test(b.textContent ?? ""));
+                    const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
+                    return hasFilter && hasSort;
+                }
             })
-            .debounce(50)
-            .build()
+                .component(DeleteAllAssetsButton)
+                .parent(el => el)
+                .after(parent => {
+                    const buttons = Array.from(parent.querySelectorAll("button"));
+                    return buttons.find(b => b.textContent?.includes("Sort")) ?? null;
+                })
+                .debounce(50)
+                .build();
+            return Object.assign(patch, {
+                disconnect: () => {
+                    document.querySelectorAll("#grok-delete-all").forEach(n => n.remove());
+                }
+            });
+        })()
     ]
 });

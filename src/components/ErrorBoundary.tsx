@@ -8,13 +8,23 @@ import { Lucide } from "@components/Lucide";
 import { Logger } from "@utils/logger";
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 
+/**
+ * Props for the ErrorBoundary component
+ */
 interface ErrorBoundaryProps {
+    /** Children elements to render inside the boundary */
     children: ReactNode;
+    /** Optional fallback UI when an error is caught */
     fallback?: ReactNode;
+    /** Optional plugin id to provide context in logs */
     pluginId?: string;
 }
 
+/**
+ * Internal state for ErrorBoundary
+ */
 interface ErrorBoundaryState {
+    /** Whether an error was caught */
     hasError: boolean;
 }
 

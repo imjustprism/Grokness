@@ -11,37 +11,71 @@ import clsx from "clsx";
 import React, { type ElementType, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+/**
+ * Props shape for custom icon components supplied to Button via `icon`
+ */
 type IconProps = {
+    /** Optional class name(s) to apply on the icon */
     className?: string;
+    /** Size of the icon in pixels */
     size?: number;
+    /** Stroke width for line icons, when supported */
     strokeWidth?: number;
 };
 
+/**
+ * Item definition for Button dropdown menus
+ */
 export interface DropdownMenuItem {
+    /** Visual label node */
     label: React.ReactNode;
+    /** Optional Lucide icon to show to the left */
     icon?: LucideIconName;
+    /** Selection handler for the item */
     onSelect?: (event: Event) => void;
+    /** When true, the item is disabled and non-interactive */
     disabled?: boolean;
 }
 
+/**
+ * Props for the Button component
+ */
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    /** Render as a different element/component */
     as?: ElementType;
+    /** Button label/content */
     children?: React.ReactNode;
+    /** Additional class names */
     className?: string;
+    /** Visual style */
     variant?: "outline" | "solid" | "ghost";
+    /** Button size */
     size?: "sm" | "md" | "lg" | "icon";
+    /** Color intent */
     color?: "default" | "danger" | "warning";
+    /** Rounded-full when true; otherwise rounded-xl */
     rounded?: boolean;
+    /** Visual active state */
     isActive?: boolean;
+    /** Show loading spinner and disable interactions */
     loading?: boolean;
+    /** Icon specification: Lucide icon name or custom component */
     icon?: LucideIconName | React.ComponentType<IconProps>;
+    /** Icon size in pixels */
     iconSize?: number;
+    /** Icon placement */
     iconPosition?: "left" | "right";
+    /** Optional tooltip content */
     tooltip?: React.ReactNode;
+    /** Dropdown menu items; when provided, a dropdown-capable button is rendered */
     dropdownItems?: DropdownMenuItem[];
+    /** Dropdown alignment relative to the trigger */
     dropdownAlign?: "start" | "center" | "end";
+    /** When true, rotate the icon on open/close */
     rotateIcon?: boolean;
+    /** Use manual, portal-based dropdown positioning */
     manualDropdown?: boolean;
+    /** Prevent icon color change on hover when true */
     disableIconHover?: boolean;
 }
 

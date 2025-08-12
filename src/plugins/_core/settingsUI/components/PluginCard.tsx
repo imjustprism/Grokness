@@ -5,9 +5,9 @@
  */
 
 import { Button } from "@components/Button";
+import { InputField } from "@components/InputField";
 import { Modal } from "@components/Modal";
 import { Switch } from "@components/Switch";
-import { InputField } from "@plugins/_core/settingsUI/components/InputField";
 import { SliderField } from "@plugins/_core/settingsUI/components/SliderField";
 import { usePluginSettings } from "@plugins/_core/settingsUI/hooks/usePluginSettings";
 import { Logger } from "@utils/logger";

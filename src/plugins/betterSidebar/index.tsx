@@ -120,8 +120,11 @@ function SidebarUserInfo() {
             return;
         }
         const el = containerRef.current;
-        const footer = el?.closest(LOCATORS.SIDEBAR.footer as unknown as string) as HTMLElement | null;
-        if (!el || !footer) {
+        if (!el) {
+            return;
+        }
+        const footer = el.closest(LOCATORS.SIDEBAR.footer as unknown as string) as HTMLElement | null;
+        if (!footer) {
             return;
         }
         const avatarBtn = selectOne<HTMLButtonElement>(AVATAR_BUTTON_SELECTOR, footer);
@@ -137,7 +140,7 @@ function SidebarUserInfo() {
             wrapper.setAttribute("data-grokness-avatar-wrap", "true");
             wrapper.style.display = "flex";
             wrapper.style.alignItems = "center";
-            wrapper.style.gap = "0.5px";
+            wrapper.style.gap = "6px";
         }
         if (el.parentElement !== wrapper) {
             wrapper.appendChild(el);
@@ -163,11 +166,27 @@ export default definePlugin({
     tags: ["sidebar", "user-info"],
     styles,
     patches: [
-        Patch.ui(SIDEBAR_FOOTER_SELECTOR)
-            .component(SidebarUserInfo)
-            .parent(footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer)
-            .after(AVATAR_BUTTON_SELECTOR as unknown as string)
-            .debounce(50)
-            .build(),
+        (() => {
+            const patch = Patch.ui(SIDEBAR_FOOTER_SELECTOR)
+                .component(SidebarUserInfo)
+                .parent(footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer)
+                .after(AVATAR_BUTTON_SELECTOR as unknown as string)
+                .when(footer => !footer.querySelector('[data-grokness-ui="better-sidebar"]'))
+                .debounce(50)
+                .build();
+            return Object.assign(patch, {
+                disconnect: () => {
+                    document.querySelectorAll('[data-grokness-avatar-wrap="true"]').forEach(node => {
+                        const wrap = node as HTMLElement;
+                        const avatar = wrap.querySelector(AVATAR_BUTTON_SELECTOR as unknown as string);
+                        const parent = wrap.parentElement;
+                        if (avatar && parent) {
+                            parent.insertBefore(avatar, wrap);
+                            wrap.remove();
+                        }
+                    });
+                }
+            });
+        })(),
     ],
 });
