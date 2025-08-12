@@ -215,13 +215,13 @@ export const Modal: React.FC<ModalProps> = ({
                 className={clsx(
                     "fixed left-[50%] top-[50%] z-[1001] translate-x-[-50%] translate-y-[-50%] bg-surface-base dark:border dark:border-border-l1 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
                     maxWidth,
-                    "w-full p-4 rounded-3xl border border-border-l1 flex flex-col gap-4 overflow-hidden h-[640px] max-h-[85vh]",
+                    "w-full pl-4 pr-0 py-4 rounded-3xl border border-border-l1 flex flex-col gap-4 overflow-hidden h-[640px] max-h-[85vh]",
                     className
                 )}
                 tabIndex={-1}
                 style={{ pointerEvents: "auto" }}
             >
-                <div className="flex flex-col space-y-1.5 text-center sm:text-left">
+                <div className="flex flex-col space-y-1.5 text-center sm:text-left pr-4">
                     <div className="flex w-full items-start justify-between">
                         <div className="flex-1">
                             {title && (
@@ -242,13 +242,13 @@ export const Modal: React.FC<ModalProps> = ({
                             iconSize={18}
                             onClick={onClose}
                             aria-label="Close dialog"
-                            className="-mt-2 -mr-2 rounded-xl text-secondary hover:text-primary"
+                            className="-mt-2 rounded-xl text-secondary hover:text-primary"
                         />
                     </div>
                 </div>
-                <div className="flex-1 overflow-y-auto pr-3 -mr-3">{children}</div>
+                <div className="flex-1 overflow-y-auto pr-4">{children}</div>
                 {(footer || showCancel) && (
-                    <div className="flex w-full items-center justify-end gap-2 pt-2">
+                    <div className="flex w-full items-center justify-end gap-2 pt-2 pr-4">
                         {showCancel && (
                             <Button
                                 variant="ghost"

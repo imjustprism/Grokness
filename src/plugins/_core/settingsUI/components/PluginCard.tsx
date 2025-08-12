@@ -216,13 +216,13 @@ export const PluginCard: React.FC<PluginCardProps> = ({
             <Modal
                 isOpen={showModal}
                 onClose={() => setShowModal(false)}
-                title={hasSettings ? `${plugin.name} Settings` : `${plugin.name} Info`}
+                title={plugin.name}
                 description={plugin.description}
                 maxWidth="max-w-xl"
                 className="h-[500px] max-h-[75vh]"
             >
-                <div className="space-y-4">
-                    <div>
+                <div className="flex flex-col gap-4 w-full">
+                    <div className="w-full">
                         <h3 className="text-sm font-medium text-primary mb-1">Authors</h3>
                         <p className="text-sm text-secondary">{plugin.authors.map(a => a.name).join(", ")}</p>
                     </div>
@@ -231,10 +231,10 @@ export const PluginCard: React.FC<PluginCardProps> = ({
                             This plugin requires a restart to take effect
                         </div>
                     )}
-                    <div>
+                    <div className="pt-4 mt-2 border-t border-border-l1 w-full">
                         <h3 className="text-sm font-medium text-primary mb-1">Settings</h3>
                         {hasSettings ? (
-                            <div className="mt-2 space-y-4">
+                            <div className="mt-2 space-y-4 w-full">
                                 {sortedOptions.map(([key, opt]) => (
                                     <div key={key}>
                                         {renderSettingControl(key, opt, settings[key])}
