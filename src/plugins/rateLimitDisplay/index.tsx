@@ -12,7 +12,7 @@ import { Devs } from "@utils/constants";
 import { findElement, MutationObserverManager, selectOne } from "@utils/dom";
 import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
-import definePlugin, { definePluginSettings } from "@utils/types";
+import definePlugin, { definePluginSettings, Patch } from "@utils/types";
 import clsx from "clsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -512,26 +512,25 @@ export default definePlugin({
     tags: ["rate-limit", "queries", "usage"],
     styles,
     settings,
-    patches: [{
-        target: QUERY_BAR_SELECTOR,
-        component: RateLimitDisplay,
-        parent: queryBar => {
-            const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
-            if (projectButton) {
-                return projectButton.parentElement;
-            }
-            const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
-            return attachButton?.parentElement ?? null;
-        },
-        insert: {
-            after: parent => {
+    patches: [
+        Patch.ui(QUERY_BAR_SELECTOR)
+            .component(RateLimitDisplay)
+            .parent(queryBar => {
+                const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
+                if (projectButton) {
+                    return projectButton.parentElement;
+                }
+                const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
+                return attachButton?.parentElement ?? null;
+            })
+            .after(parent => {
                 const projectButton = findElement({ ...projectButtonSelector, root: parent });
                 if (projectButton) {
                     return projectButton;
                 }
                 return findElement({ ...attachButtonSelector, root: parent });
-            }
-        },
-        observerDebounce: 50,
-    }]
+            })
+            .debounce(50)
+            .build()
+    ]
 });

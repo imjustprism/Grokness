@@ -10,7 +10,7 @@ import { Devs } from "@utils/constants";
 import { selectOne, wrapElement } from "@utils/dom";
 import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
-import definePlugin from "@utils/types";
+import definePlugin, { Patch } from "@utils/types";
 import clsx from "clsx";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -162,11 +162,12 @@ export default definePlugin({
     category: "appearance",
     tags: ["sidebar", "user-info"],
     styles,
-    patches: [{
-        component: SidebarUserInfo,
-        target: SIDEBAR_FOOTER_SELECTOR,
-        parent: footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer,
-        insert: { after: AVATAR_BUTTON_SELECTOR },
-        observerDebounce: 50,
-    }],
+    patches: [
+        Patch.ui(SIDEBAR_FOOTER_SELECTOR)
+            .component(SidebarUserInfo)
+            .parent(footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer)
+            .after(AVATAR_BUTTON_SELECTOR as unknown as string)
+            .debounce(50)
+            .build(),
+    ],
 });

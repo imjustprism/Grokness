@@ -50,6 +50,27 @@ export class PluginHelper {
     applyUIPatch(pluginId: string, patch: IPluginUIPatch): void {
         const mounts = new Map<HTMLElement, UIMount>();
 
+        const computeMountKey = (): string => {
+            const componentName = (patch.component as unknown as { displayName?: string; name?: string; }).displayName
+                || (patch.component as unknown as { name?: string; }).name
+                || "Component";
+            const targetKey = typeof patch.target === "string"
+                ? patch.target
+                : (patch.target && (patch.target as { selector?: string; }).selector) || "custom";
+            return `${componentName}::${targetKey}`;
+        };
+
+        const hashKey = (input: string): string => {
+            let hash = 2166136261 >>> 0; // FNV-1a 32-bit
+            for (let i = 0; i < input.length; i++) {
+                hash ^= input.charCodeAt(i);
+                hash = Math.imul(hash, 16777619) >>> 0;
+            }
+            return `k${hash.toString(36)}`;
+        };
+
+        const mountKey = hashKey(computeMountKey());
+
         const scan = (): void => {
             const targets = this.findTargets(patch);
 
@@ -74,14 +95,30 @@ export class PluginHelper {
                     continue;
                 }
 
-                const container = document.createElement("div");
-                container.setAttribute("data-grokness-ui", pluginId);
+                let container = parent.querySelector<HTMLElement>(
+                    `[data-grokness-ui="${pluginId}"][data-grokness-ui-key="${mountKey}"]`
+                );
 
                 const refNode = patch.referenceNode?.(parent, t) ?? null;
-                if (refNode && refNode.parentNode === parent) {
-                    parent.insertBefore(container, refNode.nextSibling);
+
+                if (!container) {
+                    container = document.createElement("div");
+                    container.setAttribute("data-grokness-ui", pluginId);
+                    container.setAttribute("data-grokness-ui-key", mountKey);
+                    if (refNode && refNode.parentNode === parent) {
+                        parent.insertBefore(container, refNode.nextSibling);
+                    } else {
+                        parent.appendChild(container);
+                    }
                 } else {
-                    parent.appendChild(container);
+                    const replacement = container.cloneNode(false) as HTMLElement;
+                    if (refNode && refNode.parentNode === parent) {
+                        parent.insertBefore(replacement, refNode.nextSibling);
+                    } else {
+                        parent.insertBefore(replacement, container.nextSibling);
+                    }
+                    container.remove();
+                    container = replacement;
                 }
 
                 const root = createRoot(container);
@@ -101,11 +138,12 @@ export class PluginHelper {
 
         const observer = new MutationObserver(() => {
             if (typeof patch.observerDebounce === "number" && patch.observerDebounce > 0) {
-                if ((observer as unknown as { __t?: number | null; }).__t) {
-                    clearTimeout((observer as unknown as { __t?: number | null; }).__t!);
+                const self = observer as unknown as { __t?: number | null; };
+                if (self.__t) {
+                    clearTimeout(self.__t);
                 }
-                (observer as unknown as { __t?: number | null; }).__t = window.setTimeout(() => {
-                    (observer as unknown as { __t?: number | null; }).__t = null;
+                self.__t = window.setTimeout(() => {
+                    self.__t = null;
                     scan();
                 }, patch.observerDebounce);
             } else {
@@ -138,6 +176,11 @@ export class PluginHelper {
             return;
         }
         for (const active of set) {
+            const self = active.observer as unknown as { __t?: number | null; };
+            if (self.__t) {
+                clearTimeout(self.__t);
+                self.__t = null;
+            }
             active.observer.disconnect();
             for (const { root, container } of active.mounts.values()) {
                 root.unmount();

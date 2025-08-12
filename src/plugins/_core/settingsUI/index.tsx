@@ -11,7 +11,7 @@ import styles from "@plugins/_core/settingsUI/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { selectOne } from "@utils/dom";
 import { LOCATORS } from "@utils/locators";
-import { definePlugin, type IPatch } from "@utils/types";
+import definePlugin, { Patch } from "@utils/types";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -88,11 +88,6 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({ rootEle
     );
 };
 
-const settingsPatch: IPatch = {
-    apply() { },
-    remove() { },
-};
-
 export default definePlugin({
     name: "Settings",
     description: "Adds a settings panel to manage Grokness plugins.",
@@ -103,13 +98,10 @@ export default definePlugin({
     tags: ["settings", "ui", "core"],
     styles,
     patches: [
-        {
-            component: SettingsUIComponent,
-            target: 'div[role="dialog"][data-state="open"]',
-            forEach: true,
-            getTargetParent: el => el,
-            referenceNode: () => null,
-        },
-        settingsPatch,
+        Patch.ui('div[role="dialog"][data-state="open"]')
+            .forEach()
+            .component(SettingsUIComponent)
+            .parent(el => el)
+            .build(),
     ],
 });

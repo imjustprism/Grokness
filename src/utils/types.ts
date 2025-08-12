@@ -92,7 +92,14 @@ export interface IPluginCodePatch {
         match: RegExp;
         replace: string | ((substring: string, ...args: unknown[]) => string);
     };
+    /** Only apply if this returns true */
     predicate?: () => boolean;
+    /** Apply to all matched modules if true; otherwise first match */
+    all?: boolean;
+    /** Treat replacements as a single group; if any fails, skip all */
+    group?: boolean;
+    /** Do not warn if no changes were made */
+    noWarn?: boolean;
 }
 
 export interface IPluginContext {
@@ -437,4 +444,73 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
 
     plugins.push(plugin);
     return plugin;
+}
+
+export class UIPatchBuilder {
+    private spec: IPluginUIPatch;
+
+    private constructor(target: string | ElementFinderConfig) {
+        this.spec = {
+            component: (() => null) as unknown as React.ComponentType<InjectedComponentProps>,
+            target,
+        };
+    }
+
+    static target(target: string | ElementFinderConfig): UIPatchBuilder {
+        return new UIPatchBuilder(target);
+    }
+
+    component(c: React.ComponentType<InjectedComponentProps>): UIPatchBuilder {
+        this.spec.component = c;
+        return this;
+    }
+
+    forEach(): UIPatchBuilder {
+        this.spec.forEach = true;
+        return this;
+    }
+
+    parent(resolver: (found: HTMLElement) => HTMLElement | null): UIPatchBuilder {
+        this.spec.getTargetParent = resolver;
+        return this;
+    }
+
+    append(): UIPatchBuilder {
+        return this;
+    }
+
+    after(ref: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null)): UIPatchBuilder {
+        this.spec.referenceNode = (parent, found) => {
+            if (typeof ref === "function") {
+                return (ref as (p: HTMLElement, f: HTMLElement) => Node | null)(parent, found);
+            }
+            const el = document.querySelector((ref as string)) as Node | null;
+            return el;
+        };
+        return this;
+    }
+
+    when(predicate: (found: HTMLElement) => boolean): UIPatchBuilder {
+        this.spec.predicate = predicate;
+        return this;
+    }
+
+    debounce(ms: number): UIPatchBuilder {
+        this.spec.observerDebounce = ms;
+        return this;
+    }
+
+    build(): IPluginUIPatch {
+        return { ...this.spec };
+    }
+}
+
+export namespace Patch {
+    export function ui(target: string | ElementFinderConfig): UIPatchBuilder {
+        return UIPatchBuilder.target(target);
+    }
+
+    export function codeReplace(find: string | RegExp, match: RegExp, replace: string | ((substring: string, ...args: unknown[]) => string), opts?: Omit<IPluginCodePatch, "find" | "replacement">): IPluginCodePatch {
+        return { find, replacement: { match, replace }, ...opts };
+    }
 }

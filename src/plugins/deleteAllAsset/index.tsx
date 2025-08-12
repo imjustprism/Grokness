@@ -7,7 +7,7 @@
 import { ApiClient, createApiServices, type ListAssetsResponse } from "@api/index";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
-import definePlugin from "@utils/types";
+import definePlugin, { Patch } from "@utils/types";
 import React, { useEffect, useRef, useState } from "react";
 
 const api = ApiClient.fromWindow();
@@ -143,9 +143,8 @@ export default definePlugin({
     authors: [Devs.Prism],
     category: "utility",
     tags: ["assets", "delete", "files"],
-    patches: [{
-        component: DeleteAllAssetsButton,
-        target: {
+    patches: [
+        Patch.ui({
             selector: "div.flex.gap-2",
             filter: (el: HTMLElement) => {
                 const buttons = Array.from(el.querySelectorAll("button"));
@@ -153,15 +152,14 @@ export default definePlugin({
                 const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
                 return hasFilter && hasSort;
             }
-        },
-        parent: el => el,
-        insert: {
-            after: parent => {
+        })
+            .component(DeleteAllAssetsButton)
+            .parent(el => el)
+            .after(parent => {
                 const buttons = Array.from(parent.querySelectorAll("button"));
-                const sortBtn = buttons.find(b => b.textContent?.includes("Sort")) ?? null;
-                return sortBtn;
-            }
-        },
-        observerDebounce: 50,
-    }]
+                return buttons.find(b => b.textContent?.includes("Sort")) ?? null;
+            })
+            .debounce(50)
+            .build()
+    ]
 });
