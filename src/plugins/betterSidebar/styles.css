@@ -1,12 +1,9 @@
 .sidebar-user-info {
-    position: absolute;
-    bottom: 0.75rem;
-    left: 3rem;
-    z-index: 1;
-    display: flex;
+    display: inline-flex;
     flex-direction: column;
     justify-content: center;
     height: 40px;
+    margin-left: 0.5rem;
     pointer-events: none;
     opacity: 1;
     transform: translateX(0);

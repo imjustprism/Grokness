@@ -1,0 +1,35 @@
+.rate-limit-display-button:not([class*="text-red-400"]) > svg {
+    color: white !important;
+}
+
+.rate-limit-display-button > svg {
+    stroke-width: 2 !important;
+}
+
+.rate-limit-separator {
+    color: #3a3c3e !important;
+}
+
+.rate-limit-animate {
+    display: inline-block;
+    transition: transform 180ms ease, opacity 180ms ease;
+    transform-origin: center;
+    animation: rate-limit-pop 240ms ease;
+}
+
+@keyframes rate-limit-pop {
+    0% {
+        transform: translateY(-2px);
+        opacity: 0.3;
+    }
+
+    60% {
+        transform: translateY(0) scale(1.02);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}

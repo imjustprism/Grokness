@@ -70,7 +70,6 @@ const onKey = (e: KeyboardEvent): void => {
 
 export default definePlugin({
     name: "Hotkey Tweaks",
-    id: "enter-key-swap",
     description: "Customizes the keyboard shortcuts for sending messages and creating new lines.",
     authors: [Devs.Prism],
     category: "chat",

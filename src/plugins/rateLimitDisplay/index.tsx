@@ -7,12 +7,13 @@
 import { ApiClient, createApiServices, type RateLimitData } from "@api/index";
 import { Button } from "@components/Button";
 import { Lucide } from "@components/Lucide";
+import styles from "@plugins/rateLimitDisplay/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { findElement, MutationObserverManager, selectOne } from "@utils/dom";
 import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
-import { ui } from "@utils/pluginDsl";
-import { definePlugin, definePluginSettings } from "@utils/types";
+import definePlugin, { definePluginSettings } from "@utils/types";
+import clsx from "clsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const logger = new Logger("RateLimitDisplay", "#a6d189");
@@ -193,6 +194,37 @@ function RateLimitDisplay() {
     const [rateLimit, setRateLimit] = useState<ProcessedRateLimit | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [countdown, setCountdown] = useState<number | null>(null);
+    const [animate, setAnimate] = useState(false);
+    const prevValueRef = useRef<number | null>(null);
+    const animTimerRef = useRef<number | null>(null);
+
+    const numericValue: number | null = rateLimit && !("error" in rateLimit)
+        ? (rateLimit.isBoth ? (rateLimit.highRemaining + (rateLimit.lowRemaining ?? 0)) : rateLimit.highRemaining)
+        : null;
+
+    useEffect(() => {
+        if (numericValue == null) {
+            return;
+        }
+        const prev = prevValueRef.current;
+        if (prev != null && numericValue < prev) {
+            setAnimate(true);
+            if (animTimerRef.current) {
+                clearTimeout(animTimerRef.current);
+            }
+            animTimerRef.current = window.setTimeout(() => {
+                setAnimate(false);
+                animTimerRef.current = null;
+            }, 260);
+        }
+        prevValueRef.current = numericValue;
+        return () => {
+            if (animTimerRef.current) {
+                clearTimeout(animTimerRef.current);
+                animTimerRef.current = null;
+            }
+        };
+    }, [numericValue]);
 
     const fetchNow = useCallback(async (opts?: { background?: boolean; }) => {
         if (!opts?.background) {
@@ -321,6 +353,74 @@ function RateLimitDisplay() {
         };
     }, [fetchNow]);
 
+    useEffect(() => {
+        const trigger = () => window.setTimeout(() => fetchNow({ background: true }), 1200);
+        const onDocSubmit = (e: Event) => {
+            const target = e.target as HTMLElement | null;
+            if (!target) {
+                return;
+            }
+            const withinQuery = !!target.closest(LOCATORS.QUERY_BAR.root as unknown as string);
+            if (withinQuery) {
+                trigger();
+            }
+        };
+        const onDocKeyDown = (ev: KeyboardEvent) => {
+            if (ev.isComposing) {
+                return;
+            }
+            if (ev.key !== "Enter" || ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey) {
+                return;
+            }
+            const t = ev.target as HTMLElement | null;
+            if (!t) {
+                return;
+            }
+            if (t.closest(".tiptap.ProseMirror")) {
+                trigger();
+            }
+        };
+        document.addEventListener("submit", onDocSubmit, true);
+        document.addEventListener("keydown", onDocKeyDown, true);
+        return () => {
+            document.removeEventListener("submit", onDocSubmit, true);
+            document.removeEventListener("keydown", onDocKeyDown, true);
+        };
+    }, [fetchNow]);
+
+    useEffect(() => {
+        const bubbleSel = (LOCATORS.CHAT.messageBubble as { selector: string; }).selector;
+        let debounceId: number | null = null;
+        const schedule = () => {
+            if (debounceId != null) {
+                clearTimeout(debounceId);
+            }
+            debounceId = window.setTimeout(() => {
+                fetchNow({ background: true });
+                debounceId = null;
+            }, 1400);
+        };
+        const mo = new MutationObserver(muts => {
+            for (const m of muts) {
+                if (m.addedNodes && m.addedNodes.length > 0) {
+                    for (const n of Array.from(m.addedNodes)) {
+                        if (n instanceof HTMLElement && (n.matches(bubbleSel) || n.querySelector(bubbleSel))) {
+                            schedule();
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        mo.observe(document.body, { childList: true, subtree: true });
+        return () => {
+            if (debounceId != null) {
+                clearTimeout(debounceId);
+            }
+            mo.disconnect();
+        };
+    }, [fetchNow]);
+
     const formatCountdown = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
@@ -365,13 +465,13 @@ function RateLimitDisplay() {
     const content = isLimited ? (
         formatCountdown(countdown ?? waitTimeSeconds)
     ) : isBoth ? (
-        <span className="flex items-center justify-center">
-            {highRemaining}
+        <span className={clsx("flex items-center justify-center")}>
+            <span className={clsx(animate && "rate-limit-animate")}>{highRemaining}</span>
             <Lucide name="Dot" size={16} className="rate-limit-separator mx-px" />
-            {lowRemaining ?? 0}
+            <span className={clsx(animate && "rate-limit-animate")}>{lowRemaining ?? 0}</span>
         </span>
     ) : (
-        highRemaining.toString()
+        <span className={clsx(animate && "rate-limit-animate")}>{highRemaining}</span>
     );
 
     const tooltip = isLoading
@@ -404,46 +504,34 @@ function RateLimitDisplay() {
 const projectButtonSelector = LOCATORS.QUERY_BAR.projectButton as { selector: string; svgPartialD: string; };
 const attachButtonSelector = LOCATORS.QUERY_BAR.attachButton as { selector: string; };
 
-const patch = ui({
-    target: QUERY_BAR_SELECTOR,
-    component: RateLimitDisplay,
-    parent: queryBar => {
-        const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
-        if (projectButton) {
-            return projectButton.parentElement;
-        }
-        const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
-        return attachButton?.parentElement ?? null;
-    },
-    insert: {
-        after: parent => {
-            const projectButton = findElement({ ...projectButtonSelector, root: parent });
-            if (projectButton) {
-                return projectButton;
-            }
-            return findElement({ ...attachButtonSelector, root: parent });
-        }
-    },
-    observerDebounce: 50,
-});
-
 export default definePlugin({
     name: "Rate Limit Display",
     description: "Displays the remaining queries for the current model in the chat bar.",
     authors: [Devs.blankspeaker, Devs.CursedAtom, Devs.Prism],
     category: "chat",
     tags: ["rate-limit", "queries", "usage"],
-    styles: `
-        .rate-limit-display-button:not([class*="text-red-400"]) > svg {
-            color: white !important;
-        }
-        .rate-limit-display-button > svg {
-            stroke-width: 2 !important;
-        }
-        .rate-limit-separator {
-            color: #3a3c3e !important;
-        }
-    `,
+    styles,
     settings,
-    patches: [patch]
+    patches: [{
+        target: QUERY_BAR_SELECTOR,
+        component: RateLimitDisplay,
+        parent: queryBar => {
+            const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
+            if (projectButton) {
+                return projectButton.parentElement;
+            }
+            const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
+            return attachButton?.parentElement ?? null;
+        },
+        insert: {
+            after: parent => {
+                const projectButton = findElement({ ...projectButtonSelector, root: parent });
+                if (projectButton) {
+                    return projectButton;
+                }
+                return findElement({ ...attachButtonSelector, root: parent });
+            }
+        },
+        observerDebounce: 50,
+    }]
 });

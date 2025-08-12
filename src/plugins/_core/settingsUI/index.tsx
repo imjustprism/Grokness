@@ -94,7 +94,7 @@ const settingsPatch: IPatch = {
 };
 
 export default definePlugin({
-    name: "Settings UI",
+    name: "Settings",
     description: "Adds a settings panel to manage Grokness plugins.",
     authors: [Devs.Prism],
     required: true,

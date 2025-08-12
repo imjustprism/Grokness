@@ -7,8 +7,7 @@
 import { ApiClient, createApiServices, type ListAssetsResponse } from "@api/index";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
-import { ui } from "@utils/pluginDsl";
-import { definePlugin } from "@utils/types";
+import definePlugin from "@utils/types";
 import React, { useEffect, useRef, useState } from "react";
 
 const api = ApiClient.fromWindow();
@@ -138,33 +137,31 @@ const DeleteAllAssetsButton: React.FC = () => {
     );
 };
 
-const patch = ui({
-    component: DeleteAllAssetsButton,
-    target: {
-        selector: "div.flex.gap-2",
-        filter: (el: HTMLElement) => {
-            const buttons = Array.from(el.querySelectorAll("button"));
-            const hasFilter = buttons.some(b => /filter/i.test(b.textContent ?? ""));
-            const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
-            return hasFilter && hasSort;
-        }
-    },
-    parent: el => el,
-    insert: {
-        after: parent => {
-            const buttons = Array.from(parent.querySelectorAll("button"));
-            const sortBtn = buttons.find(b => b.textContent?.includes("Sort")) ?? null;
-            return sortBtn;
-        }
-    },
-    observerDebounce: 50,
-});
-
 export default definePlugin({
     name: "Delete All Assets",
     description: "Adds a button to the files to delete all uploaded assets.",
     authors: [Devs.Prism],
     category: "utility",
     tags: ["assets", "delete", "files"],
-    patches: [patch]
+    patches: [{
+        component: DeleteAllAssetsButton,
+        target: {
+            selector: "div.flex.gap-2",
+            filter: (el: HTMLElement) => {
+                const buttons = Array.from(el.querySelectorAll("button"));
+                const hasFilter = buttons.some(b => /filter/i.test(b.textContent ?? ""));
+                const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
+                return hasFilter && hasSort;
+            }
+        },
+        parent: el => el,
+        insert: {
+            after: parent => {
+                const buttons = Array.from(parent.querySelectorAll("button"));
+                const sortBtn = buttons.find(b => b.textContent?.includes("Sort")) ?? null;
+                return sortBtn;
+            }
+        },
+        observerDebounce: 50,
+    }]
 });

@@ -7,12 +7,12 @@
 import { ApiClient, createApiServices, isActiveSubscription, normalizeTier, Tier } from "@api/index";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { selectOne } from "@utils/dom";
+import { selectOne, wrapElement } from "@utils/dom";
 import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
-import { defineUIPlugin, ui } from "@utils/pluginDsl";
+import definePlugin from "@utils/types";
 import clsx from "clsx";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const logger = new Logger("BetterSidebar", "#f2d5cf");
 
@@ -110,33 +110,63 @@ function useCollapsed(): boolean {
 function SidebarUserInfo() {
     const [data, setData] = useState<{ name: string; plan: string; } | null>(null);
     const collapsed = useCollapsed();
+    const containerRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
         getUserPlan().then(setData);
     }, []);
+
+    useEffect(() => {
+        if (!data) {
+            return;
+        }
+        const el = containerRef.current;
+        const footer = el?.closest(LOCATORS.SIDEBAR.footer as unknown as string) as HTMLElement | null;
+        if (!el || !footer) {
+            return;
+        }
+        const avatarBtn = selectOne<HTMLButtonElement>(AVATAR_BUTTON_SELECTOR, footer);
+        if (!avatarBtn) {
+            return;
+        }
+        let wrapper = avatarBtn.parentElement as HTMLElement | null;
+        if (!wrapper) {
+            return;
+        }
+        if (!wrapper.hasAttribute("data-grokness-avatar-wrap")) {
+            wrapper = wrapElement(avatarBtn, "div");
+            wrapper.setAttribute("data-grokness-avatar-wrap", "true");
+            wrapper.style.display = "flex";
+            wrapper.style.alignItems = "center";
+            wrapper.style.gap = "0.5px";
+        }
+        if (el.parentElement !== wrapper) {
+            wrapper.appendChild(el);
+        }
+    }, [data]);
     if (!data) {
         return null;
     }
+
     return (
-        <div className={clsx("sidebar-user-info", collapsed && "is-collapsed")}
-        >
+        <div ref={containerRef} className={clsx("sidebar-user-info", collapsed && "is-collapsed")}>
             <div className="display-name">{data.name}</div>
             <div className="plan text-secondary truncate">{data.plan}</div>
         </div>
     );
 }
 
-export default defineUIPlugin({
+export default definePlugin({
     name: "Better Sidebar",
     description: "Enhances the sidebar by adding user information.",
     authors: [Devs.Prism],
     category: "appearance",
     tags: ["sidebar", "user-info"],
     styles,
-    ui: ui({
+    patches: [{
         component: SidebarUserInfo,
         target: SIDEBAR_FOOTER_SELECTOR,
         parent: footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer,
         insert: { after: AVATAR_BUTTON_SELECTOR },
         observerDebounce: 50,
-    })
+    }],
 });

@@ -5,7 +5,7 @@
  */
 
 import { type IDeveloper } from "@utils/constants";
-import { type ElementFinderConfig } from "@utils/dom";
+import { type AnySelector, type ElementFinderConfig, selectOne } from "@utils/dom";
 import { PluginHelper } from "@utils/pluginHelper";
 import React from "react";
 
@@ -26,6 +26,15 @@ export type PluginOptionType =
     | "boolean"
     | "select"
     | "custom";
+
+export enum OptionType {
+    STRING = "string",
+    NUMBER = "number",
+    SLIDER = "slider",
+    BOOLEAN = "boolean",
+    SELECT = "select",
+    CUSTOM = "custom",
+}
 
 export interface PluginOptionBase {
     type: PluginOptionType;
@@ -99,7 +108,8 @@ export interface IPluginDefinition {
     hidden?: boolean;
     options?: PluginOptions;
     settings?: ISettingsManager;
-    patches?: (IPatch | IPluginUIPatch | IPluginCodePatch)[];
+    patches?: (IPatch | IPluginUIPatch | IPluginCodePatch | SimpleUIPatch)[];
+    ui?: SimpleUIPatch | SimpleUIPatch[] | IPluginUIPatch | IPluginUIPatch[];
     start?(context: IPluginContext): void;
     stop?(context: IPluginContext): void;
     onLoad?(context: IPluginContext): void;
@@ -146,6 +156,74 @@ export function definePluginSettings<T extends PluginOptions>(definition: T): IS
         store: {} as { [K in keyof T]: InferOptionType<T[K]> },
     };
 }
+
+type ParentSpec = AnySelector | ((foundElement: HTMLElement) => HTMLElement | null) | undefined;
+
+type InsertSpec =
+    | { append: true; }
+    | { after: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null); };
+
+export type SimpleUIPatch = {
+    target: AnySelector;
+    component: React.ComponentType<{ rootElement?: HTMLElement; }> | (() => React.ReactElement | null);
+    each?: boolean;
+    parent?: ParentSpec;
+    insert?: InsertSpec;
+    predicate?: (el: HTMLElement) => boolean;
+    observerDebounce?: boolean | number;
+};
+
+function resolveParent(parent: ParentSpec, found: HTMLElement): HTMLElement | null {
+    if (!parent) {
+        return found.parentElement;
+    }
+    if (typeof parent === "string" || typeof parent === "object") {
+        return selectOne(parent as AnySelector, found) ?? found;
+    }
+    return parent(found);
+}
+
+function resolveReference(
+    insert: InsertSpec | undefined,
+    parent: HTMLElement,
+    found: HTMLElement
+): Node | null {
+    if (!insert) {
+        return null;
+    }
+    if ("append" in insert && insert.append) {
+        return parent.lastChild;
+    }
+    if ("after" in insert) {
+        const ref = insert.after;
+        if (typeof ref === "string" || typeof ref === "object") {
+            const el = selectOne(ref as AnySelector, parent);
+            return el ?? null;
+        }
+        return ref(parent, found);
+    }
+    return null;
+}
+
+export function ui(def: SimpleUIPatch): IPluginUIPatch {
+    return {
+        component: def.component as React.ComponentType<InjectedComponentProps>,
+        target: def.target as unknown as string | ElementFinderConfig,
+        forEach: !!def.each,
+        getTargetParent: (found: HTMLElement) => resolveParent(def.parent, found),
+        referenceNode: (parent: HTMLElement, found: HTMLElement) => {
+            const ref = resolveReference(def.insert, parent, found);
+            if (!ref) {
+                return null;
+            }
+            return ref;
+        },
+        predicate: def.predicate,
+        observerDebounce: def.observerDebounce,
+    } as IPluginUIPatch;
+}
+
+export default definePlugin;
 
 export function getPluginSettings(pluginId: string): Record<string, unknown> {
     if (!settingsStore.has(pluginId)) {
@@ -275,6 +353,24 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
         }) as StoreType;
     }
 
+    const toArray = <T,>(v?: T | T[]): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+    const convertToUIPatch = (p: SimpleUIPatch | IPluginUIPatch): IPluginUIPatch => {
+        const candidate = p as IPluginUIPatch;
+        if (typeof candidate.getTargetParent === "function" || typeof candidate.referenceNode === "function") {
+            return candidate;
+        }
+        return ui(p as SimpleUIPatch);
+    };
+
+    const uiPatches = toArray(def.ui).map(convertToUIPatch);
+    const normalizedPatches = toArray(def.patches).map(p => {
+        if (p && typeof (p as any) === "object" && (p as any).component) {
+            return convertToUIPatch(p as unknown as SimpleUIPatch | IPluginUIPatch);
+        }
+        return p as IPluginCodePatch | IPatch;
+    });
+    const allPatches = [...normalizedPatches, ...uiPatches];
+
     const plugin: IPlugin = {
         id,
         name: def.name,
@@ -290,13 +386,13 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
         hidden: !!def.hidden,
         options: def.settings?.definition || def.options || {},
         styles: def.styles,
-        patches: def.patches || [],
+        patches: allPatches,
         start: ctx => {
             def.onLoad?.(ctx);
             if (def.styles) {
                 pluginHelper.applyStyles(id, def.styles);
             }
-            def.patches?.forEach(patch => {
+            plugin.patches?.forEach(patch => {
                 if ("component" in patch) {
                     const uiPatch = patch as IPluginUIPatch;
                     if (uiPatch.forEach) {
@@ -314,7 +410,7 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
             if (def.styles) {
                 pluginHelper.removeStyles(id);
             }
-            def.patches?.forEach(patch => {
+            plugin.patches?.forEach(patch => {
                 if ("component" in patch) {
                     patch.disconnect?.();
                     const uiPatch = patch as IPluginUIPatch;
