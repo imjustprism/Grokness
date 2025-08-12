@@ -8,6 +8,7 @@ import { Button } from "@components/Button";
 import { Modal } from "@components/Modal";
 import { Switch } from "@components/Switch";
 import { InputField } from "@plugins/_core/settingsUI/components/InputField";
+import { SliderField } from "@plugins/_core/settingsUI/components/SliderField";
 import { usePluginSettings } from "@plugins/_core/settingsUI/hooks/usePluginSettings";
 import { Logger } from "@utils/logger";
 import type { InferOptionType, IPlugin, PluginOptionBase, PluginOptions } from "@utils/types";
@@ -47,7 +48,7 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     const hasSettings = Object.keys(plugin.options).length > 0;
 
     const sortedOptions = useMemo(() => {
-        const typeOrder: Record<string, number> = { select: 0, string: 1, number: 2, custom: 3, boolean: 4 };
+        const typeOrder: Record<string, number> = { select: 0, string: 1, number: 2, slider: 3, custom: 4, boolean: 5 };
         return Object.entries(plugin.options).sort(([, a], [, b]) => {
             const orderA = typeOrder[a.type] ?? 99;
             const orderB = typeOrder[b.type] ?? 99;
@@ -120,6 +121,9 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         handleSettingChange(key as string, value);
     }, [handleSettingChange]);
 
+    type SliderOption = PluginOptionBase & { type: "slider"; min?: number; max?: number; step?: number; suffix?: string; };
+    const isSliderOption = (opt: PluginOptionBase): opt is SliderOption => opt.type === "slider";
+
     const renderSettingControl = (key: string, option: PluginOptionBase, currentValue: unknown) => {
         const labelId = `setting-label-${plugin.id}-${key}`;
 
@@ -139,30 +143,46 @@ export const PluginCard: React.FC<PluginCardProps> = ({
             );
         }
 
-        if (option.type === "string" || option.type === "number" || option.type === "select") {
-            const maxVal = option.type === "number" && typeof option.max === "number" ? option.max : undefined;
+        if (option.type === "string" || option.type === "number" || option.type === "select" || option.type === "slider") {
+            const maxVal = option.type === "number" && typeof (option as { max?: number; }).max === "number" ? (option as { max?: number; }).max : undefined;
             return (
                 <div className="flex flex-col gap-2">
                     <div className="flex flex-col flex-1">
                         <label id={labelId} className="text-sm font-medium text-primary">{option.displayName || key}</label>
                         {option.description && <p className="text-xs text-secondary mt-1">{option.description}</p>}
                     </div>
-                    <InputField
-                        type={option.type === "string" ? "text" : option.type}
-                        value={currentValue as string | number}
-                        onChange={value => {
-                            if (option.type === "number") {
-                                let newValue = typeof value === "string" ? parseInt(value, 10) || 0 : value;
-                                if (maxVal !== undefined && newValue > maxVal) {
-                                    newValue = maxVal;
-                                }
-                                handleSettingUpdate(key, newValue);
-                            } else {
-                                handleSettingUpdate(key, value as string);
-                            }
-                        }}
-                        options={option.options?.map(opt => ({ label: opt.label, value: opt.value as string })) ?? []}
-                    />
+                    {isSliderOption(option) ? (
+                        <SliderField
+                            value={(currentValue as number) ?? 0}
+                            min={typeof option.min === "number" ? option.min : 0}
+                            max={typeof option.max === "number" ? option.max : 100}
+                            step={typeof option.step === "number" ? option.step : 1}
+                            valueSuffix={typeof option.suffix === "string" ? option.suffix : undefined}
+                            onChange={val => handleSettingUpdate(key, val)}
+                            ariaLabel={labelId}
+                        />
+                    ) : (() => {
+                        const inputType: "text" | "number" | "select" =
+                            option.type === "string" ? "text" : (option.type as "number" | "select");
+                        return (
+                            <InputField
+                                type={inputType}
+                                value={currentValue as string | number}
+                                onChange={value => {
+                                    if (option.type === "number") {
+                                        let newValue = typeof value === "string" ? parseInt(value, 10) || 0 : value;
+                                        if (maxVal !== undefined && newValue > maxVal) {
+                                            newValue = maxVal;
+                                        }
+                                        handleSettingUpdate(key, newValue);
+                                    } else {
+                                        handleSettingUpdate(key, value as string);
+                                    }
+                                }}
+                                options={option.options?.map(opt => ({ label: opt.label, value: opt.value as string })) ?? []}
+                            />
+                        );
+                    })()}
                 </div>
             );
         }

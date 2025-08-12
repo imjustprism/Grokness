@@ -22,6 +22,7 @@ export enum PluginCategory {
 export type PluginOptionType =
     | "string"
     | "number"
+    | "slider"
     | "boolean"
     | "select"
     | "custom";
@@ -39,7 +40,7 @@ export type PluginOptions = Record<string, PluginOptionBase>;
 
 export type InferOptionType<O extends PluginOptionBase> =
     O["type"] extends "boolean" ? boolean :
-    O["type"] extends "number" ? number :
+    O["type"] extends "number" | "slider" ? number :
     O["type"] extends "string" ? string :
     O["type"] extends "select" ? O["options"] extends readonly { value: infer V; }[] ? V : unknown :
     unknown;
@@ -225,7 +226,7 @@ export function initializePluginSettings(pluginId: string, options: PluginOption
             const expectedType = option.type;
             const ok =
                 (expectedType === "boolean" && typeof stored === "boolean") ||
-                (expectedType === "number" && typeof stored === "number") ||
+                ((expectedType === "number" || expectedType === "slider") && typeof stored === "number") ||
                 (expectedType === "string" && typeof stored === "string") ||
                 (expectedType === "select" && option.options?.some(o => o.value === stored));
 
