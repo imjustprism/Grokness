@@ -13,12 +13,14 @@ const logger = new Logger("StreamerMode", "#f2d5cf");
 
 const settings = definePluginSettings({
     blurAmount: {
-        type: "number",
-        displayName: "Blur Amount (pixels)",
+        type: "slider",
+        displayName: "Blur Amount",
         description: "Sets the strength of the blur effect in pixels.",
         default: 4,
         min: 1,
         max: 20,
+        step: 1,
+        suffix: "px",
     },
     blurUsername: {
         type: "boolean",
@@ -56,6 +58,12 @@ const settings = definePluginSettings({
         description: "Blur file names in the files section.",
         default: true,
     },
+    blurUid: {
+        type: "boolean",
+        displayName: "Blur UID",
+        description: "Blur your account UID in the settings page footer.",
+        default: true,
+    },
 });
 
 let off: (() => void) | null = null;
@@ -72,6 +80,7 @@ function apply() {
         html.classList.toggle("blur-chat-titles", cfg.blurChatTitles);
         html.classList.toggle("blur-task-titles", cfg.blurTaskTitles);
         html.classList.toggle("blur-file-names", cfg.blurFileNames);
+        html.classList.toggle("blur-uid", cfg.blurUid);
     } catch (e) {
         logger.error("update failed:", e);
     }
@@ -101,7 +110,8 @@ export default definePlugin({
             "blur-project-titles",
             "blur-chat-titles",
             "blur-task-titles",
-            "blur-file-names"
+            "blur-file-names",
+            "blur-uid"
         );
         off?.();
         off = null;

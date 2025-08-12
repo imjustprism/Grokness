@@ -7,9 +7,7 @@ html.streamer-mode-active.blur-username .p-1.min-w-0.text-sm .text-sm.font-mediu
 }
 
 /* Email in settings */
-html.streamer-mode-active.blur-email
-    .p-1.min-w-0.text-sm
-    .text-secondary.truncate {
+html.streamer-mode-active.blur-email .p-1.min-w-0.text-sm .text-secondary.truncate {
     filter: blur(var(--grokness-blur-amount, 4px)) !important;
     -webkit-filter: blur(var(--grokness-blur-amount, 4px)) !important;
 }
@@ -41,22 +39,16 @@ html.streamer-mode-active.blur-file-names a[href^="/files?file="] > div > span.f
 
 /* --- Parent container overflow fixes --- */
 
-html.streamer-mode-active.blur-project-titles
-    li:has(a[href="/project"])
-    + div
-    a[href^="/project/"],
-html.streamer-mode-active.blur-chat-titles
-    li:has(div[aria-label="History"])
-    + div
-    a[href^="/chat/"],
-html.streamer-mode-active.blur-chat-titles
-    li:has(div[aria-label="Pinned"])
-    + div
-    a[href^="/chat/"],
-html.streamer-mode-active.blur-task-titles
-    li:has(a[href="/tasks"])
-    + div
-    a[href^="/chat/"],
+html.streamer-mode-active.blur-project-titles li:has(a[href="/project"]) + div a[href^="/project/"],
+html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="History"]) + div a[href^="/chat/"],
+html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="Pinned"]) + div a[href^="/chat/"],
+html.streamer-mode-active.blur-task-titles li:has(a[href="/tasks"]) + div a[href^="/chat/"],
 html.streamer-mode-active.blur-file-names a[href^="/files?file="] {
     overflow: visible !important;
+}
+
+/* UID at bottom of settings page */
+html.streamer-mode-active.blur-uid .mt-auto > .text-xs.flex.flex-row.gap-1.p-3.text-secondary.opacity-30 {
+    filter: blur(var(--grokness-blur-amount, 4px)) !important;
+    -webkit-filter: blur(var(--grokness-blur-amount, 4px)) !important;
 }
