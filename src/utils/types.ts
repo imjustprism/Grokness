@@ -70,12 +70,19 @@ export interface IPatch {
 }
 
 export interface IPluginUIPatch extends IPatch {
+    /** React component to render; receives the matched root element */
     component: React.ComponentType<InjectedComponentProps>;
+    /** Target to mount under: CSS selector string or strong DOM finder config */
     target: string | ElementFinderConfig;
+    /** If true, inject for every match; otherwise only the first match */
     forEach?: boolean;
+    /** Resolve the actual parent to mount into based on the found element */
     getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
+    /** Resolve an insertion reference node to mount after, if provided */
     referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
+    /** Debounce observation callbacks; false disables debounce */
     observerDebounce?: boolean | number;
+    /** Optional predicate filter for target elements */
     predicate?: (foundElement: HTMLElement) => boolean;
 }
 

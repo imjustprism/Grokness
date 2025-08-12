@@ -4,20 +4,29 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/**
+ * A union of DOM node roots that support query selection.
+ */
 export type NodeRoot = ParentNode | Document | DocumentFragment | Element | null;
 
+/**
+ * A structured selector configuration used by DOM helpers to find elements robustly.
+ */
 export type ElementFinderConfig = {
-    selector: string;
-    root?: NodeRoot;
-    filter?: (el: HTMLElement) => boolean;
-    classContains?: string[];
-    svgPartialD?: string;
-    ariaLabel?: string | RegExp;
-    role?: string;
-    textIncludes?: string;
-    textMatches?: RegExp;
+    readonly selector: string;
+    readonly root?: NodeRoot;
+    readonly filter?: (el: HTMLElement) => boolean;
+    readonly classContains?: readonly string[];
+    readonly svgPartialD?: string;
+    readonly ariaLabel?: string | RegExp;
+    readonly role?: string;
+    readonly textIncludes?: string;
+    readonly textMatches?: RegExp;
 };
 
+/**
+ * Safe wrapper around querySelector with explicit typing and sensible defaults.
+ */
 export function querySelector<T extends Element = HTMLElement>(
     selector: string,
     root?: NodeRoot
@@ -26,6 +35,9 @@ export function querySelector<T extends Element = HTMLElement>(
     return (r.querySelector(selector) as T | null) ?? null;
 }
 
+/**
+ * Safe wrapper around querySelectorAll with explicit typing.
+ */
 export function querySelectorAll<T extends Element = HTMLElement>(
     selector: string,
     root?: NodeRoot
@@ -34,7 +46,10 @@ export function querySelectorAll<T extends Element = HTMLElement>(
     return Array.from(r.querySelectorAll(selector)) as T[];
 }
 
-export function elementMatchesAllClasses(el: Element, classes: string[] | undefined): boolean {
+/**
+ * Returns true if the element contains all of the given class names.
+ */
+export function elementMatchesAllClasses(el: Element, classes: readonly string[] | undefined): boolean {
     if (!classes || classes.length === 0) {
         return true;
     }
@@ -42,6 +57,9 @@ export function elementMatchesAllClasses(el: Element, classes: string[] | undefi
     return classes.every(c => cl.contains(c));
 }
 
+/**
+ * Returns true if the element contains an <svg><path d=.../> whose d attribute includes the given string.
+ */
 export function elementHasSvgPathWithD(el: Element, includesD?: string): boolean {
     if (!includesD) {
         return true;
@@ -80,6 +98,9 @@ function elementTextMatches(el: Element, textIncludes?: string, textMatches?: Re
     return true;
 }
 
+/**
+ * Returns true if the given element satisfies all conditions in the finder configuration.
+ */
 export function matchElementByConfig(el: HTMLElement, cfg: ElementFinderConfig): boolean {
     if (!elementMatchesAllClasses(el, cfg.classContains)) {
         return false;
@@ -102,17 +123,26 @@ export function matchElementByConfig(el: HTMLElement, cfg: ElementFinderConfig):
     return true;
 }
 
+/**
+ * Finds all elements matching the given finder configuration.
+ */
 export function findElementsByConfig(cfg: ElementFinderConfig): HTMLElement[] {
     const root = (cfg.root ?? document) as ParentNode;
     const candidates = querySelectorAll<HTMLElement>(cfg.selector, root);
     return candidates.filter(el => matchElementByConfig(el, cfg));
 }
 
+/**
+ * Finds the first element matching the finder configuration.
+ */
 export function findElement(cfg: ElementFinderConfig): HTMLElement | null {
     const all = findElementsByConfig(cfg);
     return all.length ? all[0]! : null;
 }
 
+/**
+ * Waits for an element matching the configuration to appear under the configured root.
+ */
 export async function waitForElementByConfig(
     cfg: ElementFinderConfig & { timeoutMs?: number; }
 ): Promise<HTMLElement> {
@@ -144,8 +174,14 @@ export async function waitForElementByConfig(
     });
 }
 
+/**
+ * A flexible selector accepting either a CSS selector string or an ElementFinderConfig.
+ */
 export type AnySelector = string | ElementFinderConfig;
 
+/**
+ * Finds all elements for the given selector under an optional root.
+ */
 export function selectAll<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T[] {
     if (typeof sel === "string") {
         return querySelectorAll<T>(sel, root);
@@ -153,6 +189,9 @@ export function selectAll<T extends HTMLElement = HTMLElement>(sel: AnySelector,
     return findElementsByConfig({ ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root }) as unknown as T[];
 }
 
+/**
+ * Finds the first element for the given selector under an optional root.
+ */
 export function selectOne<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T | null {
     if (typeof sel === "string") {
         return querySelector<T>(sel, root);
@@ -160,6 +199,9 @@ export function selectOne<T extends HTMLElement = HTMLElement>(sel: AnySelector,
     return findElement({ ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root }) as unknown as T | null;
 }
 
+/**
+ * Waits for the first element matching the selector under an optional root.
+ */
 export async function waitFor<T extends HTMLElement = HTMLElement>(sel: AnySelector, opts?: { timeoutMs?: number; root?: NodeRoot; }): Promise<T> {
     if (typeof sel === "string") {
         const cfg: ElementFinderConfig = { selector: sel, root: opts?.root };
@@ -169,6 +211,9 @@ export async function waitFor<T extends HTMLElement = HTMLElement>(sel: AnySelec
     return waitForElementByConfig(cfg) as Promise<T>;
 }
 
+/**
+ * Utility to create debounced mutation observers with a simple API.
+ */
 export class MutationObserverManager {
     createDebouncedObserver(args: {
         target: Node;
@@ -199,6 +244,78 @@ export class MutationObserverManager {
         };
     }
 }
+
+/**
+ * A fluent builder for constructing complex selector configurations in a type-safe manner.
+ * This is additive to the existing helpers and does not replace them.
+ */
+export class DomSelectorBuilder {
+    private readonly config: ElementFinderConfig;
+
+    private constructor(config: ElementFinderConfig) {
+        this.config = config;
+    }
+
+    static css(selector: string): DomSelectorBuilder {
+        return new DomSelectorBuilder({ selector });
+    }
+
+    within(root: NodeRoot): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, root });
+    }
+
+    withClasses(classes: readonly string[]): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, classContains: classes });
+    }
+
+    withAriaLabel(label: string | RegExp): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, ariaLabel: label });
+    }
+
+    withRole(role: string): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, role });
+    }
+
+    withTextIncludes(text: string): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, textIncludes: text });
+    }
+
+    withTextMatches(regex: RegExp): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, textMatches: regex });
+    }
+
+    withSvgPathDIncludes(partial: string): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, svgPartialD: partial });
+    }
+
+    filteredBy(predicate: (el: HTMLElement) => boolean): DomSelectorBuilder {
+        return new DomSelectorBuilder({ ...this.config, filter: predicate });
+    }
+
+    build(): ElementFinderConfig {
+        return { ...this.config };
+    }
+
+    findAll<T extends HTMLElement = HTMLElement>(): T[] {
+        return findElementsByConfig(this.config) as unknown as T[];
+    }
+
+    findOne<T extends HTMLElement = HTMLElement>(): T | null {
+        return findElement(this.config) as unknown as T | null;
+    }
+
+    async waitForOne<T extends HTMLElement = HTMLElement>(timeoutMs?: number): Promise<T> {
+        const cfg = { ...this.config, timeoutMs } as ElementFinderConfig & { timeoutMs?: number; };
+        return waitForElementByConfig(cfg) as Promise<T>;
+    }
+}
+
+/**
+ * Preferred modern names for selection helpers (aliases for existing functions)
+ */
+export const selectFirst = selectOne;
+export const selectMany = selectAll;
+export const waitForFirst = waitFor;
 
 export type ElementHideConfig = {
     selector: string;

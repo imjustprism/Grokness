@@ -10,23 +10,23 @@ import { type InjectedComponentProps, type IPluginUIPatch } from "@utils/types";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-type Mount = {
+type UIMount = {
     container: HTMLElement;
     root: Root;
     target: HTMLElement;
 };
 
-type ActiveUIPatch = {
+type ActiveUIMountCollection = {
     observer: MutationObserver;
-    mounts: Map<HTMLElement, Mount>;
+    mounts: Map<HTMLElement, UIMount>;
     patch: IPluginUIPatch;
 };
 
 export class PluginHelper {
-    private styleIds = new Set<string>();
-    private activeUIPatches = new Map<string, ActiveUIPatch>();
+    private readonly styleIds = new Set<string>();
+    private readonly activeUIPatchesByPlugin = new Map<string, Set<ActiveUIMountCollection>>();
 
-    applyStyles(pluginId: string, css: string) {
+    applyStyles(pluginId: string, css: string): void {
         const id = `grokness-style-${pluginId}`;
         if (this.styleIds.has(id)) {
             return;
@@ -38,7 +38,7 @@ export class PluginHelper {
         this.styleIds.add(id);
     }
 
-    removeStyles(pluginId: string) {
+    removeStyles(pluginId: string): void {
         const id = `grokness-style-${pluginId}`;
         const tag = document.getElementById(id);
         if (tag) {
@@ -47,12 +47,10 @@ export class PluginHelper {
         }
     }
 
-    applyUIPatch(pluginId: string, patch: IPluginUIPatch) {
-        this.removeUIPatch(pluginId);
+    applyUIPatch(pluginId: string, patch: IPluginUIPatch): void {
+        const mounts = new Map<HTMLElement, UIMount>();
 
-        const mounts = new Map<HTMLElement, Mount>();
-
-        const scan = () => {
+        const scan = (): void => {
             const targets = this.findTargets(patch);
 
             for (const [t, m] of mounts) {
@@ -124,33 +122,42 @@ export class PluginHelper {
 
         scan();
 
-        this.activeUIPatches.set(pluginId, { observer, mounts, patch });
+        const entry: ActiveUIMountCollection = { observer, mounts, patch };
+        const set = this.activeUIPatchesByPlugin.get(pluginId) ?? new Set<ActiveUIMountCollection>();
+        set.add(entry);
+        this.activeUIPatchesByPlugin.set(pluginId, set);
     }
 
-    removeUIPatch(pluginId: string) {
-        const active = this.activeUIPatches.get(pluginId);
-        if (!active) {
+    removeUIPatch(pluginId: string): void {
+        this.removeAllUIPatches(pluginId);
+    }
+
+    removeAllUIPatches(pluginId: string): void {
+        const set = this.activeUIPatchesByPlugin.get(pluginId);
+        if (!set) {
             return;
         }
-        active.observer.disconnect();
-        for (const { root, container } of active.mounts.values()) {
-            root.unmount();
-            container.remove();
+        for (const active of set) {
+            active.observer.disconnect();
+            for (const { root, container } of active.mounts.values()) {
+                root.unmount();
+                container.remove();
+            }
         }
-        this.activeUIPatches.delete(pluginId);
+        this.activeUIPatchesByPlugin.delete(pluginId);
     }
 
-    applyMultiUIPatch(pluginId: string, patch: IPluginUIPatch) {
+    applyMultiUIPatch(pluginId: string, patch: IPluginUIPatch): void {
         this.applyUIPatch(pluginId, { ...patch, forEach: true });
     }
-    applySingleUIPatch(pluginId: string, patch: IPluginUIPatch) {
+    applySingleUIPatch(pluginId: string, patch: IPluginUIPatch): void {
         this.applyUIPatch(pluginId, { ...patch, forEach: false });
     }
-    removeMultiUIPatch(pluginId: string) {
-        this.removeUIPatch(pluginId);
+    removeMultiUIPatch(pluginId: string): void {
+        this.removeAllUIPatches(pluginId);
     }
-    removeSingleUIPatch(pluginId: string) {
-        this.removeUIPatch(pluginId);
+    removeSingleUIPatch(pluginId: string): void {
+        this.removeAllUIPatches(pluginId);
     }
 
     private findTargets(patch: IPluginUIPatch): HTMLElement[] {

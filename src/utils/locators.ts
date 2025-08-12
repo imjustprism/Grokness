@@ -6,155 +6,147 @@
 
 import type { AnySelector, ElementFinderConfig } from "@utils/dom";
 
+const el = (selector: string, extras: Partial<ElementFinderConfig> = {}): ElementFinderConfig => ({ selector, ...extras });
+const button = (extras: Partial<ElementFinderConfig> = {}): ElementFinderConfig => el("button", extras);
+const withinDialogButton = (extras: Partial<ElementFinderConfig> = {}): ElementFinderConfig => ({ selector: '[role="dialog"] [data-slot="button"]', ...extras });
+
+/**
+ * Central, strongly typed collection of DOM locators used throughout the app.
+ */
 export const LOCATORS = {
     COMMON: {
         buttonByText(text: string | RegExp): ElementFinderConfig {
-            return {
-                selector: "button",
-                ...(typeof text === "string" ? { textIncludes: text } : { textMatches: text })
-            } as ElementFinderConfig;
+            return button(typeof text === "string" ? { textIncludes: text } : { textMatches: text });
         },
         containerByClasses(...classes: string[]): ElementFinderConfig {
-            return { selector: "div", classContains: classes } as ElementFinderConfig;
+            return el("div", { classContains: classes });
         },
     },
     SIDEBAR: {
-        container: { selector: '[data-sidebar="sidebar"]' } as ElementFinderConfig,
-        header: { selector: '[data-sidebar="header"]' } as ElementFinderConfig,
-        homeLink: { selector: 'a[aria-label="Home page"]' } as ElementFinderConfig,
-        content: { selector: '[data-sidebar="content"]' } as ElementFinderConfig,
-        group: { selector: '[data-sidebar="group"]' } as ElementFinderConfig,
-        menu: { selector: 'ul[data-sidebar="menu"]' } as ElementFinderConfig,
-        menuItem: { selector: 'li[data-sidebar="menu-item"]' } as ElementFinderConfig,
-        menuButton: { selector: '[data-sidebar="menu-button"]' } as ElementFinderConfig,
-        menuIcon: { selector: '[data-sidebar="icon"]' } as ElementFinderConfig,
+        container: el('[data-sidebar="sidebar"]'),
+        header: el('[data-sidebar="header"]'),
+        homeLink: el('a[aria-label="Home page"]'),
+        content: el('[data-sidebar="content"]'),
+        group: el('[data-sidebar="group"]'),
+        menu: el('ul[data-sidebar="menu"]'),
+        menuItem: el('li[data-sidebar="menu-item"]'),
+        menuButton: el('[data-sidebar="menu-button"]'),
+        menuIcon: el('[data-sidebar="icon"]'),
 
-        searchButton: { selector: '[data-sidebar="menu-button"]', ariaLabel: "Search" } as ElementFinderConfig,
-        voiceButton: { selector: '[data-sidebar="menu-button"]', ariaLabel: "Voice" } as ElementFinderConfig,
-        filesLink: { selector: '[data-sidebar="menu-button"]', textIncludes: "Files" } as ElementFinderConfig,
-        tasksLink: { selector: '[data-sidebar="menu-button"]', textIncludes: "Tasks" } as ElementFinderConfig,
-        projectsLink: { selector: '[data-sidebar="menu-button"]', textIncludes: "Projects" } as ElementFinderConfig,
-        historyButton: { selector: '[data-sidebar="menu-button"]', ariaLabel: "History" } as ElementFinderConfig,
+        searchButton: el('[data-sidebar="menu-button"]', { ariaLabel: "Search" }),
+        voiceButton: el('[data-sidebar="menu-button"]', { ariaLabel: "Voice" }),
+        filesLink: el('[data-sidebar="menu-button"]', { textIncludes: "Files" }),
+        tasksLink: el('[data-sidebar="menu-button"]', { textIncludes: "Tasks" }),
+        projectsLink: el('[data-sidebar="menu-button"]', { textIncludes: "Projects" }),
+        historyButton: el('[data-sidebar="menu-button"]', { ariaLabel: "History" }),
 
         footer: "[data-sidebar=\"footer\"]" as AnySelector,
-        avatarButton: "button[aria-haspopup=\"menu\"]" as AnySelector,
-        toggleButton: { selector: 'button[data-sidebar="trigger"]' } as ElementFinderConfig,
+        avatarButton: 'button[aria-haspopup="menu"]' as AnySelector,
+        toggleButton: el('button[data-sidebar="trigger"]'),
         toggleIcon: "[data-sidebar=\"trigger\"] svg" as AnySelector,
 
         menuButtonByText(text: string): ElementFinderConfig {
-            return { selector: '[data-sidebar="menu-button"]', textIncludes: text };
+            return el('[data-sidebar="menu-button"]', { textIncludes: text });
         },
         menuButtonByAria(label: string | RegExp): ElementFinderConfig {
-            return { selector: '[data-sidebar="menu-button"]', ariaLabel: label } as ElementFinderConfig;
+            return el('[data-sidebar="menu-button"]', typeof label === "string" ? { ariaLabel: label } : { ariaLabel: label });
         },
         menuItemByText(text: string): ElementFinderConfig {
-            return { selector: 'li[data-sidebar="menu-item"] [data-sidebar="menu-button"]', textIncludes: text };
+            return el('li[data-sidebar="menu-item"] [data-sidebar="menu-button"]', { textIncludes: text });
         },
     },
     QUERY_BAR: {
         root: ".query-bar" as AnySelector,
-        modelButton: { selector: "button[aria-label='Model select']" } as ElementFinderConfig,
+        modelButton: button({ selector: "button[aria-label='Model select']" }),
         modelNameSpan: "span.font-semibold" as AnySelector,
         hiddenModelSelect: "select[aria-hidden='true']" as AnySelector,
-        textarea: { selector: ".query-bar textarea" } as ElementFinderConfig,
-        editor: { selector: ".tiptap.ProseMirror" } as ElementFinderConfig,
-        editorParagraph: { selector: ".tiptap.ProseMirror p" } as ElementFinderConfig,
-        editorPlaceholder: { selector: ".tiptap.ProseMirror p[data-placeholder]" } as ElementFinderConfig,
-        editorPlaceholderDefault: {
-            selector: ".tiptap.ProseMirror p[data-placeholder]",
-            textIncludes: "What do you want to know?",
-        } as ElementFinderConfig,
-        editorPlaceholderChat: {
-            selector: ".tiptap.ProseMirror p[data-placeholder]",
-            textIncludes: "How can Grok help?",
-        } as ElementFinderConfig,
-        projectButton: { selector: "button", svgPartialD: "M3.33965 17L11.9999 22L20.6602 17V7" } as ElementFinderConfig,
-        attachButton: { selector: "button[aria-label='Attach']" } as ElementFinderConfig,
-        voiceModeButton: { selector: "button", ariaLabel: "Enter voice mode" } as ElementFinderConfig,
-        thinkButton: { selector: "button[aria-label='Think']" } as ElementFinderConfig,
-        deepSearchButton: { selector: "button[aria-label='DeeperSearch'],button[aria-label='DeepSearch']" } as ElementFinderConfig,
+        textarea: el(".query-bar textarea"),
+        editor: el(".tiptap.ProseMirror"),
+        editorParagraph: el(".tiptap.ProseMirror p"),
+        editorPlaceholder: el(".tiptap.ProseMirror p[data-placeholder]"),
+        editorPlaceholderDefault: el(".tiptap.ProseMirror p[data-placeholder]", { textIncludes: "What do you want to know?" }),
+        editorPlaceholderChat: el(".tiptap.ProseMirror p[data-placeholder]", { textIncludes: "How can Grok help?" }),
+        projectButton: button({ svgPartialD: "M3.33965 17L11.9999 22L20.6602 17V7" }),
+        attachButton: button({ selector: "button[aria-label='Attach']" }),
+        voiceModeButton: button({ ariaLabel: "Enter voice mode" }),
+        thinkButton: button({ selector: "button[aria-label='Think']" }),
+        deepSearchButton: button({ selector: "button[aria-label='DeeperSearch'],button[aria-label='DeepSearch']" }),
 
         buttonByAria(label: string | RegExp): ElementFinderConfig {
-            return { selector: "button", ariaLabel: label } as ElementFinderConfig;
+            return button(typeof label === "string" ? { ariaLabel: label } : { ariaLabel: label });
         },
         buttonWithSvgPath(pathD: string): ElementFinderConfig {
-            return { selector: "button", svgPartialD: pathD } as ElementFinderConfig;
+            return button({ svgPartialD: pathD });
         },
         editorPlaceholderByText(text: string | RegExp): ElementFinderConfig {
-            return { selector: ".tiptap.ProseMirror p[data-placeholder]", ...(typeof text === "string" ? { textIncludes: text } : { textMatches: text }) } as ElementFinderConfig;
+            return el(".tiptap.ProseMirror p[data-placeholder]", typeof text === "string" ? { textIncludes: text } : { textMatches: text });
         },
     },
     CHAT_NAV: {
-        container: { selector: "div", classContains: ["absolute", "flex", "items-center", "ms-auto", "end-3"] } as ElementFinderConfig,
-        homeLink: { selector: "a[href=\"/\"]" } as ElementFinderConfig,
-        pinButton: { selector: "button", ariaLabel: "Pin" } as ElementFinderConfig,
-        shareButton: { selector: "button", ariaLabel: "Share conversation" } as ElementFinderConfig,
+        container: el("div", { classContains: ["absolute", "flex", "items-center", "ms-auto", "end-3"] }),
+        homeLink: el('a[href="/"]'),
+        pinButton: button({ ariaLabel: "Pin" }),
+        shareButton: button({ ariaLabel: "Share conversation" }),
 
         iconButtonByAria(label: string | RegExp): ElementFinderConfig {
-            return { selector: "button", ariaLabel: label } as ElementFinderConfig;
+            return button(typeof label === "string" ? { ariaLabel: label } : { ariaLabel: label });
         },
         anchorByHref(href: string | RegExp): ElementFinderConfig {
-            return { selector: "a", ...(typeof href === "string" ? { filter: el => (el as HTMLAnchorElement).getAttribute("href") === href } : { filter: el => href.test((el as HTMLAnchorElement).getAttribute("href") ?? "") }) } as ElementFinderConfig;
+            return el("a", typeof href === "string"
+                ? { filter: el => (el as HTMLAnchorElement).getAttribute("href") === href }
+                : { filter: el => href.test((el as HTMLAnchorElement).getAttribute("href") ?? "") });
         },
     },
     CHAT: {
-        messageBubble: { selector: "div.message-bubble.bg-surface-l2" } as ElementFinderConfig,
-        messageContainer: { selector: "div.relative.group" } as ElementFinderConfig,
-        editButton: { selector: "button", ariaLabel: "Edit" } as ElementFinderConfig,
+        messageBubble: el("div.message-bubble.bg-surface-l2"),
+        messageContainer: el("div.relative.group"),
+        editButton: button({ ariaLabel: "Edit" }),
     },
     AVATAR_MENU: {
-        wrapper: { selector: "[data-radix-popper-content-wrapper]" } as ElementFinderConfig,
-        menu: { selector: '[data-radix-menu-content][role="menu"][data-state="open"]' } as ElementFinderConfig,
-        menuItem: { selector: '[data-radix-menu-content][data-state="open"] [role="menuitem"]' } as ElementFinderConfig,
+        wrapper: el("[data-radix-popper-content-wrapper]"),
+        menu: el('[data-radix-menu-content][role="menu"][data-state="open"]'),
+        menuItem: el('[data-radix-menu-content][data-state="open"] [role="menuitem"]'),
 
-        settings: { selector: '[role="menuitem"]', textIncludes: "Settings" } as ElementFinderConfig,
-        reportIssue: { selector: '[role="menuitem"]', textIncludes: "Report Issue" } as ElementFinderConfig,
-        community: {
-            selector: 'a[role="menuitem"]',
+        settings: el('[role="menuitem"]', { textIncludes: "Settings" }),
+        reportIssue: el('[role="menuitem"]', { textIncludes: "Report Issue" }),
+        community: el('a[role="menuitem"]', {
             filter: el => {
                 const a = el as HTMLAnchorElement;
                 const text = (a.textContent ?? "").trim();
                 return text.includes("Community") || a.href.includes("discord.gg");
             },
-        } as ElementFinderConfig,
-        manageSubscription: { selector: '[role="menuitem"]', textIncludes: "Manage Subscription" } as ElementFinderConfig,
-        signOut: { selector: '[role="menuitem"]', textIncludes: "Sign Out" } as ElementFinderConfig,
+        }),
+        manageSubscription: el('[role="menuitem"]', { textIncludes: "Manage Subscription" }),
+        signOut: el('[role="menuitem"]', { textIncludes: "Sign Out" }),
 
         itemByText(text: string | RegExp): ElementFinderConfig {
-            return {
-                selector: '[data-radix-menu-content][data-state="open"] [role="menuitem"]',
-                ...(typeof text === "string" ? { textIncludes: text } : { textMatches: text })
-            } as ElementFinderConfig;
+            return el('[data-radix-menu-content][data-state="open"] [role="menuitem"]', typeof text === "string" ? { textIncludes: text } : { textMatches: text });
         },
         menuByTriggerId(triggerId: string): ElementFinderConfig {
-            return {
-                selector: '[data-radix-menu-content][role="menu"]',
-                filter: el => el.getAttribute("aria-labelledby") === triggerId
-            } as ElementFinderConfig;
+            return el('[data-radix-menu-content][role="menu"]', { filter: el => el.getAttribute("aria-labelledby") === triggerId });
         },
     },
     SETTINGS_MODAL: {
-        dialog: { selector: '[role="dialog"]' } as ElementFinderConfig,
-        title: { selector: '[role="dialog"] h2', textIncludes: "Settings" } as ElementFinderConfig,
+        dialog: el('[role="dialog"]'),
+        title: el('[role="dialog"] h2', { textIncludes: "Settings" }),
 
-        leftNavContainer: { selector: "div", classContains: ["flex", "flex-col", "gap-1.5", "pl-3", "pb-3"] } as ElementFinderConfig,
-        leftNavButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"] } as ElementFinderConfig,
+        leftNavContainer: el("div", { classContains: ["flex", "flex-col", "gap-1.5", "pl-3", "pb-3"] }),
+        leftNavButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"] }),
 
-        contentArea: { selector: "div", filter: el => el.classList.contains("overflow-scroll") || el.classList.contains("overflow-y-auto") } as ElementFinderConfig,
+        contentArea: el("div", { filter: el => el.classList.contains("overflow-scroll") || el.classList.contains("overflow-y-auto") }),
 
-        accountButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"], textIncludes: "Account" } as ElementFinderConfig,
-        appearanceButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"], textIncludes: "Appearance" } as ElementFinderConfig,
-        behaviorButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"], textIncludes: "Behavior" } as ElementFinderConfig,
-        customizeButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"], textIncludes: "Customize" } as ElementFinderConfig,
-        dataControlsButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"], textIncludes: "Data Controls" } as ElementFinderConfig,
-        subscriptionButton: { selector: '[role="dialog"] [data-slot="button"]', classContains: ["justify-start", "min-w-40"], textIncludes: "Subscription" } as ElementFinderConfig,
+        accountButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"], textIncludes: "Account" }),
+        appearanceButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"], textIncludes: "Appearance" }),
+        behaviorButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"], textIncludes: "Behavior" }),
+        customizeButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"], textIncludes: "Customize" }),
+        dataControlsButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"], textIncludes: "Data Controls" }),
+        subscriptionButton: withinDialogButton({ classContains: ["justify-start", "min-w-40"], textIncludes: "Subscription" }),
 
         navButtonByText(text: string | RegExp): ElementFinderConfig {
-            return {
-                selector: '[role="dialog"] [data-slot="button"]',
+            return withinDialogButton({
                 classContains: ["justify-start", "min-w-40"],
                 ...(typeof text === "string" ? { textIncludes: text } : { textMatches: text })
-            } as ElementFinderConfig;
+            });
         },
     },
     CODE_BLOCK: {
@@ -165,7 +157,7 @@ export const LOCATORS = {
         languageLabel: "span.font-mono.text-xs" as AnySelector,
     },
     EFFECTS: {
-        idleSparklesContainer: { selector: 'div[style*="opacity:"] > div.absolute.top-0.left-0.w-full.h-full' } as ElementFinderConfig,
+        idleSparklesContainer: el('div[style*="opacity:"] > div.absolute.top-0.left-0.w-full.h-full'),
     },
 } as const;
 
