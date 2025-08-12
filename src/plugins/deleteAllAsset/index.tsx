@@ -4,42 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ApiClient, createApiServices, type ListAssetsResponse } from "@api/index";
+import { grokApi } from "@api/index";
 import { Button } from "@components/Button";
 import { Devs } from "@utils/constants";
 import definePlugin, { Patch } from "@utils/types";
 import React, { useEffect, useRef, useState } from "react";
 
-const api = ApiClient.fromWindow();
-const apiServices = createApiServices(api);
-
-type AssetItem = ListAssetsResponse["assets"][number];
-
-const pickAssetId = (a: AssetItem): string | null => {
-    const x = a as unknown as { assetId?: string; id?: string; rootAssetId?: string; };
-    return x.assetId ?? x.id ?? x.rootAssetId ?? null;
-};
-
-async function fetchAllAssets(signal?: AbortSignal): Promise<AssetItem[]> {
-    const out: AssetItem[] = [];
-    let token: string | undefined = undefined;
-    do {
-        const res = await apiServices.assets.list(
-            { pageSize: 100, source: "SOURCE_ANY", isLatest: true, pageToken: token },
-            signal
-        );
-        out.push(...res.assets);
-        token = res.nextPageToken ?? undefined;
-    } while (token && !(signal?.aborted ?? false));
-    return out;
-}
-
-async function deleteInBatches(items: ReadonlyArray<AssetItem>, signal?: AbortSignal): Promise<void> {
-    const ids = items.map(pickAssetId).filter((v): v is string => typeof v === "string" && v.length > 0);
+async function deleteInBatches(ids: ReadonlyArray<string>, signal?: AbortSignal): Promise<void> {
     const size = 6;
     for (let i = 0; i < ids.length; i += size) {
         const slice = ids.slice(i, i + size);
-        await Promise.all(slice.map(id => apiServices.assets.delete({ assetId: id }, signal)));
+        await Promise.all(slice.map(id => grokApi.services.assets.delete({ assetId: id }, signal)));
     }
 }
 
@@ -106,9 +81,15 @@ const DeleteAllAssetsButton: React.FC = () => {
         const ac = new AbortController();
         abortRef.current = ac;
         try {
-            const assets = await fetchAllAssets(ac.signal);
-            if (assets.length > 0) {
-                await deleteInBatches(assets, ac.signal);
+            const assets = await grokApi.listAllAssets({ pageSize: 100, source: "SOURCE_ANY", isLatest: true }, ac.signal);
+            const ids = assets
+                .map(a => {
+                    const x = a as unknown as { id?: string; assetId?: string; rootAssetId?: string; };
+                    return x.id ?? x.assetId ?? x.rootAssetId;
+                })
+                .filter((v: unknown): v is string => typeof v === "string" && v.length > 0);
+            if (ids.length > 0) {
+                await deleteInBatches(ids, ac.signal);
             }
         } finally {
             suppressAbortErrorsDuringReload(80);

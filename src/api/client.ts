@@ -81,6 +81,9 @@ const jitter = (n: number) => Math.floor(n * (0.5 + Math.random() * 0.5));
 type ETagEntry = { etag: string; body: unknown; };
 type InflightEntry<T> = Promise<T>;
 
+/**
+ * Strongly-typed HTTP client with retries, optional ETag cache, timeouts and CSRF support.
+ */
 export class ApiClient {
     readonly baseUrl: string;
     readonly includeCredentials: boolean;
@@ -90,8 +93,10 @@ export class ApiClient {
     readonly csrfProvider: (() => Promise<string | null>) | (() => string | null);
     readonly fetchImpl: typeof fetch;
     readonly retry: RetryPolicy;
+    readonly defaultTimeoutMs: number;
 
     private readonly etagCache: Map<string, ETagEntry>;
+    private readonly ttlCache: Map<string, { body: unknown; expiresAt: number; }>;
     private readonly inflight: Map<string, InflightEntry<unknown>>;
     private readonly cacheEtag: boolean;
     private readonly cacheMax: number;
@@ -107,12 +112,20 @@ export class ApiClient {
         const baseFetch = cfg.fetchImpl ?? globalThis.fetch;
         this.fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => baseFetch(input, init)) as typeof fetch;
         this.retry = { ...dfltRetry, ...(cfg.retry ?? {}) };
+        this.defaultTimeoutMs = Math.max(0, cfg.timeoutMs ?? 0);
         this.cacheEtag = !!cfg.cache?.etag;
         this.cacheMax = Math.max(0, cfg.cache?.maxEntries ?? 200);
         this.etagCache = new Map();
+        this.ttlCache = new Map();
         this.inflight = new Map();
     }
 
+    /**
+     * Build an absolute URL for a given path and query parameters.
+     * @param path - Absolute or relative path
+     * @param query - Optional query parameters
+     * @returns Fully qualified URL
+     */
     url(path: string, query?: QueryParams): string {
         const u = new URL(path.startsWith("http") ? path : this.baseUrl + (path.startsWith("/") ? path : "/" + path));
         if (query) {
@@ -152,6 +165,14 @@ export class ApiClient {
         this.etagCache.set(key, { etag, body });
     }
 
+    /**
+     * Execute an HTTP request and parse the response as JSON/text accordingly.
+     * @param method - HTTP method
+     * @param path - Path relative to baseUrl (or absolute)
+     * @param init - Additional RequestInit
+     * @param opts - Per-request options
+     * @returns Parsed response body
+     */
     async request<T = unknown>(method: HttpMethod, path: string, init?: RequestInitExt, opts?: RequestOptions): Promise<T> {
         const signal = opts?.signal ?? init?.signal;
         const url = this.url(path, opts?.query);
@@ -164,7 +185,27 @@ export class ApiClient {
             }
         }
         const useEtag = this.cacheEtag && method === "GET";
+        const useTtl = method === "GET" && this.cacheMax > 0 && typeof globalThis !== "undefined";
         const cached = useEtag ? this.etagCache.get(cacheKey) : undefined;
+
+        if (useTtl && !opts?.bypassTtl) {
+            const ttlMs = (this as unknown as { cache?: { ttlMs?: number; staleWhileRevalidate?: boolean; }; }).cache?.ttlMs ?? 0;
+            const swr = (this as unknown as { cache?: { ttlMs?: number; staleWhileRevalidate?: boolean; }; }).cache?.staleWhileRevalidate ?? false;
+            const entry = this.ttlCache.get(cacheKey);
+            const now = Date.now();
+            if (ttlMs > 0 && entry) {
+                if (entry.expiresAt > now) {
+                    return entry.body as T;
+                }
+                if (swr) {
+                    this.executeWithRetry(() => attemptRequest().then(res => {
+                        this.ttlCache.set(cacheKey, { body: res, expiresAt: now + ttlMs });
+                        return res;
+                    })).catch(() => void 0);
+                    return entry.body as T;
+                }
+            }
+        }
         if (useEtag && cached?.etag) {
             headers["If-None-Match"] = cached.etag;
         }
@@ -213,6 +254,11 @@ export class ApiClient {
             if (useEtag && et) {
                 this.touchCache(cacheKey, et, data);
             }
+
+            const ttlMs = (this as unknown as { cache?: { ttlMs?: number; staleWhileRevalidate?: boolean; }; }).cache?.ttlMs ?? 0;
+            if (method === "GET" && ttlMs > 0) {
+                this.ttlCache.set(cacheKey, { body: data, expiresAt: Date.now() + ttlMs });
+            }
             return data;
         };
 
@@ -224,7 +270,22 @@ export class ApiClient {
             }
         }
 
-        const exec = this.executeWithRetry(attemptRequest);
+        const exec = this.executeWithRetry(async () => {
+            if (!this.defaultTimeoutMs && !opts?.timeoutMs) {
+                return attemptRequest();
+            }
+            const timeout = opts?.timeoutMs ?? this.defaultTimeoutMs;
+            if (timeout <= 0) {
+                return attemptRequest();
+            }
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeout);
+            try {
+                return await attemptRequest();
+            } finally {
+                clearTimeout(timer);
+            }
+        });
 
         if (inflightKey) {
             this.inflight.set(inflightKey, exec as InflightEntry<unknown>);

@@ -129,7 +129,39 @@ import {
 
 export type ApiServices = ReturnType<typeof createApiServices>;
 
+/**
+ * Bundle of typed endpoint groups built on top of ApiClient.
+ * @param client - ApiClient instance
+ * @returns Grouped service methods
+ */
 export const createApiServices = (client: ApiClient) => {
+    const enc = encodeURIComponent;
+    const qp = (obj: Record<string, unknown>) => {
+        const out: Record<string, string | number | boolean | ReadonlyArray<string | number | boolean>> = {};
+        for (const [k, v] of Object.entries(obj)) {
+            if (v === undefined || v === null) {
+                continue;
+            }
+            if (Array.isArray(v)) {
+                out[k] = (v as Array<unknown>).filter(x => x !== undefined && x !== null).map(x => x as string | number | boolean) as ReadonlyArray<string | number | boolean>;
+            } else {
+                out[k] = v as string | number | boolean;
+            }
+        }
+        return out;
+    };
+    const req = {
+        get: <R>(path: string, signal?: AbortSignal, query?: ReturnType<typeof qp>) =>
+            client.get<R>(path, { signal, query }),
+        post: <R, B>(path: string, body: B, signal?: AbortSignal, query?: ReturnType<typeof qp>) =>
+            client.post<R>(path, body, { signal, query }),
+        put: <R, B>(path: string, body: B, signal?: AbortSignal, query?: ReturnType<typeof qp>) =>
+            client.put<R>(path, body, { signal, query }),
+        patch: <R, B>(path: string, body: B, signal?: AbortSignal, query?: ReturnType<typeof qp>) =>
+            client.patch<R>(path, body, { signal, query }),
+        del: <R>(path: string, signal?: AbortSignal, query?: ReturnType<typeof qp>) =>
+            client.delete<R>(path, { signal, query }),
+    } as const;
     const settings = {
         addMobileDeviceToken: (body: AddMobileDeviceTokenRequest, signal?: AbortSignal) =>
             client.post<unknown>("/rest/add-mobile-device-notification-token", body, { signal }),
@@ -141,15 +173,15 @@ export const createApiServices = (client: ApiClient) => {
 
     const chat = {
         createModelResponse: (p: ConversationIdParam, body: ModelResponseCreateRequest, signal?: AbortSignal) =>
-            client.post<unknown>(`/rest/app-chat/conversations/${encodeURIComponent(p.conversationId)}/model-responses`, body, { signal }),
+            req.post<unknown, ModelResponseCreateRequest>(`/rest/app-chat/conversations/${enc(p.conversationId)}/model-responses`, body, signal),
         createResponse: (p: ConversationIdParam, body: ResponseCreateRequest, signal?: AbortSignal) =>
-            client.post<unknown>(`/rest/app-chat/conversations/${encodeURIComponent(p.conversationId)}/responses`, body, { signal }),
+            req.post<unknown, ResponseCreateRequest>(`/rest/app-chat/conversations/${enc(p.conversationId)}/responses`, body, signal),
         toolResponse: (body: ToolResponseRequest, signal?: AbortSignal) =>
-            client.post<unknown>("/rest/app-chat/tool-responses", body, { signal }),
+            req.post<unknown, ToolResponseRequest>("/rest/app-chat/tool-responses", body, signal),
         createUserResponse: (p: ConversationIdParam, body: UserResponseCreateRequest, signal?: AbortSignal) =>
-            client.post<unknown>(`/rest/app-chat/conversations/${encodeURIComponent(p.conversationId)}/user-responses`, body, { signal }),
+            req.post<unknown, UserResponseCreateRequest>(`/rest/app-chat/conversations/${enc(p.conversationId)}/user-responses`, body, signal),
         askToShare: (p: ConversationIdParam, body: AskToShareRequest, signal?: AbortSignal) =>
-            client.post<unknown>(`/rest/app-chat/conversations/${encodeURIComponent(p.conversationId)}/ask-to-share`, body, { signal }),
+            req.post<unknown, AskToShareRequest>(`/rest/app-chat/conversations/${enc(p.conversationId)}/ask-to-share`, body, signal),
         cloneShareLink: (p: ShareLinkIdParam, body: ShareLinkCloneRequest, signal?: AbortSignal) =>
             client.post<unknown>(`/rest/app-chat/share_links/${encodeURIComponent(p.shareLinkId)}/clone`, body, { signal }),
         createConversation: (body: ConversationCreateRequest, signal?: AbortSignal) =>
@@ -191,11 +223,11 @@ export const createApiServices = (client: ApiClient) => {
         getConversationV2: (p: ConversationIdParam, signal?: AbortSignal) =>
             client.get<unknown>(`/rest/app-chat/conversations_v2/${encodeURIComponent(p.conversationId)}`, { signal }),
         getConversationsMany: (q: ConversationsQuery = {}, signal?: AbortSignal) =>
-            client.get<unknown>("/rest/app-chat/conversations-many", { signal, query: { conversationIds: q.conversationIds, includeWorkspaces: q.includeWorkspaces, includeTaskResult: q.includeTaskResult } }),
+            req.get<unknown>("/rest/app-chat/conversations-many", signal, qp({ conversationIds: q.conversationIds, includeWorkspaces: q.includeWorkspaces, includeTaskResult: q.includeTaskResult })),
         listConversations: (q: ConversationsListQuery = {}, signal?: AbortSignal) =>
-            client.get<unknown>("/rest/app-chat/conversations", { signal, query: q }),
+            req.get<unknown>("/rest/app-chat/conversations", signal, qp(q as Record<string, unknown>)),
         listDeletedConversations: (q: ConversationsDeletedQuery = {}, signal?: AbortSignal) =>
-            client.get<unknown>("/rest/app-chat/conversations/deleted", { signal, query: q }),
+            req.get<unknown>("/rest/app-chat/conversations/deleted", signal, qp(q as Record<string, unknown>)),
         uploadFile: (body: UploadFileRequest, signal?: AbortSignal) => client.post<unknown>("/rest/app-chat/upload-file", body, { signal }),
         postFileMetadata: (p: FileMetadataIdParam, body: FileMetadataPostRequest, signal?: AbortSignal) =>
             client.post<unknown>(`/rest/app-chat/file-metadata/${encodeURIComponent(p.fileMetadataId)}`, body, { signal }),
@@ -291,20 +323,17 @@ export const createApiServices = (client: ApiClient) => {
 
     const assets = {
         list: (q: ListAssetsRequest = {}, signal?: AbortSignal) =>
-            client.get<ListAssetsResponse>("/rest/assets", {
-                signal,
-                query: {
-                    query: q.query,
-                    pageSize: q.pageSize,
-                    pageToken: q.pageToken,
-                    mimeTypes: q.mimeTypes,
-                    assetIds: q.assetIds,
-                    orderBy: q.orderBy,
-                    workspaceId: q.workspaceId,
-                    source: q.source,
-                    isLatest: q.isLatest
-                }
-            }),
+            req.get<ListAssetsResponse>("/rest/assets", signal, qp({
+                query: q.query,
+                pageSize: q.pageSize,
+                pageToken: q.pageToken,
+                mimeTypes: q.mimeTypes,
+                assetIds: q.assetIds,
+                orderBy: q.orderBy,
+                workspaceId: q.workspaceId,
+                source: q.source,
+                isLatest: q.isLatest
+            })),
         create: (body: AssetCreateRequest, signal?: AbortSignal) => client.post<unknown>("/rest/assets", body, { signal }),
         get: (p: { assetId: string; }, signal?: AbortSignal) => client.get<unknown>(`/rest/assets/${encodeURIComponent(p.assetId)}`, { signal }),
         update: (p: { assetId: string; }, body: AssetUpdateRequest, signal?: AbortSignal) =>
@@ -320,7 +349,7 @@ export const createApiServices = (client: ApiClient) => {
         search: (
             q: { query?: string; pageSize?: number; pageToken?: string; mimeTypes?: ReadonlyArray<string>; source?: string; } = {},
             signal?: AbortSignal
-        ) => client.get<unknown>("/rest/assets/search", { signal, query: { query: q.query, pageSize: q.pageSize, pageToken: q.pageToken, mimeTypes: q.mimeTypes, source: q.source } }),
+        ) => req.get<unknown>("/rest/assets/search", signal, qp({ query: q.query, pageSize: q.pageSize, pageToken: q.pageToken, mimeTypes: q.mimeTypes, source: q.source })),
         storageUsage: (signal?: AbortSignal) => client.get<unknown>("/rest/assets/storage-usage", { signal }),
         deleteMetadata: (p: { assetId: string; }, signal?: AbortSignal) =>
             client.delete<unknown>(`/rest/assets-metadata/${encodeURIComponent(p.assetId)}`, { signal }),

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ApiClient, createApiServices, type RateLimitData } from "@api/index";
+import { grokApi, type RateLimitData } from "@api/index";
 import { Button } from "@components/Button";
 import { Lucide } from "@components/Lucide";
 import styles from "@plugins/rateLimitDisplay/styles.css?raw";
@@ -62,17 +62,6 @@ const DEFAULT_KIND = "DEFAULT";
 const QUERY_BAR_SELECTOR = LOCATORS.QUERY_BAR.root;
 const observerManager = new MutationObserverManager();
 
-const api = ApiClient.fromWindow();
-const apiServices = createApiServices(api);
-
-type RateLimitPayload = {
-    highEffortRateLimits?: { remainingQueries?: number; };
-    lowEffortRateLimits?: { remainingQueries?: number; };
-    waitTimeSeconds?: number;
-    remainingQueries?: number;
-};
-type RateLimitResponse = RateLimitData & RateLimitPayload;
-
 function getCurrentModelFromUI(): string {
     const queryBar = selectOne(QUERY_BAR_SELECTOR);
     if (!queryBar) {
@@ -103,9 +92,9 @@ function getCurrentModelFromUI(): string {
     return DEFAULT_MODEL;
 }
 
-async function fetchRateLimit(modelName: string, requestKind: string): Promise<RateLimitResponse | null> {
+async function fetchRateLimit(modelName: string, requestKind: string): Promise<RateLimitData | null> {
     try {
-        const data = (await apiServices.rateLimits.post({ requestKind, modelName })) as RateLimitResponse;
+        const data = await grokApi.getRateLimit({ requestKind, modelName });
         return data;
     } catch (error) {
         logger.error(`Failed to fetch rate limit for ${modelName} (${requestKind}):`, error);

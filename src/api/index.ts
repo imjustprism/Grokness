@@ -6,5 +6,6 @@
 
 export * from "./client";
 export * from "./enums";
+export { GrokApi, grokApi } from "./facade";
 export { type ApiServices, createApiServices } from "./services";
 export * from "./types";

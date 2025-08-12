@@ -9,11 +9,22 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
 export type Primitive = string | number | boolean | null | undefined | bigint;
 export type JsonValue = Primitive | { [k: string]: JsonValue; } | ReadonlyArray<JsonValue>;
 
+/**
+ * Headers map used by the ApiClient. Keys are normalized as sent.
+ */
 export type HeadersInitLike = Record<string, string>;
 export type QueryScalar = string | number | boolean;
 export type QueryValue = QueryScalar | null | undefined | ReadonlyArray<QueryScalar>;
 export type QueryParams = Record<string, QueryValue>;
 
+/**
+ * Exponential backoff retry policy
+ *
+ * @property retries - Maximum number of retry attempts
+ * @property baseDelayMs - Initial delay in milliseconds
+ * @property maxDelayMs - Maximum backoff delay in milliseconds
+ * @property retryOn - HTTP status codes that should trigger a retry
+ */
 export interface RetryPolicy {
     retries: number;
     baseDelayMs: number;
@@ -21,12 +32,27 @@ export interface RetryPolicy {
     retryOn: number[];
 }
 
+/**
+ * CSRF protection configuration
+ *
+ * @property enabled - Whether CSRF protection is enabled
+ * @property headerName - HTTP header name to carry the token
+ * @property getToken - Provider that returns the token synchronously or asynchronously
+ */
 export interface CsrfOptions {
     enabled?: boolean;
     headerName?: string;
     getToken?: () => Promise<string | null> | string | null;
 }
 
+/**
+ * Auth header injection configuration
+ *
+ * @property enabled - Whether auth header injection is enabled
+ * @property headerName - Header to write the token to
+ * @property scheme - Prefix scheme (e.g., "Bearer")
+ * @property getToken - Token provider
+ */
 export interface AuthOptions {
     enabled?: boolean;
     headerName?: string;
@@ -34,11 +60,34 @@ export interface AuthOptions {
     getToken?: () => Promise<string | null> | string | null;
 }
 
+/**
+ * Response cache options
+ *
+ * @property etag - Enable ETag-based caching for GET requests
+ * @property maxEntries - Max in-memory cache entries
+ */
 export interface CacheOptions {
     etag?: boolean;
     maxEntries?: number;
+    /** Memory cache TTL for GET responses (ms). 0 disables TTL caching. */
+    ttlMs?: number;
+    /** When true, serves expired cached data immediately and refreshes in background. */
+    staleWhileRevalidate?: boolean;
 }
 
+/**
+ * ApiClient configuration
+ *
+ * @property baseUrl - Base URL of the API (no trailing slash required)
+ * @property defaultHeaders - Default headers applied to every request
+ * @property includeCredentials - Whether to include credentials in cross-site requests
+ * @property csrf - CSRF options
+ * @property auth - Auth header options
+ * @property cache - Response cache options
+ * @property retry - Retry policy overrides
+ * @property fetchImpl - Custom fetch implementation
+ * @property timeoutMs - Default timeout for requests
+ */
 export interface ApiConfig {
     baseUrl: string;
     defaultHeaders?: HeadersInitLike;
@@ -48,21 +97,37 @@ export interface ApiConfig {
     cache?: CacheOptions;
     retry?: Partial<RetryPolicy>;
     fetchImpl?: typeof fetch;
+    /** Default request timeout in milliseconds for all requests (overridable per request) */
+    timeoutMs?: number;
 }
 
+/**
+ * Generic API error payload structure.
+ */
 export interface ApiErrorPayload {
+    /** Short error string */
     error?: string;
+    /** Human-readable message */
     message?: string;
+    /** Error code (string or numeric) */
     code?: string | number;
     [k: string]: JsonValue;
 }
 
+/**
+ * Error thrown by ApiClient when a non-retryable HTTP error occurs.
+ *
+ * @template E - JSON payload type carried by the error
+ */
 export class ApiError<E extends JsonValue = ApiErrorPayload> extends Error {
     readonly status: number;
     readonly method: HttpMethod;
     readonly url: string;
     readonly body: E | null;
     readonly headers: Readonly<Record<string, string>>;
+    /**
+     * @param init - Initialization structure for the ApiError
+     */
     constructor(init: { status: number; method: HttpMethod; url: string; message: string; body: E | null; headers: Record<string, string>; }) {
         super(init.message);
         this.name = "ApiError";
@@ -104,6 +169,23 @@ export interface RateLimitRequest {
 }
 
 export interface RateLimitData {
+    /** Sliding window size in seconds */
+    windowSizeSeconds?: number;
+    /** Remaining queries in the current window (generic) */
+    remainingQueries?: number;
+    /** Total allowed queries in the current window (generic) */
+    totalQueries?: number;
+    /** Remaining token budget (if applicable) */
+    remainingTokens?: number;
+    /** Total token budget (if applicable) */
+    totalTokens?: number;
+    /** Low-effort lane (e.g., grok-3) */
+    lowEffortRateLimits?: { cost?: number; remainingQueries?: number; };
+    /** High-effort lane (e.g., grok-4) */
+    highEffortRateLimits?: { cost?: number; remainingQueries?: number; };
+    /** Seconds until rate limit resets (if provided by backend) */
+    waitTimeSeconds?: number;
+    /** Legacy fields for backwards compatibility */
     remaining?: number;
     limit?: number;
     resetAt?: string;
@@ -152,12 +234,35 @@ export interface UserProfile {
     avatarUrl?: string | null;
 }
 
+/**
+ * Minimal user summary for UI surfaces that need only display name and plan.
+ */
+export interface UserPlanSummary {
+    /** Friendly display name */
+    name: string;
+    /** Human-readable plan label (e.g., "SuperGrok Pro", "SuperGrok", "Enterprise", "Free") */
+    plan: string;
+}
+
+/**
+ * Per-request options for ApiClient.
+ * @property signal - AbortSignal to cancel the request
+ * @property headers - Additional headers
+ * @property query - Query string parameters
+ * @property retry - Retry policy overrides
+ * @property cacheKey - Cache key override for ETag caching
+ * @property timeoutMs - Per-request timeout override
+ */
 export interface RequestOptions {
     signal?: AbortSignal;
     headers?: HeadersInitLike;
     query?: QueryParams;
     retry?: Partial<RetryPolicy>;
     cacheKey?: string;
+    /** Per-request timeout in milliseconds (overrides ApiConfig.timeoutMs when provided) */
+    timeoutMs?: number;
+    /** Bypass memory TTL cache when true */
+    bypassTtl?: boolean;
 }
 
 export type RequestInitExt = Omit<RequestInit, "headers"> & { headers?: HeadersInitLike; };

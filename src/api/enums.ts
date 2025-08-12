@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/**
+ * Canonical subscription tier codes.
+ */
 export const Tier = {
     Invalid: "SUBSCRIPTION_TIER_INVALID",
     GrokPro: "SUBSCRIPTION_TIER_GROK_PRO",
@@ -15,6 +18,9 @@ export const Tier = {
 
 export type SubscriptionTierCode = typeof Tier[keyof typeof Tier];
 
+/**
+ * Canonical subscription status codes.
+ */
 export const Status = {
     Invalid: "SUBSCRIPTION_STATUS_INVALID",
     Active: "SUBSCRIPTION_STATUS_ACTIVE",
@@ -50,6 +56,11 @@ const StatusAliases: Record<string, SubscriptionStatusCode> = {
     subscription_status_inactive: Status.Inactive
 };
 
+/**
+ * Normalize an arbitrary value to a canonical subscription tier code.
+ * @param input - raw value from API or unknown source
+ * @returns canonical code or null if unrecognized
+ */
 export const normalizeTier = (input: unknown): SubscriptionTierCode | null => {
     if (!input) {
         return null;
@@ -62,6 +73,11 @@ export const normalizeTier = (input: unknown): SubscriptionTierCode | null => {
     return TierAliases[key] ?? null;
 };
 
+/**
+ * Normalize an arbitrary value to a canonical subscription status code.
+ * @param input - raw value from API or unknown source
+ * @returns canonical code or null if unrecognized
+ */
 export const normalizeStatus = (input: unknown): SubscriptionStatusCode | null => {
     if (!input) {
         return null;
@@ -74,4 +90,5 @@ export const normalizeStatus = (input: unknown): SubscriptionStatusCode | null =
     return StatusAliases[key] ?? null;
 };
 
+/** Determine if a status value represents an active subscription. */
 export const isActiveSubscription = (status?: unknown): boolean => normalizeStatus(status) === Status.Active;

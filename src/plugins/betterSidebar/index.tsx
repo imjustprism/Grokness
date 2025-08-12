@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ApiClient, createApiServices, isActiveSubscription, normalizeTier, Tier } from "@api/index";
+import { grokApi } from "@api/index";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { selectOne, wrapElement } from "@utils/dom";
@@ -23,54 +23,6 @@ const TOGGLE_ICON_SELECTOR = LOCATORS.SIDEBAR.toggleIcon;
 const DEFAULT_USER_NAME = "User";
 const DEFAULT_PLAN = "Free";
 
-const api = ApiClient.fromWindow();
-const apiServices = createApiServices(api);
-
-type MinimalUser = {
-    givenName?: string | null;
-    familyName?: string | null;
-    email?: string | null;
-    xSubscriptionType?: string | null;
-};
-
-type SubscriptionLike = {
-    tier?: unknown;
-    status?: unknown;
-    enterprise?: boolean | null;
-};
-
-const normalizeSubs = (raw: unknown): ReadonlyArray<SubscriptionLike> => {
-    if (Array.isArray(raw)) {
-        return raw as ReadonlyArray<SubscriptionLike>;
-    }
-    if (raw && typeof raw === "object") {
-        const o = raw as Record<string, unknown>;
-        if (Array.isArray(o.subscriptions)) {
-            return o.subscriptions as ReadonlyArray<SubscriptionLike>;
-        }
-        return [raw as SubscriptionLike];
-    }
-    return [];
-};
-
-const computePlan = (user: MinimalUser, subs: ReadonlyArray<SubscriptionLike>): string => {
-    const isSuperGrokProUser = subs.some(s => normalizeTier(s.tier) === Tier.SuperGrokPro && isActiveSubscription(s.status));
-    const isSuperGrokUser = subs.some(s => normalizeTier(s.tier) === Tier.GrokPro && isActiveSubscription(s.status));
-    const isEnterpriseUser = subs.some(s => !!s.enterprise && isActiveSubscription(s.status));
-    const isXPremiumPlus = (user.xSubscriptionType ?? "").trim() === "PremiumPlus";
-
-    if (isSuperGrokProUser) {
-        return "SuperGrok Pro";
-    }
-    if (isSuperGrokUser || isXPremiumPlus) {
-        return "SuperGrok";
-    }
-    if (isEnterpriseUser) {
-        return "Enterprise";
-    }
-    return DEFAULT_PLAN;
-};
-
 let cached: { name: string; plan: string; } | null = null;
 
 async function getUserPlan(): Promise<{ name: string; plan: string; }> {
@@ -78,11 +30,7 @@ async function getUserPlan(): Promise<{ name: string; plan: string; }> {
         return cached;
     }
     try {
-        const [userRaw, subsRaw] = await Promise.all([apiServices.auth.getUser(), apiServices.subscriptions.get()]);
-        const user = userRaw as MinimalUser;
-        const subs = normalizeSubs(subsRaw);
-        const name = (`${user.givenName ?? ""} ${user.familyName ?? ""}`.trim() || user.email?.split("@")[0] || DEFAULT_USER_NAME);
-        const plan = computePlan(user, subs);
+        const { name, plan } = await grokApi.getUserPlanSummary();
         cached = { name, plan };
         return cached;
     } catch (e) {
