@@ -92,7 +92,7 @@ export const DropdownMenu = <V extends string = string>({
                     <Lucide name="ChevronDown" size={16} strokeWidth={2} />
                 </div>
             </button>
-            {isOpen && (
+            {isOpen ? (
                 <div
                     className={clsx(
                         "absolute top-full left-0 mt-2 z-50",
@@ -116,15 +116,15 @@ export const DropdownMenu = <V extends string = string>({
                             >
                                 <span>{option.label}</span>
                                 <span className="w-4 h-4 flex-shrink-0 ml-2">
-                                    {option.value === value && (
+                                    {option.value === value ? (
                                         <Lucide name="Check" size={16} className="text-primary" />
-                                    )}
+                                    ) : null}
                                 </span>
                             </button>
                         ))}
                     </div>
                 </div>
-            )}
+            ) : null}
         </div>
     );
 };
