@@ -23,6 +23,7 @@ const userscriptHeader = `// ==UserScript==
 export default defineConfig(({ mode }) => {
     const buildTarget = process.env.BUILD_TARGET ?? 'extension';
     const isUserscript = buildTarget === 'userscript';
+    const readableUserscript = process.env.USERSCRIPT_READABLE === '1';
     const aliases = {
         '@utils': path.resolve(__dirname, 'src/utils'),
         '@plugins': path.resolve(__dirname, 'src/plugins'),
@@ -52,8 +53,66 @@ export default defineConfig(({ mode }) => {
                 outDir: path.resolve(__dirname, 'dist/userscript'),
                 emptyOutDir: true,
                 target: 'esnext',
-                sourcemap: mode === 'development',
-                minify: false,
+                sourcemap: false,
+                cssCodeSplit: false,
+                minify: 'terser',
+                terserOptions: readableUserscript
+                    ? {
+                        ecma: 2020,
+                        module: true,
+                        toplevel: false,
+                        compress: {
+                            passes: 2,
+                            dead_code: true,
+                            conditionals: true,
+                            evaluate: true,
+                            drop_console: true,
+                            drop_debugger: true,
+                            pure_getters: true,
+                            defaults: true,
+                        },
+                        mangle: false,
+                        keep_classnames: true,
+                        keep_fnames: true,
+                        format: {
+                            beautify: true,
+                            braces: true,
+                            indent_level: 2,
+                            comments: (_: any, c: any) => /==UserScript==/.test(c.value),
+                        },
+                    }
+                    : {
+                        ecma: 2020,
+                        module: true,
+                        toplevel: true,
+                        compress: {
+                            passes: 3,
+                            drop_console: true,
+                            drop_debugger: true,
+                            pure_getters: true,
+                            hoist_funs: true,
+                            hoist_vars: false,
+                            booleans_as_integers: true,
+                        },
+                        mangle: {
+                            toplevel: true,
+                        },
+                        format: {
+                            comments: (_: any, c: any) => /==UserScript==/.test(c.value),
+                        },
+                    },
+                rollupOptions: {
+                    treeshake: readableUserscript ? true : 'smallest',
+                    output: {
+                        compact: !readableUserscript,
+                        inlineDynamicImports: true,
+                    },
+                },
+                esbuild: {
+                    legalComments: 'none',
+                    drop: ['console', 'debugger'],
+                    pure: ['console.log', 'console.info', 'console.debug', 'console.warn', 'console.error'],
+                },
                 lib: {
                     entry: path.resolve(__dirname, 'src/loader.ts'),
                     name: pkg.name,
