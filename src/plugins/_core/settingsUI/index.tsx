@@ -84,6 +84,38 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({ rootEle
         });
     }, [active, contentArea]);
 
+    useEffect(() => {
+        if (!contentArea) {
+            return;
+        }
+        const area = contentArea as HTMLElement;
+        if (active) {
+            if (area.dataset.groknessPrevPaddingRight == null) {
+                area.dataset.groknessPrevPaddingRight = area.style.paddingRight || "";
+            }
+            if (area.dataset.groknessPrevOverflowY == null) {
+                area.dataset.groknessPrevOverflowY = area.style.overflowY || "";
+            }
+            area.style.paddingRight = "0px";
+            area.style.overflowY = "hidden";
+        } else {
+            const prevPR = area.dataset.groknessPrevPaddingRight ?? "";
+            const prevOY = area.dataset.groknessPrevOverflowY ?? "";
+            area.style.paddingRight = prevPR;
+            area.style.overflowY = prevOY;
+            delete area.dataset.groknessPrevPaddingRight;
+            delete area.dataset.groknessPrevOverflowY;
+        }
+        return () => {
+            const prevPR = area.dataset.groknessPrevPaddingRight ?? "";
+            const prevOY = area.dataset.groknessPrevOverflowY ?? "";
+            area.style.paddingRight = prevPR;
+            area.style.overflowY = prevOY;
+            delete area.dataset.groknessPrevPaddingRight;
+            delete area.dataset.groknessPrevOverflowY;
+        };
+    }, [active, contentArea]);
+
     if (!contentArea || !sidebarArea) {
         return null;
     }
