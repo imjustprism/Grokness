@@ -180,9 +180,9 @@ export interface RateLimitData {
     /** Total token budget (if applicable) */
     totalTokens?: number;
     /** Low-effort lane (e.g., grok-3) */
-    lowEffortRateLimits?: { cost?: number; remainingQueries?: number; };
+    lowEffortRateLimits?: { cost?: number; remainingQueries?: number; waitTimeSeconds?: number; };
     /** High-effort lane (e.g., grok-4) */
-    highEffortRateLimits?: { cost?: number; remainingQueries?: number; };
+    highEffortRateLimits?: { cost?: number; remainingQueries?: number; waitTimeSeconds?: number; };
     /** Seconds until rate limit resets (if provided by backend) */
     waitTimeSeconds?: number;
     /** Legacy fields for backwards compatibility */

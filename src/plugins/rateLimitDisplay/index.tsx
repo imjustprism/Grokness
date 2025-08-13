@@ -18,7 +18,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const logger = new Logger("RateLimitDisplay", "#a6d189");
 
-const CACHE_TTL_MS = 30_000;
 type CacheEntry = { processed: ProcessedRateLimit; fetchedAt: number; };
 const rateLimitCache = new Map<string, CacheEntry>();
 
@@ -35,10 +34,6 @@ function setCached(model: string, requestKind: string, processed: ProcessedRateL
     rateLimitCache.set(makeCacheKey(model, requestKind), { processed, fetchedAt: Date.now() });
 }
 
-function cacheAgeMs(entry: CacheEntry): number {
-    return Date.now() - entry.fetchedAt;
-}
-
 const settings = definePluginSettings({
     autoRefresh: {
         type: "boolean",
@@ -50,6 +45,8 @@ const settings = definePluginSettings({
 
 const MODEL_MAP: Record<string, string> = {
     Auto: "grok-4-auto",
+    "Grok 4 With Effort Decider": "grok-4-auto",
+    "Grok 4 Auto": "grok-4-auto",
     Fast: "grok-3",
     Expert: "grok-4",
     Heavy: "grok-4-heavy",
@@ -74,7 +71,7 @@ function getCurrentModelFromUI(): string {
         if (modelValue.startsWith("grok-")) {
             return modelValue;
         }
-        const mapKey = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === modelValue);
+        const mapKey = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === modelValue.toLowerCase());
         if (mapKey) {
             return MODEL_MAP[mapKey]!;
         }
@@ -123,7 +120,30 @@ function useCurrentModel(): string {
 }
 
 function useCurrentRequestKind(currentModel: string): string {
-    const getKind = useCallback((): string => DEFAULT_KIND, [currentModel]);
+    const getKind = useCallback((): string => {
+        if (currentModel !== "grok-3") {
+            return DEFAULT_KIND;
+        }
+        const queryBar = selectOne(QUERY_BAR_SELECTOR);
+        if (!queryBar) {
+            return DEFAULT_KIND;
+        }
+        const thinkBtn = findElement({ ...LOCATORS.QUERY_BAR.buttonByAria("Think"), root: queryBar });
+        if (thinkBtn && thinkBtn.getAttribute("aria-pressed") === "true") {
+            return "REASONING";
+        }
+        const deepSearchBtn = findElement({ ...LOCATORS.QUERY_BAR.buttonByAria(/Deep(er)?Search/i), root: queryBar });
+        if (deepSearchBtn && deepSearchBtn.getAttribute("aria-pressed") === "true") {
+            const aria = deepSearchBtn.getAttribute("aria-label") || "";
+            if (/deeper/i.test(aria)) {
+                return "DEEPERSEARCH";
+            }
+            if (/deep/i.test(aria)) {
+                return "DEEPSEARCH";
+            }
+        }
+        return DEFAULT_KIND;
+    }, [currentModel]);
 
     const [requestKind, setRequestKind] = useState<string>(getKind);
     useEffect(() => {
@@ -215,21 +235,24 @@ function RateLimitDisplay() {
                     isBoth: true,
                     highRemaining: data.highEffortRateLimits?.remainingQueries ?? 0,
                     lowRemaining: data.lowEffortRateLimits?.remainingQueries ?? 0,
-                    waitTimeSeconds: data.waitTimeSeconds ?? 0
+                    waitTimeSeconds: Math.max(
+                        data.highEffortRateLimits?.waitTimeSeconds ?? 0,
+                        data.lowEffortRateLimits?.waitTimeSeconds ?? 0,
+                        data.waitTimeSeconds ?? 0
+                    )
                 };
             } else {
-                const limits = model === "grok-3" ? data.lowEffortRateLimits : data.highEffortRateLimits;
+                const isLowLane = model === "grok-3";
+                const limits = isLowLane ? data.lowEffortRateLimits : data.highEffortRateLimits;
                 processed = {
                     isBoth: false,
                     highRemaining: limits?.remainingQueries ?? data.remainingQueries ?? 0,
-                    waitTimeSeconds: data.waitTimeSeconds ?? 0
+                    waitTimeSeconds: limits?.waitTimeSeconds ?? data.waitTimeSeconds ?? 0
                 };
             }
             setRateLimit(processed);
             setCached(model, kind, processed);
-            if (processed.waitTimeSeconds > 0) {
-                setCountdown(processed.waitTimeSeconds);
-            }
+            setCountdown(processed.waitTimeSeconds > 0 ? processed.waitTimeSeconds : null);
         }
         if (!opts?.background) {
             setIsLoading(false);
@@ -243,12 +266,8 @@ function RateLimitDisplay() {
         if (entry) {
             setRateLimit(entry.processed);
             setIsLoading(false);
-            if (!("error" in entry.processed) && entry.processed.waitTimeSeconds > 0) {
-                setCountdown(entry.processed.waitTimeSeconds);
-            }
-            if (cacheAgeMs(entry) > CACHE_TTL_MS) {
-                fetchNow({ background: true });
-            }
+            setCountdown(!("error" in entry.processed) && entry.processed.waitTimeSeconds > 0 ? entry.processed.waitTimeSeconds : null);
+            fetchNow({ background: true });
         } else {
             fetchNow();
         }

@@ -206,14 +206,14 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         );
 
         let iconClasses = "";
-        if (isActive) {
-            iconClasses = "text-primary";
-        } else if (variant === "solid" && color !== "default") {
+        if (variant === "solid" && color !== "default") {
             iconClasses = "text-white";
         } else if (color === "danger") {
             iconClasses = "text-red-400 dark:text-red-200 group-hover:text-red-500";
         } else if (color === "warning") {
             iconClasses = "text-yellow-400 group-hover:text-yellow-500";
+        } else if (isActive) {
+            iconClasses = "text-primary";
         } else {
             iconClasses = clsx("text-secondary", !disableIconHover && "group-hover:text-primary");
         }
