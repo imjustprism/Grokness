@@ -113,7 +113,7 @@ function detach(el: HTMLElement): void {
 let detachLive: (() => void) | null = null;
 
 export default definePlugin({
-    name: "Message Click Actions",
+    name: "Click Actions",
     description: "Adds click actions, such as double-click to edit.",
     authors: [Devs.Prism],
     category: "chat",
