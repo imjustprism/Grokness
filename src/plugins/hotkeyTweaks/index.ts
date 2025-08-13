@@ -6,7 +6,6 @@
 
 import { Devs } from "@utils/constants";
 import { selectOne } from "@utils/dom";
-import { LOCATORS } from "@utils/locators";
 import { definePlugin, definePluginSettings } from "@utils/types";
 
 const settings = definePluginSettings({
@@ -23,30 +22,80 @@ const settings = definePluginSettings({
     },
 });
 
-let tracked: HTMLTextAreaElement | null = null;
+let tracked: HTMLElement | null = null;
 let mo: MutationObserver | null = null;
 
-const { selector } = LOCATORS.QUERY_BAR.textarea;
+const EDITOR_SELECTOR = ".query-bar .tiptap.ProseMirror" as const;
 
 const onKey = (e: KeyboardEvent): void => {
-    if (e.target !== tracked || e.key !== "Enter") {
+    if (e.key !== "Enter") {
         return;
     }
+    const editor = tracked;
+    if (!editor) {
+        return;
+    }
+    const t = e.target as HTMLElement | null;
+    if (!t || (t !== editor && !editor.contains(t))) {
+        return;
+    }
+
     const behavior = settings.store.enterBehavior;
     if (behavior === "default") {
         return;
     }
-    const ta = e.target as HTMLTextAreaElement;
 
-    const send = () => ta.closest("form")?.requestSubmit();
+    const send = () => editor.closest("form")?.requestSubmit();
     const newline = () => {
-        const { selectionStart, selectionEnd, value } = ta;
-        const next = `${value.substring(0, selectionStart)}\n${value.substring(selectionEnd)}`;
-        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set?.call(ta, next);
-        ta.dispatchEvent(new Event("input", { bubbles: true }));
-        const pos = selectionStart + 1;
-        ta.selectionStart = pos;
-        ta.selectionEnd = pos;
+        editor.focus();
+
+        const dispatchBeforeInput = (inputType: string, data?: string): boolean => {
+            const ev = new InputEvent("beforeinput", {
+                bubbles: true,
+                cancelable: true,
+                inputType,
+                data,
+            });
+            const notCanceled = editor.dispatchEvent(ev);
+            return !notCanceled;
+        };
+
+        const handled = dispatchBeforeInput("insertLineBreak") || dispatchBeforeInput("insertParagraph");
+        if (handled) {
+            editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "\n" }));
+            return;
+        }
+
+        const sel = document.getSelection();
+        if (!sel) {
+            return;
+        }
+        if (sel.rangeCount === 0) {
+            const r = document.createRange();
+            r.selectNodeContents(editor);
+            r.collapse(false);
+            sel.addRange(r);
+        }
+        const range = sel.getRangeAt(0);
+        if (!editor.contains(range.startContainer)) {
+            const r = document.createRange();
+            r.selectNodeContents(editor);
+            r.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(r);
+        }
+        const current = sel.getRangeAt(0);
+        current.deleteContents();
+        const br = document.createElement("br");
+        current.insertNode(br);
+        const zw = document.createTextNode("\u200B");
+        br.parentNode?.insertBefore(zw, br.nextSibling);
+        const after = document.createRange();
+        after.setStartAfter(zw);
+        after.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(after);
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
     };
 
     if (behavior === "swap") {
@@ -79,7 +128,7 @@ export default definePlugin({
     start() {
         document.addEventListener("keydown", onKey, { capture: true });
         const update = () => {
-            tracked = selectOne(selector) as HTMLTextAreaElement | null;
+            tracked = selectOne(EDITOR_SELECTOR) as HTMLElement | null;
         };
         mo = new MutationObserver(update);
         mo.observe(document.body, { childList: true, subtree: true });

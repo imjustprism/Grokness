@@ -12,15 +12,14 @@ html.streamer-mode-active.blur-email .p-1.min-w-0.text-sm .text-secondary.trunca
     -webkit-filter: blur(var(--grokness-blur-amount, 4px)) !important;
 }
 
-/* Chat titles under "History" and "Pinned" sections */
-html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="History"]) + div a[href^="/chat/"] > span.flex-1,
-html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="Pinned"]) + div a[href^="/chat/"] > span.flex-1,
+/* Chat titles (pinned and historical), language-agnostic */
+html.streamer-mode-active.blur-chat-titles [data-sidebar="menu"] a[href^="/chat/"] > span.flex-1,
 
 /* Project titles under the "Projects" section */
 html.streamer-mode-active.blur-project-titles li:has(a[href="/project"]) + div a[href^="/project/"] > span.flex-1,
 
-/* Task titles under the "Tasks" section */
-html.streamer-mode-active.blur-task-titles li:has(a[href="/tasks"]) + div a[href^="/chat/"] > span.flex-1,
+/* Task titles (language-agnostic) */
+html.streamer-mode-active.blur-task-titles [data-sidebar="menu"] a[href^="/tasks"] > span.flex-1,
 
 /* File names in files section */
 html.streamer-mode-active.blur-file-names a[href^="/files?file="] > div > span.flex-1 {
@@ -40,9 +39,8 @@ html.streamer-mode-active.blur-file-names a[href^="/files?file="] > div > span.f
 /* --- Parent container overflow fixes --- */
 
 html.streamer-mode-active.blur-project-titles li:has(a[href="/project"]) + div a[href^="/project/"],
-html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="History"]) + div a[href^="/chat/"],
-html.streamer-mode-active.blur-chat-titles li:has(div[aria-label="Pinned"]) + div a[href^="/chat/"],
-html.streamer-mode-active.blur-task-titles li:has(a[href="/tasks"]) + div a[href^="/chat/"],
+html.streamer-mode-active.blur-chat-titles [data-sidebar="menu"] a[href^="/chat/"],
+html.streamer-mode-active.blur-task-titles [data-sidebar="menu"] a[href^="/tasks"],
 html.streamer-mode-active.blur-file-names a[href^="/files?file="] {
     overflow: visible !important;
 }

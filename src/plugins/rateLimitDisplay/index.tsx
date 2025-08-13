@@ -68,15 +68,6 @@ function getCurrentModelFromUI(): string {
         return DEFAULT_MODEL;
     }
 
-    const modelButton = selectOne(LOCATORS.QUERY_BAR.modelButton, queryBar);
-    if (modelButton) {
-        const modelNameSpan = selectOne(LOCATORS.QUERY_BAR.modelNameSpan, modelButton);
-        const rawName = modelNameSpan?.textContent?.trim() ?? "";
-        if (MODEL_MAP[rawName]) {
-            return MODEL_MAP[rawName];
-        }
-    }
-
     const selectElement = selectOne(LOCATORS.QUERY_BAR.hiddenModelSelect, queryBar) as HTMLSelectElement | null;
     if (selectElement?.value) {
         const modelValue = selectElement.value;
@@ -86,6 +77,15 @@ function getCurrentModelFromUI(): string {
         const mapKey = Object.keys(MODEL_MAP).find(k => k.toLowerCase() === modelValue);
         if (mapKey) {
             return MODEL_MAP[mapKey]!;
+        }
+    }
+
+    const modelButton = selectOne(LOCATORS.QUERY_BAR.modelButton, queryBar);
+    if (modelButton) {
+        const modelNameSpan = selectOne(LOCATORS.QUERY_BAR.modelNameSpan, modelButton);
+        const rawName = modelNameSpan?.textContent?.trim() ?? "";
+        if (MODEL_MAP[rawName]) {
+            return MODEL_MAP[rawName];
         }
     }
 
@@ -123,23 +123,7 @@ function useCurrentModel(): string {
 }
 
 function useCurrentRequestKind(currentModel: string): string {
-    const getKind = useCallback((): string => {
-        if (currentModel !== "grok-3") {
-            return DEFAULT_KIND;
-        }
-        const queryBar = selectOne(QUERY_BAR_SELECTOR);
-        if (!queryBar) {
-            return DEFAULT_KIND;
-        }
-        const isPressed = (sel: string | { selector: string; }) => findElement(typeof sel === "string" ? { selector: sel, root: queryBar } : { ...sel, root: queryBar })?.getAttribute("aria-pressed") === "true";
-        if (isPressed(LOCATORS.QUERY_BAR.thinkButton)) {
-            return "REASONING";
-        }
-        if (isPressed("button[aria-label=\"DeeperSearch\"]") || isPressed("button[aria-label=\"DeepSearch\"]")) {
-            return "DEEPSEARCH";
-        }
-        return DEFAULT_KIND;
-    }, [currentModel]);
+    const getKind = useCallback((): string => DEFAULT_KIND, [currentModel]);
 
     const [requestKind, setRequestKind] = useState<string>(getKind);
     useEffect(() => {

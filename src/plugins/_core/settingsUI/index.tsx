@@ -117,7 +117,6 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({ rootEle
         return mount;
     };
 
-    // Cleanup the dynamically created mount container if the plugin is stopped/disabled
     useEffect(() => () => {
         const mount = tabMountRef.current;
         if (mount && mount.parentElement) {

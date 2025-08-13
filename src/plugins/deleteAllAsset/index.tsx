@@ -6,6 +6,7 @@
 
 import { grokApi } from "@api/index";
 import { Button } from "@components/Button";
+import { Modal } from "@components/Modal";
 import { Devs } from "@utils/constants";
 import definePlugin, { Patch } from "@utils/types";
 import React, { useEffect, useRef, useState } from "react";
@@ -51,29 +52,17 @@ const suppressAbortErrorsDuringReload = (delayMs: number = 50) => {
 };
 
 const DeleteAllAssetsButton: React.FC = () => {
-    const [confirming, setConfirming] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
-
-    useEffect(() => {
-        if (!confirming) {
-            return;
-        }
-        const t = setTimeout(() => setConfirming(false), 5000);
-        return () => clearTimeout(t);
-    }, [confirming]);
 
     useEffect(() => () => {
         abortRef.current?.abort();
         abortRef.current = null;
     }, []);
 
-    const onClick = async () => {
+    const runDelete = async () => {
         if (loading) {
-            return;
-        }
-        if (!confirming) {
-            setConfirming(true);
             return;
         }
         setLoading(true);
@@ -96,25 +85,56 @@ const DeleteAllAssetsButton: React.FC = () => {
         }
     };
 
+    const handleClose = () => {
+        if (!loading) {
+            setIsOpen(false);
+        }
+    };
+
     return (
-        <Button
-            id="grok-delete-all"
-            variant="outline"
-            size="sm"
-            loading={loading}
-            icon={loading ? "Loader2" : "Trash"}
-            iconSize={15}
-            onClick={onClick}
-            aria-label="Delete All Assets"
-            className="h-8 px-3 text-xs flex-shrink-0"
-            color={confirming ? "danger" : "default"}
-            rounded
-            disableIconHover
-            disabled={loading}
-            tooltip={loading ? "Deleting…" : confirming ? "Click again to confirm" : "Delete all uploaded assets"}
-        >
-            <span className="hidden @[160px]:inline-block">{confirming ? "Sure?" : "Delete All"}</span>
-        </Button>
+        <>
+            <Button
+                id="grok-delete-all"
+                variant="ghost"
+                size="sm"
+                loading={false}
+                icon={"Trash"}
+                iconSize={18}
+                onClick={() => setIsOpen(true)}
+                aria-label="Delete All Assets"
+                className="w-8 h-8 px-1.5 py-1.5 rounded-xl text-fg-secondary border-transparent"
+                disableIconHover
+            />
+            <Modal
+                isOpen={isOpen}
+                onClose={handleClose}
+                title="Delete all assets?"
+                description="This will permanently delete all uploaded assets from the Files tab. This action cannot be undone."
+                maxWidth="max-w-[480px]"
+            >
+                <Modal.Footer>
+                    <Button
+                        variant="ghost"
+                        onClick={() => setIsOpen(false)}
+                        size="md"
+                        disabled={loading}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="solid"
+                        color="danger"
+                        onClick={runDelete}
+                        loading={loading}
+                        icon={loading ? "Loader2" : "Trash"}
+                        iconSize={18}
+                        size="md"
+                    >
+                        Delete
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+        </>
     );
 };
 
@@ -126,21 +146,45 @@ export default definePlugin({
     tags: ["assets", "delete", "files"],
     patches: [
         (() => {
-            const patch = Patch.ui({
-                selector: "div.flex.gap-2",
-                filter: (el: HTMLElement) => {
-                    const buttons = Array.from(el.querySelectorAll("button"));
-                    const hasFilter = buttons.some(b => /filter/i.test(b.textContent ?? ""));
-                    const hasSort = buttons.some(b => /sort/i.test(b.textContent ?? ""));
-                    return hasFilter && hasSort;
+            const SEARCH_ICON_D = "M17.5 17L20.5 20";
+
+            const findButtonByPath = (root: HTMLElement, dContains: string): HTMLButtonElement | null => {
+                const paths = Array.from(root.querySelectorAll("button svg path"));
+                const needle = dContains.toLowerCase();
+                for (const p of paths) {
+                    const d = (p.getAttribute("d") || "").toLowerCase();
+                    if (d.includes(needle)) {
+                        const btn = p.closest("button");
+                        if (btn instanceof HTMLButtonElement) {
+                            return btn;
+                        }
+                    }
                 }
+                return null;
+            };
+
+            const isIconToolbar = (el: HTMLElement): boolean => {
+                const hasIconSizedButtons = Array.from(el.querySelectorAll("button")).some(b => b.classList.contains("w-8") && b.classList.contains("h-8"));
+                const hasSearch = !!findButtonByPath(el, SEARCH_ICON_D);
+                return hasIconSizedButtons && hasSearch;
+            };
+
+            const patch = Patch.ui({
+                selector: "div.flex.gap-1",
+                filter: (el: HTMLElement) => isIconToolbar(el)
             })
                 .component(DeleteAllAssetsButton)
                 .parent(el => el)
-                .after(parent => {
-                    const buttons = Array.from(parent.querySelectorAll("button"));
-                    return buttons.find(b => b.textContent?.includes("Sort")) ?? null;
-                })
+                .after(parent => (
+                    (() => {
+                        const searchBtn = findButtonByPath(parent as HTMLElement, SEARCH_ICON_D);
+                        if (searchBtn) {
+                            return searchBtn as unknown as HTMLElement;
+                        }
+                        const buttons = parent.querySelectorAll("button");
+                        return (buttons[buttons.length - 1] as HTMLElement | null) ?? null;
+                    })()
+                ))
                 .debounce(50)
                 .build();
             return Object.assign(patch, {

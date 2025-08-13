@@ -57,8 +57,11 @@ export const LOCATORS = {
     },
     QUERY_BAR: {
         root: ".query-bar" as AnySelector,
-        modelButton: button({ selector: "button[aria-label='Model select']" }),
-        modelNameSpan: "span.font-semibold" as AnySelector,
+        modelButton: button({
+            selector: "button#model-select-trigger,button[role='combobox'][data-slot='select-trigger'],button",
+            svgPartialD: "M5 14.25L14 4",
+        }),
+        modelNameSpan: "span.font-semibold, span.inline-block" as AnySelector,
         hiddenModelSelect: "select[aria-hidden='true']" as AnySelector,
         textarea: el(".query-bar textarea"),
         editor: el(".tiptap.ProseMirror"),
@@ -67,10 +70,8 @@ export const LOCATORS = {
         editorPlaceholderDefault: el(".tiptap.ProseMirror p[data-placeholder]", { textIncludes: "What do you want to know?" }),
         editorPlaceholderChat: el(".tiptap.ProseMirror p[data-placeholder]", { textIncludes: "How can Grok help?" }),
         projectButton: button({ svgPartialD: "M3.33965 17L11.9999 22L20.6602 17V7" }),
-        attachButton: button({ selector: "button[aria-label='Attach']" }),
-        voiceModeButton: button({ ariaLabel: "Enter voice mode" }),
-        thinkButton: button({ selector: "button[aria-label='Think']" }),
-        deepSearchButton: button({ selector: "button[aria-label='DeeperSearch'],button[aria-label='DeepSearch']" }),
+        attachButton: button({ svgPartialD: "M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8" }),
+        voiceModeButton: el("button", { filter: el => el.querySelectorAll("div.w-0.5").length >= 5 }),
 
         buttonByAria(label: string | RegExp): ElementFinderConfig {
             return button(typeof label === "string" ? { ariaLabel: label } : { ariaLabel: label });

@@ -5,34 +5,109 @@
  */
 
 import { Devs } from "@utils/constants";
-import { liveElements, selectOne } from "@utils/dom";
+import { liveElements } from "@utils/dom";
+import { createEventGuard, type EventGuard } from "@utils/guard";
 import { LOCATORS } from "@utils/locators";
 import { definePlugin } from "@utils/types";
 
 const BUBBLE = LOCATORS.CHAT.messageBubble.selector;
 const ATTR = "data-quick-actions-listener";
+const ACTIONS_CONTAINER_SELECTOR = ".action-buttons" as const;
+const ICON_BUTTON_SELECTOR = "button.h-8.w-8.rounded-full" as const;
+const FALLBACK_BUTTONS_SELECTOR = `${ACTIONS_CONTAINER_SELECTOR} button, button` as const;
+const INTERACTIVE_SELECTOR = "a,button,textarea,input,select,[role='button']" as const;
 
-const onDbl = (e: MouseEvent): void => {
-    const bubble = e.currentTarget as HTMLElement;
+function isPencilLikeIconButton(btn: HTMLButtonElement): boolean {
+    const hasRect = !!btn.querySelector("svg rect");
+    if (hasRect) {
+        return false;
+    }
+    const pathCount = btn.querySelectorAll("svg path").length;
+    return pathCount >= 2;
+}
+
+function getCandidateButtons(root: HTMLElement): HTMLButtonElement[] {
+    const iconButtons = Array.from(root.querySelectorAll<HTMLButtonElement>(ICON_BUTTON_SELECTOR));
+    if (iconButtons.length > 0) {
+        return iconButtons;
+    }
+    return Array.from(root.querySelectorAll<HTMLButtonElement>(FALLBACK_BUTTONS_SELECTOR));
+}
+
+function findEditButton(container: HTMLElement): HTMLButtonElement | null {
+    const withinActions = container.querySelector<HTMLElement>(ACTIONS_CONTAINER_SELECTOR);
+    const buttonSourceRoot = withinActions ?? container;
+
+    const buttons = getCandidateButtons(buttonSourceRoot);
+
+    if (buttons.length === 0) {
+        return null;
+    }
+
+    const pencil = buttons.find(isPencilLikeIconButton);
+    if (pencil) {
+        return pencil;
+    }
+
+    const nonRect = buttons.find(b => !b.querySelector("svg rect"));
+    if (nonRect) {
+        return nonRect;
+    }
+
+    return buttons[0] ?? null;
+}
+
+const onDbl = (e: Event, bubble: HTMLElement): void => {
+    if (bubble.querySelector("textarea")) {
+        return;
+    }
+    const t = e.target as HTMLElement | null;
+    if (t && t.closest(INTERACTIVE_SELECTOR)) {
+        return;
+    }
     const container = bubble.closest<HTMLElement>(LOCATORS.CHAT.messageContainer.selector);
     if (!container) {
         return;
     }
-    const edit = selectOne<HTMLButtonElement>(LOCATORS.CHAT.editButton, container);
+    const edit = findEditButton(container);
     edit?.click();
 };
+
+const GUARDS = new WeakMap<HTMLElement, EventGuard>();
 
 function attach(el: HTMLElement): void {
     if (el.hasAttribute(ATTR)) {
         return;
     }
     el.setAttribute(ATTR, "true");
-    el.addEventListener("dblclick", onDbl);
+    const guard = createEventGuard({
+        query: {
+            roots: [el],
+            selectors: ["*"],
+            filter: node => node === el,
+        },
+        behavior: {
+            events: ["dblclick"],
+            capture: false,
+            passive: true,
+            stopPropagation: "none",
+            preventDefault: "never",
+            allowPredicate: () => true,
+        },
+        onAllowed: (evt, area) => onDbl(evt, area),
+        debugName: undefined,
+    });
+    guard.enable();
+    GUARDS.set(el, guard);
 }
 
 function detach(el: HTMLElement): void {
     el.removeAttribute(ATTR);
-    el.removeEventListener("dblclick", onDbl);
+    const guard = GUARDS.get(el);
+    if (guard) {
+        guard.disable();
+        GUARDS.delete(el);
+    }
 }
 
 let detachLive: (() => void) | null = null;
