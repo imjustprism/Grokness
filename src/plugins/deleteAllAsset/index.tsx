@@ -19,11 +19,18 @@ import {
 import { Button } from "@components/Button";
 import { Toast, type ToastIntent, ToastProvider } from "@components/Toast";
 import { Devs } from "@utils/constants";
+import { findElement } from "@utils/dom";
 import { Logger } from "@utils/logger";
+import { session } from "@utils/storage";
 import definePlugin, { Patch } from "@utils/types";
 import React, { useEffect, useRef, useState } from "react";
 
 const logger = new Logger("DeleteAllAsset", "#a6e3a1");
+
+const ASSETS_CACHE_KEY = "deleteAllAsset:assets";
+const ASSETS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type AssetInfo = { id?: string; assetId?: string; rootAssetId?: string; };
 
 interface ToastInfo {
     id: number;
@@ -31,17 +38,12 @@ interface ToastInfo {
     type: ToastIntent;
 }
 
-async function deleteInBatches(
-    ids: ReadonlyArray<string>,
-    signal?: AbortSignal
-): Promise<void> {
+async function deleteInBatches(ids: ReadonlyArray<string>, signal?: AbortSignal): Promise<void> {
     const size = 6;
     for (let i = 0; i < ids.length; i += size) {
         const slice = ids.slice(i, i + size);
         await Promise.all(
-            slice.map(id =>
-                grokApi.services.assets.delete({ assetId: id }, signal)
-            )
+            slice.map(id => grokApi.services.assets.delete({ assetId: id }, signal))
         );
     }
 }
@@ -52,17 +54,11 @@ const suppressAbortErrorsDuringReload = (delayMs = 50) => {
             return false;
         }
         const m = msg.toLowerCase();
-        return (
-            m.includes("networkerror") ||
-            m.includes("the user aborted a request") ||
-            m.includes("load failed")
-        );
+        return m.includes("networkerror") || m.includes("the user aborted a request") || m.includes("load failed");
     };
 
     const onRejection = (e: PromiseRejectionEvent) => {
-        const msg = (
-            e.reason && (e.reason.message || String(e.reason))
-        ) as string | undefined;
+        const msg = (e.reason && (e.reason.message || String(e.reason))) as string | undefined;
         if (isBenign(msg)) {
             e.preventDefault();
         }
@@ -95,13 +91,10 @@ const DeleteAllAssetsButton: React.FC = () => {
         setToasts(prev => [...prev, { id, message, type }]);
     };
 
-    useEffect(
-        () => () => {
-            abortRef.current?.abort();
-            abortRef.current = null;
-        },
-        []
-    );
+    useEffect(() => () => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+    }, []);
 
     const runDelete = async () => {
         if (loading) {
@@ -113,27 +106,31 @@ const DeleteAllAssetsButton: React.FC = () => {
         abortRef.current = ac;
 
         try {
-            const assets = await grokApi.listAllAssets(
-                { pageSize: 1000, source: "SOURCE_ANY", isLatest: true },
-                ac.signal
-            );
+            let assets = session.get<AssetInfo[]>(ASSETS_CACHE_KEY);
+            if (!assets) {
+                const fetchedAssets = await grokApi.listAllAssets(
+                    { pageSize: 1000, source: "SOURCE_ANY", isLatest: true },
+                    ac.signal
+                );
+                assets = [...fetchedAssets];
+                session.set(ASSETS_CACHE_KEY, assets, ASSETS_CACHE_TTL_MS);
+            }
+
+            if (!assets) {
+                showToast("No assets found to delete.", "info");
+                return;
+            }
+
             const ids = assets
                 .map(a => {
-                    const x = a as unknown as {
-                        id?: string;
-                        assetId?: string;
-                        rootAssetId?: string;
-                    };
+                    const x = a as AssetInfo;
                     return x.id ?? x.assetId ?? x.rootAssetId;
                 })
                 .filter((v): v is string => typeof v === "string" && v.length > 0);
 
             if (ids.length > 0) {
                 await deleteInBatches(ids, ac.signal);
-                showToast(
-                    `Successfully deleted ${ids.length} assets.`,
-                    "success"
-                );
+                showToast(`Successfully deleted ${ids.length} assets.`, "success");
                 suppressAbortErrorsDuringReload(2000);
             } else {
                 showToast("No assets found to delete.", "info");
@@ -171,43 +168,25 @@ const DeleteAllAssetsButton: React.FC = () => {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete all assets?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete all uploaded assets from
-                            the Files tab. This action cannot be undone.
+                            This will permanently delete all uploaded assets from the Files tab. This action cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={loading}>
-                            Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            color="danger"
-                            onClick={runDelete}
-                            disabled={loading}
-                        >
+                        <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction color="danger" onClick={runDelete} disabled={loading}>
                             {loading ? "Deleting..." : "Delete All"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
 
-            <div
-                style={{
-                    position: "fixed",
-                    top: "1rem",
-                    right: "1rem",
-                    zIndex: 10000,
-                }}
-            >
+            <div style={{ position: "fixed", top: "1rem", right: "1rem", zIndex: 10000 }}>
                 <ToastProvider>
                     {toasts.map(toast => (
                         <Toast
                             key={toast.id}
                             open
-                            onOpenChange={() =>
-                                setToasts(prev =>
-                                    prev.filter(t => t.id !== toast.id)
-                                )
-                            }
+                            onOpenChange={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
                             intent={toast.type}
                             message={toast.message}
                         />
@@ -218,6 +197,8 @@ const DeleteAllAssetsButton: React.FC = () => {
     );
 };
 
+const SEARCH_ICON_D = "M17.5 17L20.5 20";
+
 export default definePlugin({
     name: "Delete All Assets",
     description: "Adds a button to the files to delete all uploaded assets.",
@@ -225,70 +206,35 @@ export default definePlugin({
     category: "utility",
     tags: ["assets", "delete", "files"],
     patches: [
-        (() => {
-            const SEARCH_ICON_D = "M17.5 17L20.5 20";
-
-            const findButtonByPath = (
-                root: HTMLElement,
-                dContains: string
-            ): HTMLButtonElement | null => {
-                const paths = Array.from(
-                    root.querySelectorAll("button svg path")
+        Patch.ui({
+            selector: "div.flex.gap-1",
+            filter: (el: HTMLElement) => {
+                const hasIconSizedButtons = Array.from(el.querySelectorAll("button")).some(
+                    b => b.classList.contains("w-8") && b.classList.contains("h-8")
                 );
-                const needle = dContains.toLowerCase();
-                for (const p of paths) {
-                    const d = (p.getAttribute("d") || "").toLowerCase();
-                    if (d.includes(needle)) {
-                        const btn = p.closest("button");
-                        if (btn instanceof HTMLButtonElement) {
-                            return btn;
-                        }
-                    }
-                }
-                return null;
-            };
-
-            const isIconToolbar = (el: HTMLElement): boolean => {
-                const hasIconSizedButtons = Array.from(
-                    el.querySelectorAll("button")
-                ).some(
-                    b =>
-                        b.classList.contains("w-8") &&
-                        b.classList.contains("h-8")
-                );
-                const hasSearch = !!findButtonByPath(el, SEARCH_ICON_D);
+                const hasSearch = !!findElement({
+                    selector: "button",
+                    root: el,
+                    svgPartialD: SEARCH_ICON_D,
+                });
                 return hasIconSizedButtons && hasSearch;
-            };
-
-            const patch = Patch.ui({
-                selector: "div.flex.gap-1",
-                filter: (el: HTMLElement) => isIconToolbar(el),
+            },
+        })
+            .component(DeleteAllAssetsButton)
+            .parent(el => el)
+            .after(parent => {
+                const searchBtn = findElement({
+                    selector: "button",
+                    root: parent as HTMLElement,
+                    svgPartialD: SEARCH_ICON_D,
+                });
+                if (searchBtn) {
+                    return searchBtn;
+                }
+                const buttons = parent.querySelectorAll("button");
+                return buttons[buttons.length - 1] ?? null;
             })
-                .component(DeleteAllAssetsButton)
-                .parent(el => el)
-                .after(parent => {
-                    const searchBtn = findButtonByPath(
-                        parent as HTMLElement,
-                        SEARCH_ICON_D
-                    );
-                    if (searchBtn) {
-                        return searchBtn as unknown as HTMLElement;
-                    }
-                    const buttons = parent.querySelectorAll("button");
-                    return (
-                        (buttons[buttons.length - 1] as HTMLElement | null) ??
-                        null
-                    );
-                })
-                .debounce(50)
-                .build();
-            return Object.assign(patch, {
-                disconnect: () => {
-                    document
-                        .querySelectorAll("#grok-delete-all")
-                        .forEach(n => n.remove());
-                },
-            });
-        })(),
+            .debounce(50)
+            .build(),
     ],
 });

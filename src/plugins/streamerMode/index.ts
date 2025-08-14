@@ -7,7 +7,8 @@
 import styles from "@plugins/streamerMode/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/logger";
-import { definePlugin, definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
+import definePlugin, { definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
+import { useEffect } from "react";
 
 const logger = new Logger("StreamerMode", "#f2d5cf");
 
@@ -66,25 +67,48 @@ const settings = definePluginSettings({
     },
 });
 
-let off: (() => void) | null = null;
+const StreamerMode: React.FC = () => {
+    useEffect(() => {
+        const apply = () => {
+            try {
+                const cfg = settings.store;
+                const html = document.documentElement;
+                html.style.setProperty("--grokness-blur-amount", `${cfg.blurAmount}px`);
+                html.classList.toggle("streamer-mode-active", true);
+                html.classList.toggle("blur-username", cfg.blurUsername);
+                html.classList.toggle("blur-email", cfg.blurEmail);
+                html.classList.toggle("blur-project-titles", cfg.blurProjectTitles);
+                html.classList.toggle("blur-chat-titles", cfg.blurChatTitles);
+                html.classList.toggle("blur-task-titles", cfg.blurTaskTitles);
+                html.classList.toggle("blur-file-names", cfg.blurFileNames);
+                html.classList.toggle("blur-uid", cfg.blurUid);
+            } catch (e) {
+                logger.error("update failed:", e);
+            }
+        };
 
-function apply() {
-    try {
-        const cfg = settings.store;
-        const html = document.documentElement;
-        html.style.setProperty("--grokness-blur-amount", `${cfg.blurAmount}px`);
-        html.classList.toggle("streamer-mode-active", true);
-        html.classList.toggle("blur-username", cfg.blurUsername);
-        html.classList.toggle("blur-email", cfg.blurEmail);
-        html.classList.toggle("blur-project-titles", cfg.blurProjectTitles);
-        html.classList.toggle("blur-chat-titles", cfg.blurChatTitles);
-        html.classList.toggle("blur-task-titles", cfg.blurTaskTitles);
-        html.classList.toggle("blur-file-names", cfg.blurFileNames);
-        html.classList.toggle("blur-uid", cfg.blurUid);
-    } catch (e) {
-        logger.error("update failed:", e);
-    }
-}
+        apply();
+        const off = onPluginSettingsUpdated("streamer-mode", apply);
+
+        return () => {
+            const html = document.documentElement;
+            html.style.removeProperty("--grokness-blur-amount");
+            html.classList.remove(
+                "streamer-mode-active",
+                "blur-username",
+                "blur-email",
+                "blur-project-titles",
+                "blur-chat-titles",
+                "blur-task-titles",
+                "blur-file-names",
+                "blur-uid"
+            );
+            off();
+        };
+    }, []);
+
+    return null;
+};
 
 export default definePlugin({
     name: "Streamer Mode",
@@ -94,26 +118,8 @@ export default definePlugin({
     tags: ["privacy", "blur", "streamer"],
     settings,
     styles,
-
-    start() {
-        apply();
-        off = onPluginSettingsUpdated("streamer-mode", () => apply());
-    },
-
-    stop() {
-        const html = document.documentElement;
-        html.style.removeProperty("--grokness-blur-amount");
-        html.classList.remove(
-            "streamer-mode-active",
-            "blur-username",
-            "blur-email",
-            "blur-project-titles",
-            "blur-chat-titles",
-            "blur-task-titles",
-            "blur-file-names",
-            "blur-uid"
-        );
-        off?.();
-        off = null;
+    ui: {
+        component: StreamerMode,
+        target: "body",
     },
 });

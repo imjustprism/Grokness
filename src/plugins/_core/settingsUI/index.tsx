@@ -538,6 +538,13 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
         if (!sidebarArea) {
             return null;
         }
+
+        sidebarArea.querySelectorAll<HTMLElement>("[data-grokness-settings-tab]").forEach(el => {
+            if (el !== tabMountRef.current) {
+                el.remove();
+            }
+        });
+
         let mount = sidebarArea.querySelector<HTMLElement>(
             "[data-grokness-settings-tab]"
         );
@@ -560,16 +567,13 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
         return mount;
     };
 
-    useEffect(
-        () => () => {
-            const mount = tabMountRef.current;
-            if (mount && mount.parentElement) {
-                mount.remove();
-                tabMountRef.current = null;
-            }
-        },
-        []
-    );
+    useEffect(() => () => {
+        const mount = tabMountRef.current;
+        if (mount && mount.parentElement) {
+            mount.remove();
+            tabMountRef.current = null;
+        }
+    }, []);
 
     const PanelBody = (
         <Panel

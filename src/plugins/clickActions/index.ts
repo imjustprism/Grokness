@@ -5,13 +5,12 @@
  */
 
 import { Devs } from "@utils/constants";
-import { liveElements } from "@utils/dom";
-import { createEventGuard, type EventGuard } from "@utils/guard";
 import { LOCATORS } from "@utils/locators";
-import { definePlugin } from "@utils/types";
+import definePlugin, { type InjectedComponentProps, Patch } from "@utils/types";
+import type React from "react";
+import { useEffect } from "react";
 
-const BUBBLE = LOCATORS.CHAT.messageBubble.selector;
-const ATTR = "data-quick-actions-listener";
+const BUBBLE_SELECTOR = LOCATORS.CHAT.messageBubble.selector;
 const ACTIONS_CONTAINER_SELECTOR = ".action-buttons" as const;
 const ICON_BUTTON_SELECTOR = "button.h-8.w-8.rounded-full" as const;
 const FALLBACK_BUTTONS_SELECTOR = `${ACTIONS_CONTAINER_SELECTOR} button, button` as const;
@@ -37,80 +36,47 @@ function getCandidateButtons(root: HTMLElement): HTMLButtonElement[] {
 function findEditButton(container: HTMLElement): HTMLButtonElement | null {
     const withinActions = container.querySelector<HTMLElement>(ACTIONS_CONTAINER_SELECTOR);
     const buttonSourceRoot = withinActions ?? container;
-
     const buttons = getCandidateButtons(buttonSourceRoot);
-
     if (buttons.length === 0) {
         return null;
     }
-
     const pencil = buttons.find(isPencilLikeIconButton);
     if (pencil) {
         return pencil;
     }
-
     const nonRect = buttons.find(b => !b.querySelector("svg rect"));
     if (nonRect) {
         return nonRect;
     }
-
     return buttons[0] ?? null;
 }
 
-const onDbl = (e: Event, bubble: HTMLElement): void => {
-    if (bubble.querySelector("textarea")) {
-        return;
-    }
-    const t = e.target as HTMLElement | null;
-    if (t && t.closest(INTERACTIVE_SELECTOR)) {
-        return;
-    }
-    const container = bubble.closest<HTMLElement>(LOCATORS.CHAT.messageContainer.selector);
-    if (!container) {
-        return;
-    }
-    const edit = findEditButton(container);
-    edit?.click();
+const ClickActions: React.FC<InjectedComponentProps> = ({ rootElement: bubble }) => {
+    useEffect(() => {
+        if (!bubble) {
+            return;
+        }
+        const onDoubleClick = (e: MouseEvent) => {
+            if (bubble.querySelector("textarea")) {
+                return;
+            }
+            const t = e.target as HTMLElement | null;
+            if (t?.closest(INTERACTIVE_SELECTOR)) {
+                return;
+            }
+            const container = bubble.closest<HTMLElement>(LOCATORS.CHAT.messageContainer.selector);
+            if (!container) {
+                return;
+            }
+            findEditButton(container)?.click();
+        };
+
+        bubble.addEventListener("dblclick", onDoubleClick);
+        return () => bubble.removeEventListener("dblclick", onDoubleClick);
+    }, [bubble]);
+
+    return null;
 };
-
-const GUARDS = new WeakMap<HTMLElement, EventGuard>();
-
-function attach(el: HTMLElement): void {
-    if (el.hasAttribute(ATTR)) {
-        return;
-    }
-    el.setAttribute(ATTR, "true");
-    const guard = createEventGuard({
-        query: {
-            roots: [el],
-            selectors: ["*"],
-            filter: node => node === el,
-        },
-        behavior: {
-            events: ["dblclick"],
-            capture: false,
-            passive: true,
-            stopPropagation: "none",
-            preventDefault: "never",
-            allowPredicate: () => true,
-        },
-        onAllowed: (evt, area) => onDbl(evt, area),
-        debugName: undefined,
-    });
-    guard.enable();
-    GUARDS.set(el, guard);
-}
-
-function detach(el: HTMLElement): void {
-    el.removeAttribute(ATTR);
-    const guard = GUARDS.get(el);
-    if (guard) {
-        guard.disable();
-        GUARDS.delete(el);
-    }
-}
-
-let detachLive: (() => void) | null = null;
 
 export default definePlugin({
     name: "Click Actions",
@@ -118,15 +84,10 @@ export default definePlugin({
     authors: [Devs.Prism],
     category: "chat",
     tags: ["edit", "double-click", "chat", "quality of life"],
-
-    start() {
-        const { disconnect } = liveElements<HTMLElement>(BUBBLE, document, attach, detach, { debounce: 50 });
-        detachLive = disconnect;
-    },
-
-    stop() {
-        detachLive?.();
-        detachLive = null;
-        document.querySelectorAll<HTMLElement>(BUBBLE).forEach(detach);
-    },
+    patches: [
+        Patch.ui(BUBBLE_SELECTOR)
+            .component(ClickActions)
+            .forEach()
+            .build(),
+    ],
 });

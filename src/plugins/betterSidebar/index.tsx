@@ -10,22 +10,38 @@ import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { makeDraggable, makeDropTarget } from "@utils/dnd";
 import { liveElements, selectOne, waitFor, wrapElement } from "@utils/dom";
-import { createEventGuard, type EventGuard } from "@utils/guard";
+import { createEventGuard } from "@utils/guard";
 import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
-import definePlugin, { definePluginSettings, onPluginSettingsUpdated, Patch } from "@utils/types";
+import { session } from "@utils/storage";
+import definePlugin, {
+    definePluginSettings,
+    type InjectedComponentProps,
+    onPluginSettingsUpdated,
+    Patch,
+} from "@utils/types";
 import clsx from "clsx";
 import React, { useEffect, useRef, useState } from "react";
 
 const logger = new Logger("BetterSidebar", "#f2d5cf");
 
-const SIDEBAR_FOOTER_SELECTOR = LOCATORS.SIDEBAR.footer;
-const AVATAR_BUTTON_SELECTOR = LOCATORS.SIDEBAR.avatarButton;
-const TOGGLE_ICON_SELECTOR = LOCATORS.SIDEBAR.toggleIcon;
-const SIDEBAR_CONTAINER_SELECTOR = LOCATORS.SIDEBAR.container.selector;
-const TOGGLE_BUTTON_SELECTOR = LOCATORS.SIDEBAR.toggleButton.selector;
-const CHAT_LINK_SELECTOR = `${SIDEBAR_CONTAINER_SELECTOR} a[href^="/chat/"]` as const;
-const PROJECT_LINK_SELECTOR = `${SIDEBAR_CONTAINER_SELECTOR} a[href^="/project/"]` as const;
+const {
+    SIDEBAR_FOOTER_SELECTOR,
+    AVATAR_BUTTON_SELECTOR,
+    TOGGLE_ICON_SELECTOR,
+    SIDEBAR_CONTAINER_SELECTOR,
+    TOGGLE_BUTTON_SELECTOR,
+    CHAT_LINK_SELECTOR,
+    PROJECT_LINK_SELECTOR,
+} = {
+    SIDEBAR_FOOTER_SELECTOR: LOCATORS.SIDEBAR.footer,
+    AVATAR_BUTTON_SELECTOR: LOCATORS.SIDEBAR.avatarButton,
+    TOGGLE_ICON_SELECTOR: LOCATORS.SIDEBAR.toggleIcon,
+    SIDEBAR_CONTAINER_SELECTOR: LOCATORS.SIDEBAR.container.selector,
+    TOGGLE_BUTTON_SELECTOR: LOCATORS.SIDEBAR.toggleButton.selector,
+    CHAT_LINK_SELECTOR: `${LOCATORS.SIDEBAR.container.selector} a[href^="/chat/"]` as const,
+    PROJECT_LINK_SELECTOR: `${LOCATORS.SIDEBAR.container.selector} a[href^="/project/"]` as const,
+};
 
 const INTERACTIVE_SELECTORS = [
     "a",
@@ -42,26 +58,32 @@ const INTERACTIVE_SELECTORS = [
 const DEFAULT_USER_NAME = "User";
 const DEFAULT_PLAN = "Free";
 
-let cached: { name: string; plan: string; } | null = null;
+const USER_INFO_CACHE_KEY = "sidebar:userInfo";
+const USER_INFO_CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function getUserPlan(): Promise<{ name: string; plan: string; }> {
+    const cached = session.get<{ name: string; plan: string; }>(USER_INFO_CACHE_KEY);
     if (cached) {
         return cached;
     }
     try {
         const { name, plan } = await grokApi.getUserPlanSummary();
-        cached = { name, plan };
-        return cached;
+        const data = { name, plan };
+        session.set(USER_INFO_CACHE_KEY, data, USER_INFO_CACHE_TTL_MS);
+        return data;
     } catch (e) {
         logger.error("fetch failed:", e);
         return { name: DEFAULT_USER_NAME, plan: DEFAULT_PLAN };
     }
 }
 
-function useCollapsed(): boolean {
+function useCollapsed(root: HTMLElement | null): boolean {
     const [isCollapsed, set] = useState(false);
     useEffect(() => {
-        const icon = selectOne(TOGGLE_ICON_SELECTOR);
+        if (!root) {
+            return;
+        }
+        const icon = selectOne(TOGGLE_ICON_SELECTOR, root);
         if (!icon) {
             return;
         }
@@ -70,49 +92,64 @@ function useCollapsed(): boolean {
         const mo = new MutationObserver(update);
         mo.observe(icon, { attributes: true, attributeFilter: ["class"] });
         return () => mo.disconnect();
-    }, []);
+    }, [root]);
     return isCollapsed;
 }
 
-function SidebarUserInfo() {
+function SidebarUserInfo({ rootElement }: InjectedComponentProps) {
     const [data, setData] = useState<{ name: string; plan: string; } | null>(null);
-    const collapsed = useCollapsed();
+    const collapsed = useCollapsed(rootElement ?? null);
     const containerRef = useRef<HTMLDivElement | null>(null);
+
     useEffect(() => {
         getUserPlan().then(setData);
     }, []);
 
     useEffect(() => {
-        if (!data) {
+        if (!data || !rootElement) {
             return;
         }
         const el = containerRef.current;
         if (!el) {
             return;
         }
-        const footer = el.closest(LOCATORS.SIDEBAR.footer as unknown as string) as HTMLElement | null;
-        if (!footer) {
-            return;
-        }
-        const avatarBtn = selectOne<HTMLButtonElement>(AVATAR_BUTTON_SELECTOR, footer);
+
+        const avatarBtn = selectOne<HTMLButtonElement>(AVATAR_BUTTON_SELECTOR, rootElement);
         if (!avatarBtn) {
             return;
         }
-        let wrapper = avatarBtn.parentElement as HTMLElement | null;
-        if (!wrapper) {
-            return;
-        }
-        if (!wrapper.hasAttribute("data-grokness-avatar-wrap")) {
-            wrapper = wrapElement(avatarBtn, "div");
-            wrapper.setAttribute("data-grokness-avatar-wrap", "true");
-            wrapper.style.display = "flex";
-            wrapper.style.alignItems = "center";
-            wrapper.style.gap = "0.5px";
-        }
-        if (el.parentElement !== wrapper) {
-            wrapper.appendChild(el);
-        }
-    }, [data]);
+
+        const cleanupOldWrappers = () => {
+            document.querySelectorAll('[data-grokness-avatar-wrap="true"]').forEach(wrapper => {
+                const parent = wrapper.parentElement;
+                const avatar = wrapper.querySelector(AVATAR_BUTTON_SELECTOR as string);
+                if (parent && avatar) {
+                    parent.insertBefore(avatar, wrapper);
+                }
+                wrapper.remove();
+            });
+        };
+        cleanupOldWrappers();
+
+        const wrapper = wrapElement(avatarBtn, "div");
+        wrapper.setAttribute("data-grokness-avatar-wrap", "true");
+        wrapper.style.display = "flex";
+        wrapper.style.alignItems = "center";
+        wrapper.style.gap = "0.5px";
+        wrapper.appendChild(el);
+
+        return () => {
+            el.remove();
+            if (document.body.contains(wrapper)) {
+                const parent = wrapper.parentElement;
+                if (avatarBtn && parent) {
+                    parent.insertBefore(avatarBtn, wrapper);
+                    wrapper.remove();
+                }
+            }
+        };
+    }, [data, rootElement]);
+
     if (!data) {
         return null;
     }
@@ -124,7 +161,6 @@ function SidebarUserInfo() {
         </div>
     );
 }
-
 const settings = definePluginSettings({
     collapseOnlyViaToggle: {
         type: "boolean",
@@ -146,40 +182,41 @@ const settings = definePluginSettings({
     },
 });
 
-const GUARDS = new WeakMap<HTMLElement, EventGuard>();
-let disconnectLive: (() => void) | null = null;
-let offSettingsListener: (() => void) | null = null;
-let didForceInitialCollapse = false;
-let disconnectLiveChats: (() => void) | null = null;
-let disconnectLiveProjects: (() => void) | null = null;
-
 const CLASS_DROP_OVER = "grokness-project-drop-over" as const;
 
-let pushToastRef: ((t: {
-    id: number;
-    message: React.ReactNode;
-    intent?: ToastIntent;
-    duration?: number;
-}) => void) | null = null;
-const PENDING_TOASTS: Array<{
-    id: number;
-    message: React.ReactNode;
-    intent?: ToastIntent;
-    duration?: number;
-}> = [];
+function showToast(message: React.ReactNode, intent: ToastIntent = "default", duration?: number): void {
+    const event = new CustomEvent("grokness-toast", { detail: { message, intent, duration } });
+    window.dispatchEvent(event);
+}
+
+function extractConversationIdFromURL(href: string | null): string | null {
+    if (!href) {
+        return null;
+    }
+    const match = href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
+    return match?.[1] ?? null;
+}
+
+function extractWorkspaceIdFromURL(href: string | null): string | null {
+    if (!href) {
+        return null;
+    }
+    const match = href.match(/\/project\/([a-zA-Z0-9_-]+)/);
+    return match?.[1] ?? null;
+}
 
 const ToastHost: React.FC = () => {
-    const [items, setItems] = React.useState<Array<{ id: number; message: React.ReactNode; intent?: ToastIntent; duration?: number; }>>([]);
-    React.useEffect(() => {
-        pushToastRef = t => setItems(prev => [...prev, t]);
-        if (PENDING_TOASTS.length) {
-            setItems(prev => [...prev, ...PENDING_TOASTS]);
-            PENDING_TOASTS.length = 0;
-        }
-        return () => {
-            pushToastRef = null;
+    const [items, setItems] = useState<Array<{ id: number; message: React.ReactNode; intent?: ToastIntent; duration?: number; }>>([]);
+
+    useEffect(() => {
+        const handler = (e: CustomEvent) => {
+            const id = Date.now() + Math.random();
+            setItems(prev => [...prev, { id, ...e.detail }]);
         };
+        window.addEventListener("grokness-toast", handler as EventListener);
+        return () => window.removeEventListener("grokness-toast", handler as EventListener);
     }, []);
+
     return (
         <div data-grokness-toast-host>
             <ToastProvider duration={5000}>
@@ -202,200 +239,140 @@ const ToastHost: React.FC = () => {
     );
 };
 
-function showToast(
-    message: React.ReactNode,
-    intent: ToastIntent = "default",
-    duration?: number
-): void {
-    const id = Date.now() + Math.floor(Math.random() * 1000);
-    if (pushToastRef) {
-        pushToastRef({ id, message, intent, duration });
-    } else {
-        PENDING_TOASTS.push({ id, message, intent, duration });
-    }
-}
+const BetterSidebar: React.FC<InjectedComponentProps> = ({ rootElement }) => {
+    const sidebar = rootElement;
 
-function extractConversationIdFromURL(href: string | null): string | null {
-    if (!href) {
-        return null;
-    }
-    const match = href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
-    return match?.[1] ?? null;
-}
+    useEffect(() => {
+        if (!sidebar) {
+            return;
+        }
 
-function extractWorkspaceIdFromURL(href: string | null): string | null {
-    if (!href) {
-        return null;
-    }
-    const match = href.match(/\/project\/([a-zA-Z0-9_-]+)/);
-    return match?.[1] ?? null;
-}
+        const guard = createEventGuard({
+            query: { roots: [sidebar], selectors: ["*"], filter: (node: HTMLElement) => node === sidebar },
+            behavior: {
+                events: ["click"],
+                capture: true,
+                passive: false,
+                stopPropagation: "stopImmediate",
+                preventDefault: "never",
+                allowIfClosest: [TOGGLE_BUTTON_SELECTOR],
+                allowPredicate: (event: Event) => {
+                    const t = event.target as HTMLElement | null;
+                    return !!t?.closest(INTERACTIVE_SELECTORS);
+                },
+            },
+            debugName: "BetterSidebar:CollapseGuard",
+        });
 
-const bindings = new WeakMap<HTMLElement, { destroy: () => void; }>();
+        const sync = () => {
+            if (settings.store.collapseOnlyViaToggle) {
+                sidebar.setAttribute("data-grokness-sidebar-nohover", "true");
+                guard.enable();
+            } else {
+                sidebar.removeAttribute("data-grokness-sidebar-nohover");
+                guard.disable();
+            }
+        };
 
-function attachDragHandler(link: HTMLAnchorElement): void {
-    if (bindings.has(link) || !settings.store.dragToProject) {
-        return;
-    }
+        sync();
+        const off = onPluginSettingsUpdated("better-sidebar", sync);
+        return () => {
+            off();
+            guard.disable();
+            sidebar.removeAttribute("data-grokness-sidebar-nohover");
+        };
+    }, [sidebar]);
 
-    const binding = makeDraggable(link, {
-        getPayload: () => {
-            const conversationId = extractConversationIdFromURL(link.href);
-            return conversationId
-                ? { "application/grokness-conversation": conversationId }
-                : null;
-        },
-        ghostScale: 0.8,
-        cursorOffset: { x: -4, y: -4 },
-        onDragStart: () => link.classList.add("grokness-chat-dragging"),
-        onDragEnd: () => link.classList.remove("grokness-chat-dragging"),
-    });
+    useEffect(() => {
+        if (!sidebar) {
+            return;
+        }
 
-    bindings.set(link, binding);
-}
+        const dndBindings = new WeakMap<HTMLElement, { destroy: () => void; }>();
 
-function detachDragHandler(link: HTMLAnchorElement): void {
-    bindings.get(link)?.destroy();
-    bindings.delete(link);
-}
-
-function attachDropHandler(link: HTMLAnchorElement): void {
-    if (bindings.has(link) || !settings.store.dragToProject) {
-        return;
-    }
-
-    const binding = makeDropTarget<{ conversationId: string; }>(link, {
-        canAccept: types => types.has("application/grokness-conversation"),
-        extract: data => {
-            const conversationId = data.getData("application/grokness-conversation");
-            return conversationId ? { conversationId } : null;
-        },
-        onEnter: () => link.classList.add(CLASS_DROP_OVER),
-        onOver: () => link.classList.add(CLASS_DROP_OVER),
-        onLeave: () => link.classList.remove(CLASS_DROP_OVER),
-        onDrop: async ({ conversationId }) => {
-            const workspaceId = extractWorkspaceIdFromURL(link.href);
-            if (!workspaceId) {
+        const attachDrag = (el: HTMLAnchorElement) => {
+            if (dndBindings.has(el)) {
                 return;
             }
+            const binding = makeDraggable(el, {
+                getPayload: () => {
+                    const id = extractConversationIdFromURL(el.href);
+                    return id ? { "application/grokness-conversation": id } : null;
+                },
+                onDragStart: () => el.classList.add("grokness-chat-dragging"),
+                onDragEnd: () => el.classList.remove("grokness-chat-dragging"),
+            });
+            dndBindings.set(el, binding);
+        };
 
-            try {
-                await grokApi.services.workspaces.addConversation(
-                    { workspaceId },
-                    { conversationId }
-                );
-                showToast("Chat added to project.", "success");
-            } catch (err) {
-                logger.error("Failed to add conversation to project:", err);
-                showToast("Failed to add chat to project.", "error");
-            } finally {
-                link.classList.remove(CLASS_DROP_OVER);
+        const attachDrop = (el: HTMLAnchorElement) => {
+            if (dndBindings.has(el)) {
+                return;
             }
-        },
-    });
+            const binding = makeDropTarget<{ conversationId: string; }>(el, {
+                canAccept: types => types.has("application/grokness-conversation"),
+                extract: data => {
+                    const id = data.getData("application/grokness-conversation");
+                    return id ? { conversationId: id } : null;
+                },
+                onEnter: () => el.classList.add(CLASS_DROP_OVER),
+                onLeave: () => el.classList.remove(CLASS_DROP_OVER),
+                onDrop: async ({ conversationId }) => {
+                    const workspaceId = extractWorkspaceIdFromURL(el.href);
+                    if (!workspaceId) {
+                        return;
+                    }
+                    try {
+                        await grokApi.services.workspaces.addConversation({ workspaceId }, { conversationId });
+                        showToast("Chat added to project.", "success");
+                    } catch (err) {
+                        logger.error("Failed to add conversation to project:", err);
+                        showToast("Failed to add chat to project.", "error");
+                    }
+                },
+            });
+            dndBindings.set(el, binding);
+        };
 
-    bindings.set(link, binding);
-}
+        const detach = (el: HTMLElement) => dndBindings.get(el)?.destroy();
 
-function detachDropHandler(link: HTMLAnchorElement): void {
-    bindings.get(link)?.destroy();
-    bindings.delete(link);
-}
+        let liveChats: ReturnType<typeof liveElements> | null = null;
+        let liveProjects: ReturnType<typeof liveElements> | null = null;
 
-function ensureGuard(el: HTMLElement): void {
-    if (GUARDS.has(el)) {
-        return;
-    }
-    const guard = createEventGuard({
-        query: {
-            roots: [el],
-            selectors: ["*"],
-            filter: node => node === el,
-        },
-        behavior: {
-            events: ["click"],
-            capture: true,
-            passive: false,
-            stopPropagation: "stopImmediate",
-            preventDefault: "never",
-            allowIfClosest: [TOGGLE_BUTTON_SELECTOR],
-            allowPredicate: event => {
-                const t = event.target as HTMLElement | null;
-                if (!t) {
-                    return true;
-                }
-                if (t.closest(TOGGLE_BUTTON_SELECTOR)) {
-                    return true;
-                }
-                if (t.closest(INTERACTIVE_SELECTORS)) {
-                    return true;
-                }
-                return false;
-            },
-        },
-        debugName: "BetterSidebar:CollapseGuard",
-    });
-    guard.enable();
-    GUARDS.set(el, guard);
-}
-
-function disableGuard(el: HTMLElement): void {
-    const g = GUARDS.get(el);
-    if (g) {
-        g.disable();
-        GUARDS.delete(el);
-    }
-}
-
-function syncContainer(el: HTMLElement): void {
-    if (settings.store.collapseOnlyViaToggle) {
-        ensureGuard(el);
-    } else {
-        disableGuard(el);
-    }
-
-    if (settings.store.collapseOnlyViaToggle) {
-        el.setAttribute("data-grokness-sidebar-nohover", "true");
-    } else {
-        el.removeAttribute("data-grokness-sidebar-nohover");
-    }
-}
-
-function attachSidebar(el: HTMLElement): void {
-    syncContainer(el);
-}
-
-function detachSidebar(el: HTMLElement): void {
-    el.removeAttribute("data-grokness-sidebar-nohover");
-    disableGuard(el);
-}
-
-function isCollapsedWithin(root?: ParentNode): boolean {
-    const icon = selectOne<HTMLElement>(TOGGLE_ICON_SELECTOR, root);
-    if (!icon) {
-        return false;
-    }
-    return !icon.classList.contains("rotate-180");
-}
-
-async function tryForceCollapseOnce(root: HTMLElement | Document = document): Promise<void> {
-    if (didForceInitialCollapse || !settings.store.collapseOnLoad) {
-        return;
-    }
-    try {
-        const container = await waitFor<HTMLElement>(LOCATORS.SIDEBAR.container, { root });
-        await waitFor<HTMLElement>(TOGGLE_ICON_SELECTOR, { root: container });
-        if (!isCollapsedWithin(container)) {
-            const toggleBtn = selectOne<HTMLButtonElement>(LOCATORS.SIDEBAR.toggleButton, container);
-            toggleBtn?.click();
+        if (settings.store.dragToProject) {
+            liveChats = liveElements(CHAT_LINK_SELECTOR, sidebar, attachDrag, detach, { debounce: 0 });
+            liveProjects = liveElements(PROJECT_LINK_SELECTOR, sidebar, attachDrop, detach, { debounce: 0 });
         }
-    } catch {
-        // ignore timing issues
-    } finally {
-        didForceInitialCollapse = true;
-    }
-}
 
+        return () => {
+            liveChats?.disconnect();
+            liveProjects?.disconnect();
+        };
+    }, [sidebar, settings.store.dragToProject]);
+
+    useEffect(() => {
+        if (!sidebar || !settings.store.collapseOnLoad) {
+            return;
+        }
+        let didForce = false;
+        const tryCollapse = async () => {
+            if (didForce) {
+                return;
+            }
+            try {
+                await waitFor(TOGGLE_ICON_SELECTOR, { root: sidebar });
+                if (!useCollapsed(sidebar)) {
+                    selectOne<HTMLButtonElement>(TOGGLE_BUTTON_SELECTOR, sidebar)?.click();
+                }
+            } finally {
+                didForce = true;
+            }
+        };
+        tryCollapse();
+    }, [sidebar]);
+
+    return null;
+};
 export default definePlugin({
     name: "Better Sidebar",
     description: "General enhancements for the sidebar.",
@@ -405,72 +382,15 @@ export default definePlugin({
     settings,
     styles,
     patches: [
-        (() => {
-            const patch = Patch.ui("body")
-                .component(() => <ToastHost />)
-                .forEach()
-                .when(body => !body.querySelector('[data-grokness-ui="better-sidebar"] [data-grokness-toast-host]'))
-                .debounce(50)
-                .build();
-            return patch;
-        })(),
-        (() => {
-            const patch = Patch.ui(SIDEBAR_FOOTER_SELECTOR)
-                .component(SidebarUserInfo)
-                .parent(footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer)
-                .after(AVATAR_BUTTON_SELECTOR as unknown as string)
-                .when(footer => !footer.querySelector('[data-grokness-ui="better-sidebar"]'))
-                .debounce(50)
-                .build();
-            return Object.assign(patch, {
-                disconnect: () => {
-                    document.querySelectorAll('[data-grokness-avatar-wrap="true"]').forEach(node => {
-                        const wrap = node as HTMLElement;
-                        const avatar = wrap.querySelector(AVATAR_BUTTON_SELECTOR as unknown as string);
-                        const parent = wrap.parentElement;
-                        if (avatar && parent) {
-                            parent.insertBefore(avatar, wrap);
-                            wrap.remove();
-                        }
-                    });
-                }
-            });
-        })(),
+        Patch.ui("body")
+            .component(ToastHost)
+            .when(body => !body.querySelector("[data-grokness-toast-host]"))
+            .build(),
+        Patch.ui(SIDEBAR_FOOTER_SELECTOR)
+            .component(SidebarUserInfo)
+            .build(),
+        Patch.ui(SIDEBAR_CONTAINER_SELECTOR)
+            .component(BetterSidebar)
+            .build(),
     ],
-
-    start() {
-        const live = liveElements<HTMLElement>(SIDEBAR_CONTAINER_SELECTOR, document, attachSidebar, detachSidebar, { debounce: 50 });
-        disconnectLive = live.disconnect;
-
-        offSettingsListener = onPluginSettingsUpdated("better-sidebar", detail => {
-            document.querySelectorAll<HTMLElement>(SIDEBAR_CONTAINER_SELECTOR).forEach(syncContainer);
-            if (detail.key === "collapseOnLoad" && detail.value === true) {
-                didForceInitialCollapse = false;
-                void tryForceCollapseOnce(document);
-            }
-        });
-
-        document.querySelectorAll<HTMLElement>(SIDEBAR_CONTAINER_SELECTOR).forEach(syncContainer);
-        void tryForceCollapseOnce(document);
-
-        const liveChats = liveElements<HTMLAnchorElement>(CHAT_LINK_SELECTOR, document, attachDragHandler, detachDragHandler, { debounce: 100 });
-        disconnectLiveChats = liveChats.disconnect;
-        const liveProjects = liveElements<HTMLAnchorElement>(PROJECT_LINK_SELECTOR, document, attachDropHandler, detachDropHandler, { debounce: 100 });
-        disconnectLiveProjects = liveProjects.disconnect;
-    },
-
-    stop() {
-        disconnectLive?.();
-        disconnectLive = null;
-        disconnectLiveChats?.();
-        disconnectLiveChats = null;
-        disconnectLiveProjects?.();
-        disconnectLiveProjects = null;
-        offSettingsListener?.();
-        offSettingsListener = null;
-        document.querySelectorAll<HTMLElement>(SIDEBAR_CONTAINER_SELECTOR).forEach(detachSidebar);
-        document.querySelectorAll<HTMLAnchorElement>(CHAT_LINK_SELECTOR).forEach(detachDragHandler);
-        document.querySelectorAll<HTMLAnchorElement>(PROJECT_LINK_SELECTOR).forEach(detachDropHandler);
-        pushToastRef = null;
-    },
 });

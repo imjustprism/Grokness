@@ -6,9 +6,10 @@
 
 import styles from "@plugins/screenCleaner/styles.css?raw";
 import { Devs } from "@utils/constants";
-import { createDomElementHider, type ElementHideConfig } from "@utils/dom";
+import { createDomElementHider } from "@utils/dom";
 import { LOCATORS } from "@utils/locators";
-import { definePlugin, definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
+import definePlugin, { definePluginSettings, onPluginSettingsUpdated } from "@utils/types";
+import { useEffect } from "react";
 
 const settings = definePluginSettings({
     hideScreensaver: {
@@ -19,21 +20,29 @@ const settings = definePluginSettings({
     },
 });
 
-let hider: ReturnType<typeof createDomElementHider> | null = null;
-let off: (() => void) | null = null;
+const ScreenCleaner: React.FC = () => {
+    useEffect(() => {
+        const hider = createDomElementHider(document.body, [
+            {
+                selector: LOCATORS.EFFECTS.idleSparklesContainer.selector,
+                description: "Idle sparkle effects",
+                condition: () => settings.store.hideScreensaver,
+            },
+        ]);
 
-const CONFIGS: ElementHideConfig[] = [
-    {
-        selector: LOCATORS.EFFECTS.idleSparklesContainer.selector,
-        description: "Idle sparkle effects",
-        condition: (el: HTMLElement) => {
-            if (!settings.store.hideScreensaver) {
-                return false;
-            }
-            return !!el.querySelector("canvas.w-full.h-full");
-        },
-    },
-];
+        hider.hideImmediately();
+        hider.startObserving();
+
+        const off = onPluginSettingsUpdated("screen-cleaner", () => hider.hideImmediately());
+
+        return () => {
+            hider.stopObserving();
+            off();
+        };
+    }, []);
+
+    return null;
+};
 
 export default definePlugin({
     name: "Screen Cleaner",
@@ -44,18 +53,8 @@ export default definePlugin({
     enabledByDefault: true,
     styles,
     settings,
-
-    start() {
-        hider = createDomElementHider(document.body, CONFIGS, { useRequestAnimationFrame: true });
-        hider.hideImmediately();
-        hider.startObserving();
-        off = onPluginSettingsUpdated("screen-cleaner", () => hider?.hideImmediately());
-    },
-
-    stop() {
-        hider?.stopObserving();
-        hider = null;
-        off?.();
-        off = null;
+    ui: {
+        component: ScreenCleaner,
+        target: "body",
     },
 });
