@@ -38,3 +38,8 @@
     opacity: 0;
     transform: translateX(-4px);
 }
+
+/* Remove hover cursor hint when requested */
+[data-sidebar="sidebar"][data-grokness-sidebar-nohover="true"] {
+    cursor: default !important;
+}
