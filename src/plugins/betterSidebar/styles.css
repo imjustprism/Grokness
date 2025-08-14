@@ -39,7 +39,104 @@
     transform: translateX(-4px);
 }
 
-/* Remove hover cursor hint when requested */
 [data-sidebar="sidebar"][data-grokness-sidebar-nohover="true"] {
     cursor: default !important;
+}
+
+.grokness-drag-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 99999;
+    pointer-events: none;
+    padding: 0;
+    border-radius: 12px;
+    background: color-mix(in oklab, currentColor 5%, transparent);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18), 0 6px 12px rgba(0, 0, 0, 0.08);
+    backdrop-filter: saturate(120%) blur(4px);
+    -webkit-backdrop-filter: saturate(120%) blur(4px);
+    overflow: hidden;
+}
+
+.grokness-drag-ghost-animate {
+    animation: grokness-ghost-rise 140ms ease-out;
+}
+
+@keyframes grokness-ghost-rise {
+    0% {
+        transform: translateY(3px) scale(0.985);
+        opacity: 0.0;
+    }
+
+    100% {
+        transform: translateY(0) scale(1.0);
+        opacity: 1.0;
+    }
+}
+
+.grokness-chat-dragging {
+    outline: 2px solid color-mix(in oklab, currentColor 22%, transparent);
+    outline-offset: 2px;
+    border-radius: 12px;
+}
+
+.grokness-project-drop-over {
+    border: 2px dotted color-mix(in oklab, currentColor 45%, transparent);
+    border-radius: 12px;
+    outline: none;
+    box-shadow: none;
+}
+
+.grokness-project-drop-success {
+    position: relative;
+    overflow: hidden;
+}
+
+.grokness-project-drop-success::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #4d4e51;
+    opacity: 0.26;
+    clip-path: circle(0% at 50% 50%);
+    animation: grokness-radial-fill 780ms ease-out 140ms forwards;
+    pointer-events: none;
+}
+
+.grokness-project-drop-error {
+    animation: grokness-drop-bad 520ms ease-out;
+}
+
+@keyframes grokness-radial-fill {
+    0% {
+        clip-path: circle(0% at 50% 50%);
+        opacity: 0.26;
+    }
+
+    70% {
+        clip-path: circle(140% at 50% 50%);
+        opacity: 0.22;
+    }
+
+    100% {
+        clip-path: circle(160% at 50% 50%);
+        opacity: 0;
+    }
+}
+
+@keyframes grokness-drop-bad {
+    0% {
+        box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.00);
+        transform: scale(1);
+    }
+
+    30% {
+        box-shadow: 0 0 0 6px rgba(244, 63, 94, 0.28);
+        transform: scale(1.02);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.00);
+        transform: scale(1);
+    }
 }

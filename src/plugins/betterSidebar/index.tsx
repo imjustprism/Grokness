@@ -5,8 +5,10 @@
  */
 
 import { grokApi } from "@api/index";
+import { Toast, type ToastIntent, ToastProvider } from "@components/Toast";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
+import { makeDraggable, makeDropTarget } from "@utils/dnd";
 import { liveElements, selectOne, waitFor, wrapElement } from "@utils/dom";
 import { createEventGuard, type EventGuard } from "@utils/guard";
 import { LOCATORS } from "@utils/locators";
@@ -22,6 +24,8 @@ const AVATAR_BUTTON_SELECTOR = LOCATORS.SIDEBAR.avatarButton;
 const TOGGLE_ICON_SELECTOR = LOCATORS.SIDEBAR.toggleIcon;
 const SIDEBAR_CONTAINER_SELECTOR = LOCATORS.SIDEBAR.container.selector;
 const TOGGLE_BUTTON_SELECTOR = LOCATORS.SIDEBAR.toggleButton.selector;
+const CHAT_LINK_SELECTOR = `${SIDEBAR_CONTAINER_SELECTOR} a[href^="/chat/"]` as const;
+const PROJECT_LINK_SELECTOR = `${SIDEBAR_CONTAINER_SELECTOR} a[href^="/project/"]` as const;
 
 const INTERACTIVE_SELECTORS = [
     "a",
@@ -128,6 +132,12 @@ const settings = definePluginSettings({
         description: "Only collapse or expand the sidebar using its toggle button.",
         default: false,
     },
+    dragToProject: {
+        type: "boolean",
+        displayName: "Drag chats into projects",
+        description: "Enable drag-and-drop of chats onto projects to add them to a project.",
+        default: true,
+    },
     collapseOnLoad: {
         type: "boolean",
         displayName: "Start collapsed",
@@ -140,6 +150,157 @@ const GUARDS = new WeakMap<HTMLElement, EventGuard>();
 let disconnectLive: (() => void) | null = null;
 let offSettingsListener: (() => void) | null = null;
 let didForceInitialCollapse = false;
+let disconnectLiveChats: (() => void) | null = null;
+let disconnectLiveProjects: (() => void) | null = null;
+
+const CLASS_DROP_OVER = "grokness-project-drop-over" as const;
+
+let pushToastRef: ((t: {
+    id: number;
+    message: React.ReactNode;
+    intent?: ToastIntent;
+    duration?: number;
+}) => void) | null = null;
+const PENDING_TOASTS: Array<{
+    id: number;
+    message: React.ReactNode;
+    intent?: ToastIntent;
+    duration?: number;
+}> = [];
+
+const ToastHost: React.FC = () => {
+    const [items, setItems] = React.useState<Array<{ id: number; message: React.ReactNode; intent?: ToastIntent; duration?: number; }>>([]);
+    React.useEffect(() => {
+        pushToastRef = t => setItems(prev => [...prev, t]);
+        if (PENDING_TOASTS.length) {
+            setItems(prev => [...prev, ...PENDING_TOASTS]);
+            PENDING_TOASTS.length = 0;
+        }
+        return () => {
+            pushToastRef = null;
+        };
+    }, []);
+    return (
+        <div data-grokness-toast-host>
+            <ToastProvider duration={5000}>
+                {items.map(item => (
+                    <Toast
+                        key={item.id}
+                        open
+                        onOpenChange={open => {
+                            if (!open) {
+                                setItems(prev => prev.filter(x => x.id !== item.id));
+                            }
+                        }}
+                        intent={item.intent}
+                        duration={item.duration}
+                        message={item.message}
+                    />
+                ))}
+            </ToastProvider>
+        </div>
+    );
+};
+
+function showToast(
+    message: React.ReactNode,
+    intent: ToastIntent = "default",
+    duration?: number
+): void {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    if (pushToastRef) {
+        pushToastRef({ id, message, intent, duration });
+    } else {
+        PENDING_TOASTS.push({ id, message, intent, duration });
+    }
+}
+
+function extractConversationIdFromURL(href: string | null): string | null {
+    if (!href) {
+        return null;
+    }
+    const match = href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
+    return match?.[1] ?? null;
+}
+
+function extractWorkspaceIdFromURL(href: string | null): string | null {
+    if (!href) {
+        return null;
+    }
+    const match = href.match(/\/project\/([a-zA-Z0-9_-]+)/);
+    return match?.[1] ?? null;
+}
+
+const bindings = new WeakMap<HTMLElement, { destroy: () => void; }>();
+
+function attachDragHandler(link: HTMLAnchorElement): void {
+    if (bindings.has(link) || !settings.store.dragToProject) {
+        return;
+    }
+
+    const binding = makeDraggable(link, {
+        getPayload: () => {
+            const conversationId = extractConversationIdFromURL(link.href);
+            return conversationId
+                ? { "application/grokness-conversation": conversationId }
+                : null;
+        },
+        ghostScale: 0.8,
+        cursorOffset: { x: -4, y: -4 },
+        onDragStart: () => link.classList.add("grokness-chat-dragging"),
+        onDragEnd: () => link.classList.remove("grokness-chat-dragging"),
+    });
+
+    bindings.set(link, binding);
+}
+
+function detachDragHandler(link: HTMLAnchorElement): void {
+    bindings.get(link)?.destroy();
+    bindings.delete(link);
+}
+
+function attachDropHandler(link: HTMLAnchorElement): void {
+    if (bindings.has(link) || !settings.store.dragToProject) {
+        return;
+    }
+
+    const binding = makeDropTarget<{ conversationId: string; }>(link, {
+        canAccept: types => types.has("application/grokness-conversation"),
+        extract: data => {
+            const conversationId = data.getData("application/grokness-conversation");
+            return conversationId ? { conversationId } : null;
+        },
+        onEnter: () => link.classList.add(CLASS_DROP_OVER),
+        onOver: () => link.classList.add(CLASS_DROP_OVER),
+        onLeave: () => link.classList.remove(CLASS_DROP_OVER),
+        onDrop: async ({ conversationId }) => {
+            const workspaceId = extractWorkspaceIdFromURL(link.href);
+            if (!workspaceId) {
+                return;
+            }
+
+            try {
+                await grokApi.services.workspaces.addConversation(
+                    { workspaceId },
+                    { conversationId }
+                );
+                showToast("Chat added to project.", "success");
+            } catch (err) {
+                logger.error("Failed to add conversation to project:", err);
+                showToast("Failed to add chat to project.", "error");
+            } finally {
+                link.classList.remove(CLASS_DROP_OVER);
+            }
+        },
+    });
+
+    bindings.set(link, binding);
+}
+
+function detachDropHandler(link: HTMLAnchorElement): void {
+    bindings.get(link)?.destroy();
+    bindings.delete(link);
+}
 
 function ensureGuard(el: HTMLElement): void {
     if (GUARDS.has(el)) {
@@ -245,6 +406,15 @@ export default definePlugin({
     styles,
     patches: [
         (() => {
+            const patch = Patch.ui("body")
+                .component(() => <ToastHost />)
+                .forEach()
+                .when(body => !body.querySelector('[data-grokness-ui="better-sidebar"] [data-grokness-toast-host]'))
+                .debounce(50)
+                .build();
+            return patch;
+        })(),
+        (() => {
             const patch = Patch.ui(SIDEBAR_FOOTER_SELECTOR)
                 .component(SidebarUserInfo)
                 .parent(footer => selectOne(AVATAR_BUTTON_SELECTOR, footer)?.parentElement ?? footer)
@@ -282,13 +452,25 @@ export default definePlugin({
 
         document.querySelectorAll<HTMLElement>(SIDEBAR_CONTAINER_SELECTOR).forEach(syncContainer);
         void tryForceCollapseOnce(document);
+
+        const liveChats = liveElements<HTMLAnchorElement>(CHAT_LINK_SELECTOR, document, attachDragHandler, detachDragHandler, { debounce: 100 });
+        disconnectLiveChats = liveChats.disconnect;
+        const liveProjects = liveElements<HTMLAnchorElement>(PROJECT_LINK_SELECTOR, document, attachDropHandler, detachDropHandler, { debounce: 100 });
+        disconnectLiveProjects = liveProjects.disconnect;
     },
 
     stop() {
         disconnectLive?.();
         disconnectLive = null;
+        disconnectLiveChats?.();
+        disconnectLiveChats = null;
+        disconnectLiveProjects?.();
+        disconnectLiveProjects = null;
         offSettingsListener?.();
         offSettingsListener = null;
         document.querySelectorAll<HTMLElement>(SIDEBAR_CONTAINER_SELECTOR).forEach(detachSidebar);
+        document.querySelectorAll<HTMLAnchorElement>(CHAT_LINK_SELECTOR).forEach(detachDragHandler);
+        document.querySelectorAll<HTMLAnchorElement>(PROJECT_LINK_SELECTOR).forEach(detachDropHandler);
+        pushToastRef = null;
     },
 });
