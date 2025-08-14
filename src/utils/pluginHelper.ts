@@ -28,6 +28,8 @@ export class PluginHelper {
 
     applyStyles(pluginId: string, css: string): void {
         const id = `grokness-style-${pluginId}`;
+        document.getElementById(id)?.remove();
+
         if (this.styleIds.has(id)) {
             return;
         }
@@ -48,6 +50,7 @@ export class PluginHelper {
     }
 
     applyUIPatch(pluginId: string, patch: IPluginUIPatch): void {
+        document.querySelectorAll(`[data-grokness-ui="${pluginId}"]`).forEach(el => el.remove());
         const mounts = new Map<HTMLElement, UIMount>();
 
         const computeMountKey = (): string => {

@@ -8,4 +8,5 @@ export * from "./constants";
 export * from "./dom";
 export * from "./logger";
 export * from "./pluginHelper";
+export * from "./storage";
 export * from "./types";
