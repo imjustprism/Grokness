@@ -107,7 +107,7 @@ function SidebarUserInfo() {
             wrapper.setAttribute("data-grokness-avatar-wrap", "true");
             wrapper.style.display = "flex";
             wrapper.style.alignItems = "center";
-            wrapper.style.gap = "6px";
+            wrapper.style.gap = "0.5px";
         }
         if (el.parentElement !== wrapper) {
             wrapper.appendChild(el);

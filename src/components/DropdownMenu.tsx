@@ -13,7 +13,7 @@ import React from "react";
  */
 export interface DropdownOption<V extends string = string> {
     /** Display text for the option */
-    label: string;
+    label: React.ReactNode;
     /** Value associated with the option */
     value: V;
 }
@@ -34,6 +34,8 @@ export interface DropdownMenuProps<V extends string = string> {
     className?: string;
     /** Width of the dropdown (Tailwind class) */
     width?: string;
+    /** The content to display inside the dropdown trigger */
+    children?: React.ReactNode;
 }
 
 export const DropdownMenu = <V extends string = string>({
@@ -43,6 +45,7 @@ export const DropdownMenu = <V extends string = string>({
     placeholder = "Select...",
     className,
     width = "w-96",
+    children,
 }: DropdownMenuProps<V>): React.JSX.Element => {
     const [isOpen, setIsOpen] = React.useState(false);
     const [isHovered, setIsHovered] = React.useState(false);
@@ -62,36 +65,40 @@ export const DropdownMenu = <V extends string = string>({
 
     return (
         <div className="relative" data-dropdown>
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                className={clsx(
-                    "h-10",
-                    "bg-surface-l1 dark:bg-surface-l1 border border-border-l1 rounded-xl",
-                    "text-secondary flex items-center",
-                    "focus:outline-none focus:border-border-l3 focus-visible:ring-1",
-                    "whitespace-nowrap active:bg-button-ghost-active",
-                    "text-sm",
-                    width,
-                    className
-                )}
-                style={
-                    isHovered && !isOpen
-                        ? { backgroundColor: "var(--button-ghost-hover)" }
-                        : undefined
-                }
-            >
-                <span className="flex-1 text-left px-3">{selectedOption?.label || placeholder}</span>
-                <div
+            {children || (
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
                     className={clsx(
-                        "px-3 transition-transform duration-200",
-                        isOpen && "transform rotate-180"
+                        "h-10",
+                        "bg-surface-l1 dark:bg-surface-l1 border border-border-l1 rounded-xl",
+                        "text-secondary flex items-center",
+                        "focus:outline-none focus:border-border-l3 focus-visible:ring-1",
+                        "whitespace-nowrap active:bg-button-ghost-active",
+                        "text-sm",
+                        width,
+                        className
                     )}
+                    style={
+                        isHovered && !isOpen
+                            ? { backgroundColor: "var(--button-ghost-hover)" }
+                            : undefined
+                    }
                 >
-                    <Lucide name="ChevronDown" size={16} strokeWidth={2} />
-                </div>
-            </button>
+                    <span className="flex-1 text-left px-3">
+                        {selectedOption?.label || placeholder}
+                    </span>
+                    <div
+                        className={clsx(
+                            "px-3 transition-transform duration-200",
+                            isOpen && "transform rotate-180"
+                        )}
+                    >
+                        <Lucide name="ChevronDown" size={16} strokeWidth={2} />
+                    </div>
+                </button>
+            )}
             {isOpen ? (
                 <div
                     className={clsx(
@@ -111,14 +118,15 @@ export const DropdownMenu = <V extends string = string>({
                                     "w-full text-left px-3 py-2",
                                     "focus:outline-none whitespace-nowrap",
                                     "text-sm rounded-xl flex items-center justify-between",
-                                    "text-white hover:bg-button-ghost-hover"
+                                    "text-white hover:bg-button-ghost-hover",
+                                    option.value === value && "bg-button-ghost-hover"
                                 )}
                             >
                                 <span>{option.label}</span>
                                 <span className="w-4 h-4 flex-shrink-0 ml-2">
-                                    {option.value === value ? (
+                                    {/* {option.value === value ? (
                                         <Lucide name="Check" size={16} className="text-primary" />
-                                    ) : null}
+                                    ) : null} */}
                                 </span>
                             </button>
                         ))}

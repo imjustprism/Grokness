@@ -8,7 +8,9 @@ import clsx from "clsx";
 import React from "react";
 
 /**
- * Props for the generic Panel container
+ * @interface PanelProps
+ * @extends React.HTMLAttributes<HTMLDivElement>
+ * @property {boolean} [isActive=true] - Controls visibility; when false, the panel is hidden via CSS display.
  */
 interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
     /** Controls visibility; when false, the panel is hidden via CSS display */
@@ -24,4 +26,3 @@ export const Panel: React.FC<PanelProps> = ({ isActive = true, className, style,
         {children}
     </div>
 );
-

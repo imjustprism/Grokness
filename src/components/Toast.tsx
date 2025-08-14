@@ -20,6 +20,12 @@ const defaultIconByIntent: Record<ToastIntent, LucideIconName> = {
     success: "CheckCircle2",
 };
 
+/**
+ * @interface ToastProviderProps
+ * @property {number} [duration=5000] - Default auto-dismiss duration in ms, can be overridden per toast.
+ * @property {React.ReactNode} [children] - Children of the provider.
+ * @property {string} [viewportClassName] - Additional classes for the viewport container.
+ */
 export interface ToastProviderProps {
     /** Default auto-dismiss duration in ms, can be overridden per toast. */
     duration?: number;
@@ -38,13 +44,9 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
         {children}
         <RadixToast.Viewport
             className={clsx(
-                // Top-center placement
                 "fixed top-4 right-1/2 translate-x-1/2 z-[9999]",
-                // Layout for stacked toasts
                 "flex flex-col gap-2 p-0 m-0 list-none",
-                // Accessibility
                 "outline-none",
-                // Click-through container so individual toasts manage interactions
                 "pointer-events-none",
                 viewportClassName,
             )}
@@ -52,6 +54,21 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
     </RadixToast.Provider>
 );
 
+/**
+ * @interface ToastProps
+ * @property {boolean} open - Controlled visibility.
+ * @property {(open: boolean) => void} onOpenChange - Visibility state change handler.
+ * @property {React.ReactNode} [message] - Main message content. If both are provided, `children` takes precedence.
+ * @property {React.ReactNode} [children] - Alternative way to pass message content.
+ * @property {ToastIntent} [intent="warning"] - Visual intent for icon and semantics.
+ * @property {LucideIconName | React.ReactNode | false} [icon] - Provide a custom icon, a Lucide icon name, or `false` to hide.
+ * @property {number} [duration] - Auto-dismiss duration in ms (overrides provider).
+ * @property {boolean} [dismissible=true] - When true, a close button is rendered.
+ * @property {string} [className] - Additional classes for the toast surface.
+ * @property {"polite" | "assertive" | "off"} [ariaLive="polite"] - aria-live politeness.
+ * @property {"status" | "alert" | "none"} [ariaRole] - Role override. Defaults to `alert` for error, else `status`.
+ * @property {string} [closeButtonAriaLabel="Dismiss notification"] - Accessible label for the close button.
+ */
 export interface ToastProps {
     /** Controlled visibility. */
     open: boolean;
@@ -115,17 +132,11 @@ export const Toast: React.FC<ToastProps> = ({
             role={resolvedRole}
             aria-live={ariaLive}
             className={clsx(
-                // Match Grok surface styles
                 "bg-popover rounded-2xl ring-1 ring-inset ring-toggle-border",
-                // Layout
                 "flex flex-row items-center gap-3",
-                // Spacing & sizing (match Grok layout)
                 "mx-0 py-3 pl-4 pr-3 min-w-[300px] max-w-full lg:max-w-3/5 w-fit",
-                // Ensure interactions are enabled while viewport remains click-through
                 "pointer-events-auto",
-                // Entry/exit animations (compatible with Tailwind animate-in utilities if present)
                 "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-                // Typography to match example markup
                 "antialiased text-sm leading-[normal] font-normal",
                 className,
             )}

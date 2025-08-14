@@ -4,15 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { DropdownMenu } from "@components/DropdownMenu";
 import { Lucide, type LucideIconName } from "@components/Lucide";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import * as Tooltip from "@radix-ui/react-tooltip";
+import { Tooltip } from "@components/Tooltip";
 import clsx from "clsx";
-import React, { type ElementType, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { type ElementType, useEffect, useRef, useState } from "react";
 
 /**
- * Props shape for custom icon components supplied to Button via `icon`
+ * @interface IconProps
+ * @property {string} [className] - Optional class name(s) to apply on the icon.
+ * @property {number} [size] - Size of the icon in pixels.
+ * @property {number} [strokeWidth] - Stroke width for line icons, when supported.
  */
 type IconProps = {
     /** Optional class name(s) to apply on the icon */
@@ -29,6 +31,8 @@ type IconProps = {
 export interface DropdownMenuItem {
     /** Visual label node */
     label: React.ReactNode;
+    /** Value associated with the option */
+    value: string;
     /** Optional Lucide icon to show to the left */
     icon?: LucideIconName;
     /** Selection handler for the item */
@@ -38,7 +42,25 @@ export interface DropdownMenuItem {
 }
 
 /**
- * Props for the Button component
+ * @interface ButtonProps
+ * @extends React.ButtonHTMLAttributes<HTMLButtonElement>
+ * @property {ElementType} [as="button"] - Render as a different element/component.
+ * @property {React.ReactNode} [children] - Button label/content.
+ * @property {string} [className] - Additional class names.
+ * @property {"outline" | "solid" | "ghost"} [variant="outline"] - Visual style.
+ * @property {"sm" | "md" | "lg" | "icon"} [size="md"] - Button size.
+ * @property {"default" | "danger" | "warning"} [color="default"] - Color intent.
+ * @property {boolean} [rounded=false] - Rounded-full when true; otherwise rounded-xl.
+ * @property {boolean} [isActive=false] - Visual active state.
+ * @property {boolean} [loading=false] - Show loading spinner and disable interactions.
+ * @property {LucideIconName | React.ComponentType<IconProps>} [icon] - Icon specification: Lucide icon name or custom component.
+ * @property {number} [iconSize=18] - Icon size in pixels.
+ * @property {"left" | "right"} [iconPosition="left"] - Icon placement.
+ * @property {React.ReactNode} [tooltip] - Optional tooltip content.
+ * @property {DropdownMenuItem[]} [dropdownItems] - Dropdown menu items; when provided, a dropdown-capable button is rendered.
+ * @property {"start" | "center" | "end"} [dropdownAlign="center"] - Dropdown alignment relative to the trigger.
+ * @property {boolean} [rotateIcon=false] - When true, rotate the icon on open/close.
+ * @property {boolean} [disableIconHover=false] - Prevent icon color change on hover when true.
  */
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     /** Render as a different element/component */
@@ -69,12 +91,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
     tooltip?: React.ReactNode;
     /** Dropdown menu items; when provided, a dropdown-capable button is rendered */
     dropdownItems?: DropdownMenuItem[];
-    /** Dropdown alignment relative to the trigger */
-    dropdownAlign?: "start" | "center" | "end";
     /** When true, rotate the icon on open/close */
     rotateIcon?: boolean;
-    /** Use manual, portal-based dropdown positioning */
-    manualDropdown?: boolean;
     /** Prevent icon color change on hover when true */
     disableIconHover?: boolean;
 }
@@ -110,9 +128,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             tooltip,
             disabled,
             dropdownItems,
-            dropdownAlign = "center",
             rotateIcon = false,
-            manualDropdown = false,
             disableIconHover = false,
             ...props
         },
@@ -120,23 +136,9 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     ) => {
         const [isOpen, setIsOpen] = useState(false);
         const buttonRef = useRef<HTMLElement>(null);
-        const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number; } | null>(null);
-
-        useLayoutEffect(() => {
-            if (isOpen && manualDropdown && buttonRef.current) {
-                const rect = buttonRef.current.getBoundingClientRect();
-                let { left } = rect;
-                if (dropdownAlign === "center") {
-                    left += (rect.width / 2) - (200 / 2);
-                } else if (dropdownAlign === "end") {
-                    left += rect.width - 200;
-                }
-                setDropdownPosition({ top: rect.bottom + 8, left, width: rect.width });
-            }
-        }, [isOpen, manualDropdown, dropdownAlign]);
 
         useEffect(() => {
-            if (!manualDropdown || !isOpen) {
+            if (!dropdownItems || !isOpen) {
                 return;
             }
             const handleClickOutside = (event: MouseEvent) => {
@@ -151,7 +153,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             };
             document.addEventListener("mousedown", handleClickOutside);
             return () => document.removeEventListener("mousedown", handleClickOutside);
-        }, [manualDropdown, isOpen]);
+        }, [dropdownItems, isOpen]);
 
         const baseClasses = [
             "inline-flex items-center gap-2",
@@ -241,11 +243,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
 
         const buttonNode = (
             <Component
-                ref={composeRefs(ref, manualDropdown ? buttonRef : null)}
+                ref={composeRefs(ref, dropdownItems ? buttonRef : null)}
                 className={finalClass}
                 disabled={disabled || loading}
                 aria-selected={isActive}
-                onClick={manualDropdown && dropdownItems ? () => setIsOpen(prev => !prev) : props.onClick}
+                onClick={dropdownItems ? () => setIsOpen(prev => !prev) : props.onClick}
                 {...props}
             >
                 {leftIconNode}
@@ -254,102 +256,28 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             </Component>
         );
 
-        const renderDropdown = () => {
-            if (!dropdownItems) {
-                return buttonNode;
-            }
-
-            const dropdownContentClasses = "z-[1002] min-w-[12rem] overflow-hidden rounded-xl border border-border-l1 bg-surface-l1 p-1.5 shadow-lg animate-in fade-in-0 zoom-in-95";
-            const dropdownItemClasses = "relative flex cursor-pointer select-none items-center rounded-md px-3 py-2 text-sm text-secondary outline-none transition-colors w-full hover:bg-button-ghost-hover hover:text-primary disabled:pointer-events-none disabled:opacity-50";
-
-            if (manualDropdown) {
-                return (
-                    <>
-                        {buttonNode}
-                        {isOpen && dropdownPosition && createPortal(
-                            <div
-                                data-dropdown-panel
-                                style={{
-                                    position: "fixed",
-                                    top: `${dropdownPosition.top}px`,
-                                    left: `${dropdownPosition.left}px`,
-                                }}
-                                className={dropdownContentClasses}
-                            >
-                                {dropdownItems.map((item, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={e => {
-                                            item.onSelect?.(e.nativeEvent);
-                                            setIsOpen(false);
-                                        }}
-                                        disabled={item.disabled}
-                                        className={dropdownItemClasses}
-                                    >
-                                        {item.icon && <Lucide name={item.icon} className="mr-2 h-4 w-4" />}
-                                        <span>{item.label}</span>
-                                    </button>
-                                ))}
-                            </div>,
-                            document.body
-                        )}
-                    </>
-                );
-            } else {
-                return (
-                    <DropdownMenu.Root open={isOpen} onOpenChange={setIsOpen}>
-                        <DropdownMenu.Trigger asChild>{buttonNode}</DropdownMenu.Trigger>
-                        <DropdownMenu.Portal>
-                            <DropdownMenu.Content
-                                side="bottom"
-                                align={dropdownAlign}
-                                sideOffset={8}
-                                className={clsx(
-                                    dropdownContentClasses,
-                                    "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
-                                )}
-                            >
-                                {dropdownItems?.map((item, index) => (
-                                    <DropdownMenu.Item
-                                        key={index}
-                                        onSelect={item.onSelect}
-                                        disabled={item.disabled}
-                                        className={dropdownItemClasses}
-                                    >
-                                        {item.icon && <Lucide name={item.icon} className="mr-2 h-4 w-4" />}
-                                        <span>{item.label}</span>
-                                    </DropdownMenu.Item>
-                                ))}
-                            </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                    </DropdownMenu.Root>
-                );
-            }
-        };
-
-        const renderTooltip = (content: React.ReactNode) => (
-            <Tooltip.Provider>
-                <Tooltip.Root delayDuration={600}>
-                    <Tooltip.Trigger asChild>{content}</Tooltip.Trigger>
-                    <Tooltip.Portal>
-                        <Tooltip.Content
-                            side="bottom"
-                            sideOffset={8}
-                            className={clsx(
-                                "z-50 overflow-hidden rounded-md shadow-sm dark:shadow-none px-3 py-1.5 text-xs pointer-events-none",
-                                "animate-in fade-in-0 zoom-in-95 bg-primary text-background"
-                            )}
-                        >
-                            {tooltip}
-                        </Tooltip.Content>
-                    </Tooltip.Portal>
-                </Tooltip.Root>
-            </Tooltip.Provider>
+        const finalContent = dropdownItems ? (
+            <DropdownMenu
+                options={dropdownItems}
+                value={""}
+                onChange={item => {
+                    const selected = dropdownItems.find(
+                        d => d.label === item
+                    );
+                    selected?.onSelect?.(new Event("select"));
+                }}
+            >
+                {buttonNode}
+            </DropdownMenu>
+        ) : (
+            buttonNode
         );
 
-        const finalContent = dropdownItems ? renderDropdown() : buttonNode;
-
-        return tooltip ? renderTooltip(finalContent) : finalContent;
+        return tooltip ? (
+            <Tooltip content={tooltip}>{finalContent}</Tooltip>
+        ) : (
+            finalContent
+        );
     }
 );
 

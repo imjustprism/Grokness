@@ -30,4 +30,3 @@ export const Tab: React.FC<TabProps> = ({ isActive, onClick, dataAttr, children,
         {children}
     </Button>
 );
-

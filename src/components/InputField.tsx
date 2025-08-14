@@ -20,7 +20,15 @@ export interface InputOption {
 }
 
 /**
- * Props for the InputField component
+ * @interface InputFieldProps
+ * @property {"text" | "number" | "select" | "search"} type - Type of input field.
+ * @property {string | number} value - Current value of the input.
+ * @property {(value: string | number) => void} onChange - Callback fired when the value changes.
+ * @property {string} [placeholder] - Placeholder text for text/number inputs.
+ * @property {InputOption[]} [options] - Array of options for select type.
+ * @property {string} [className] - Additional CSS classes.
+ * @property {"default" | "search"} [variant] - Visual variant for text-like inputs.
+ * @property {LucideIconName} [iconName] - Optional icon name for search variant (defaults to "Search").
  */
 export interface InputFieldProps {
     /** Type of input field */
@@ -82,7 +90,6 @@ export const InputField: React.FC<InputFieldProps> = ({
         );
     }
 
-    // Search-style variant with leading icon and special container styling
     if (type === "search" || variant === "search") {
         return (
             <div

@@ -72,7 +72,7 @@ export const useSettingsLogic = () => {
             { title: "Filters", items: [] as IPlugin[] },
             { title: "Plugins", items: optional },
             { title: "Required Plugins", items: required },
-        ].filter(s => s.title === "Filters" || s.items.length > 0);
+        ];
     }, [filteredPlugins]);
 
     const pendingChanges = useMemo<Record<string, boolean>>(

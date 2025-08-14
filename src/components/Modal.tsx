@@ -5,6 +5,7 @@
  */
 
 import { Button } from "@components/Button";
+import { ScrollArea } from "@components/ScrollArea";
 import clsx from "clsx";
 import React, {
     forwardRef,
@@ -17,6 +18,35 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 
+/**
+ * @interface ModalProps
+ * @property {boolean} isOpen - Determines if the modal is visible.
+ * @property {() => void} onClose - Callback invoked when the modal requests to close.
+ * @property {string | React.ReactNode} [title] - The title of the modal.
+ * @property {string | React.ReactNode} [description] - Optional descriptive text displayed below the title.
+ * @property {React.ReactNode} [children] - The main content of the modal.
+ * @property {React.ReactNode} [footer] - Custom footer content.
+ * @property {boolean} [showCancel=false] - Whether to display a cancel button in the footer.
+ * @property {string} [cancelLabel="Cancel"] - Label for the cancel button.
+ * @property {() => void} [onCancel] - Callback for the cancel button.
+ * @property {string} [ariaDescribedBy] - ID for aria-describedby attribute.
+ * @property {string} [ariaLabelledBy] - ID for aria-labelledby attribute.
+ * @property {string} [ariaLabel] - aria-label for the dialog.
+ * @property {string} [maxWidth="max-w-[480px]"] - Maximum width Tailwind class for the modal content.
+ * @property {string} [className] - Additional CSS classes for the modal content.
+ * @property {string} [overlayClassName] - Overlay container class override.
+ * @property {string} [contentClassName] - Content wrapper class override.
+ * @property {boolean} [closeOnOverlayClick=true] - Whether clicking the overlay should close the modal.
+ * @property {boolean} [closeOnEsc=true] - Whether pressing Escape should close the modal.
+ * @property {boolean} [trapFocus=true] - Trap focus within the modal while open.
+ * @property {boolean} [autoFocus=true] - Auto focus the dialog or provided initial focus ref on open.
+ * @property {React.RefObject<HTMLElement>} [initialFocusRef] - Optional element to receive initial focus when opening.
+ * @property {boolean} [preventScroll=true] - Prevent body scroll while the modal is open.
+ * @property {boolean} [usePortal=false] - Renders the modal into a portal attached to the document body.
+ * @property {Element | DocumentFragment | null} [portalContainer] - Portal container target when `usePortal` is true.
+ * @property {(event: KeyboardEvent) => void} [onEscapeKeyDown] - Callback for advanced control over the escape key press.
+ * @property {(event: React.PointerEvent<HTMLDivElement>) => void} [onOverlayClick] - Callback for advanced control over the overlay click.
+ */
 export interface ModalProps {
     /** Determines if the modal is visible. */
     isOpen: boolean;
@@ -329,7 +359,7 @@ export const Modal: ModalComponent = Object.assign(
                                 />
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto pr-4">{children}</div>
+                        <ScrollArea className="flex-1 pr-4">{children}</ScrollArea>
                         {(footer || showCancel) && (
                             <div className="flex w-full items-center justify-end gap-2 pt-2 pr-4">
                                 {showCancel && (
@@ -366,7 +396,7 @@ export const Modal: ModalComponent = Object.assign(
             <div id={id} className="text-sm text-secondary mt-1">{children}</div>
         ),
         Body: ({ children, className }: { children?: React.ReactNode; className?: string; }) => (
-            <div className={clsx("flex-1 overflow-y-auto pr-4", className)}>{children}</div>
+            <ScrollArea className={clsx("flex-1", className)}>{children}</ScrollArea>
         ),
         Footer: ({ children, className }: { children?: React.ReactNode; className?: string; }) => (
             <div className={clsx("flex w-full items-center justify-end gap-2 pt-2 pr-4", className)}>{children}</div>
