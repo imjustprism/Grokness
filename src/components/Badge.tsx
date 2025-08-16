@@ -15,13 +15,13 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
 export const Badge: React.FC<BadgeProps> = ({ children, className, ...rest }) => {
     const base = clsx(
         "px-1.5 rounded-md cursor-default",
-        "text-xs leading-4",
+        "leading-4",
         "text-secondary",
         "opacity-100 disabled:opacity-60",
         className
     );
     return (
-        <div className={base} style={{ backgroundColor: "#28282a" }} {...rest}>
+        <div className={base} style={{ backgroundColor: "#28282a", fontSize: "0.6875rem", lineHeight: "0.9rem" }} {...rest}>
             {children}
         </div>
     );
