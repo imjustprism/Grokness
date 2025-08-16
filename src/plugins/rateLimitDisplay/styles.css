@@ -1,5 +1,10 @@
-.rate-limit-display-button:not([class*="text-red-400"]) > svg {
-    color: white !important;
+/* Icon color adapts to site theme: dark -> white, light -> black (unless danger) */
+html.dark .rate-limit-display-button:not([class*="text-red-400"]) > svg {
+    color: #fff !important;
+}
+
+html:not(.dark) .rate-limit-display-button:not([class*="text-red-400"]) > svg {
+    color: #000 !important;
 }
 
 .rate-limit-display-button > svg {

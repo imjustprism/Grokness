@@ -6,6 +6,7 @@
 
 import { grokApi } from "@api/index";
 import { Badge } from "@components/Badge";
+import { Text } from "@components/Text";
 import { Toast, type ToastIntent, ToastProvider } from "@components/Toast";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
@@ -245,11 +246,11 @@ function SidebarUserInfo({ rootElement }: InjectedComponentProps) {
 
     return (
         <div ref={containerRef} className={clsx("sidebar-user-info", collapsed && "is-collapsed")}>
-            <div className="display-name">{data.name}</div>
-            <div className="plan text-secondary truncate flex items-center gap-1.5">
-                <span className="truncate">{data.plan}</span>
+            <Text as="span" className="display-name">{data.name}</Text>
+            <div className="plan truncate flex items-center gap-1.5 text-xs leading-4">
+                <Text as="span" tone="secondary" inheritSize className="truncate">{data.plan}</Text>
                 {showRemaining && remainingDays != null && (
-                    <Badge title="Remaining days" className="ml-1">
+                    <Badge title="Remaining days" size="inherit" className="ml-1 text-xs leading-4">
                         {remainingDays}d
                     </Badge>
                 )}

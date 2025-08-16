@@ -17,6 +17,7 @@ import {
     AlertDialogTrigger,
 } from "@components/AlertDialog";
 import { Button } from "@components/Button";
+import { Text } from "@components/Text";
 import { Toast, type ToastIntent, ToastProvider } from "@components/Toast";
 import { Devs } from "@utils/constants";
 import { findElement } from "@utils/dom";
@@ -168,7 +169,9 @@ const DeleteAllAssetsButton: React.FC = () => {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete all assets?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete all uploaded assets from the Files tab. This action cannot be undone.
+                            <Text as="span" tone="secondary">
+                                This will permanently delete all uploaded assets from the Files tab. This action cannot be undone.
+                            </Text>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

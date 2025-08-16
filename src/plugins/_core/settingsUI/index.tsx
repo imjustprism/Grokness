@@ -5,17 +5,18 @@
  */
 
 import { Button } from "@components/Button";
+import { Callout } from "@components/Callout";
+import { Card } from "@components/Card";
 import { DropdownMenu, type DropdownOption } from "@components/DropdownMenu";
 import { ErrorBoundary } from "@components/ErrorBoundary";
 import { Grid } from "@components/Grid";
 import { InputField } from "@components/InputField";
 import { Modal } from "@components/Modal";
-import { Panel } from "@components/Panel";
 import { Separator } from "@components/Separator";
 import { Slider } from "@components/Slider";
 import { Subheader } from "@components/Subheader";
 import { Switch } from "@components/Switch";
-import { Tab } from "@components/Tab";
+import { Panel, registerSettingsTab, SettingsTabsView, Tab, unregisterSettingsTab } from "@components/Tabs";
 import { usePluginSettings } from "@plugins/_core/settingsUI/hooks/usePluginSettings";
 import { useSettingsLogic } from "@plugins/_core/settingsUI/hooks/useSettingsLogic";
 import styles from "@plugins/_core/settingsUI/styles.css?raw";
@@ -303,20 +304,8 @@ const PluginCard: React.FC<PluginCardProps> = ({
 
     return (
         <>
-            <div
-                className={clsx(
-                    "relative flex flex-col p-4 bg-surface-l1 dark:bg-surface-l1",
-                    "transition-colors duration-200 hover:bg-surface-l2",
-                    "w-full rounded-xl overflow-hidden"
-                )}
-                style={{
-                    height: `${CARD_HEIGHT}px`,
-                    minHeight: `${CARD_HEIGHT}px`,
-                    maxHeight: `${CARD_HEIGHT}px`,
-                    borderWidth: 1,
-                    borderStyle: "solid",
-                    borderColor: "var(--border-l1)",
-                }}
+            <Card className={clsx("relative flex flex-col p-4 w-full overflow-hidden")}
+                style={{ height: `${CARD_HEIGHT}px`, minHeight: `${CARD_HEIGHT}px`, maxHeight: `${CARD_HEIGHT}px` }}
             >
                 <div className="absolute top-2 right-2 flex gap-2 items-center z-10">
                     <Button
@@ -352,7 +341,7 @@ const PluginCard: React.FC<PluginCardProps> = ({
                         {plugin.description}
                     </div>
                 </div>
-            </div>
+            </Card>
 
             <Modal
                 isOpen={showModal}
@@ -575,126 +564,75 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
         }
     }, []);
 
-    const PanelBody = (
-        <Panel
-            isActive={active}
-            data-grokness-panel
-            className="flex-1 w-full h-full pl-4 pb-32"
-        >
-            <div className="flex flex-col w-full gap-4 min-h-full pr-4">
-                {Object.keys(logic.pendingChanges).length > 0 && (
-                    <div className="w-full mb-6">
-                        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r rounded-lg shadow-lg border from-yellow-800/50 to-yellow-700/50 border-yellow-600">
-                            <div className="flex flex-col gap-1">
-                                <div className="text-white text-sm font-medium">
-                                    Restart Required!
-                                </div>
-                                <div className="text-xs text-gray-400">
-                                    Restart to apply new plugins and settings
-                                </div>
-                            </div>
-                            <Button
-                                onClick={() => location.reload()}
-                                variant="outline"
-                                color="warning"
-                            >
-                                Restart
-                            </Button>
+    const defaultPluginsContent = useMemo(() => (
+        <div className="flex flex-col w-full gap-4 min-h-full pr-4">
+            {Object.keys(logic.pendingChanges).length > 0 && (
+                <div className="w-full mb-6">
+                    <Callout color="amber" title="Restart Required!">
+                        <div className="flex items-center justify-between w-full">
+                            <span>Restart to apply new plugins and settings</span>
+                            <Button onClick={() => location.reload()} variant="outline" color="warning">Restart</Button>
+                        </div>
+                    </Callout>
+                </div>
+            )}
+            {filterSection && (
+                <div key={filterSection.title} className="w-full mb-4">
+                    <Subheader>{filterSection.title}</Subheader>
+                    <div className={clsx("flex items-center justify-start w-full gap-4", "rounded-lg py-2")}>
+                        <div className="flex-1">
+                            <InputField type="search" value={logic.filterText} onChange={v => logic.setFilterText(String(v))} placeholder="Search for a plugin..." variant="search" />
+                        </div>
+                        <div className="ml-auto">
+                            <DropdownMenu options={filterOptions} value={logic.filterOption} onChange={logic.setFilterOption} className="w-48" width="w-48" />
                         </div>
                     </div>
-                )}
-                {filterSection && (
-                    <div key={filterSection.title} className="w-full mb-4">
-                        <Subheader>{filterSection.title}</Subheader>
-                        <div
-                            className={clsx(
-                                "flex items-center justify-start w-full gap-4",
-                                "rounded-lg py-2"
-                            )}
-                        >
-                            <div className="flex-1">
-                                <InputField
-                                    type="search"
-                                    value={logic.filterText}
-                                    onChange={v =>
-                                        logic.setFilterText(String(v))
-                                    }
-                                    placeholder="Search for a plugin..."
-                                    variant="search"
-                                />
-                            </div>
-                            <div className="ml-auto">
-                                <DropdownMenu
-                                    options={filterOptions}
-                                    value={logic.filterOption}
-                                    onChange={logic.setFilterOption}
-                                    className="w-48"
-                                    width="w-48"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Plugin Sections */}
-                {pluginSections.map(({ title, items }) => (
-                    <div key={title} className="w-full mb-4">
-                        <Subheader>{title}</Subheader>
-                        {items.length > 0 ? (
-                            <Grid cols={2} gap="md">
-                                {items.map(plugin => (
-                                    <ErrorBoundary
-                                        key={plugin.id}
-                                        pluginId={plugin.id}
-                                    >
-                                        <PluginCard
-                                            plugin={plugin}
-                                            onToggle={logic.handlePluginToggle}
-                                            onRestartChange={
-                                                logic.handleRestartChange
-                                            }
-                                        />
-                                    </ErrorBoundary>
-                                ))}
-                            </Grid>
-                        ) : hasActiveFilter ? (
-                            <div className="text-sm text-secondary py-2">
-                                No plugins meet the search criteria.
-                            </div>
-                        ) : null}
-                    </div>
-                ))}
-
-                {/* Required Plugins Section */}
-                <div className="w-full mb-4">
-                    <div className="mb-6">
-                        <Separator />
-                    </div>
-                    <Subheader>Required Plugins</Subheader>
-                    {requiredSection && requiredSection.items.length > 0 ? (
+                </div>
+            )}
+            {pluginSections.map(({ title, items }) => (
+                <div key={title} className="w-full mb-4">
+                    <Subheader>{title}</Subheader>
+                    {items.length > 0 ? (
                         <Grid cols={2} gap="md">
-                            {requiredSection.items.map(plugin => (
-                                <ErrorBoundary
-                                    key={plugin.id}
-                                    pluginId={plugin.id}
-                                >
-                                    <PluginCard
-                                        plugin={plugin}
-                                        onToggle={logic.handlePluginToggle}
-                                        onRestartChange={
-                                            logic.handleRestartChange
-                                        }
-                                    />
+                            {items.map(plugin => (
+                                <ErrorBoundary key={plugin.id} pluginId={plugin.id}>
+                                    <PluginCard plugin={plugin} onToggle={logic.handlePluginToggle} onRestartChange={logic.handleRestartChange} />
                                 </ErrorBoundary>
                             ))}
                         </Grid>
                     ) : hasActiveFilter ? (
-                        <div className="text-sm text-secondary py-2">
-                            No plugins meet the search criteria.
-                        </div>
+                        <div className="text-sm text-secondary py-2">No plugins meet the search criteria.</div>
                     ) : null}
                 </div>
+            ))}
+            <div className="w-full mb-4">
+                <div className="mb-6">
+                    <Separator />
+                </div>
+                <Subheader>Required Plugins</Subheader>
+                {requiredSection && requiredSection.items.length > 0 ? (
+                    <Grid cols={2} gap="md">
+                        {requiredSection.items.map(plugin => (
+                            <ErrorBoundary key={plugin.id} pluginId={plugin.id}>
+                                <PluginCard plugin={plugin} onToggle={logic.handlePluginToggle} onRestartChange={logic.handleRestartChange} />
+                            </ErrorBoundary>
+                        ))}
+                    </Grid>
+                ) : hasActiveFilter ? (
+                    <div className="text-sm text-secondary py-2">No plugins meet the search criteria.</div>
+                ) : null}
             </div>
+        </div>
+    ), [logic.pendingChanges, logic.filterText, logic.filterOption, filterSection, filterOptions, pluginSections, hasActiveFilter, requiredSection, logic.handlePluginToggle, logic.handleRestartChange]);
+
+    useEffect(() => {
+        registerSettingsTab({ id: "plugins", label: "Plugins", icon: "SlidersHorizontal", render: () => defaultPluginsContent });
+        return () => unregisterSettingsTab("plugins");
+    }, [defaultPluginsContent]);
+
+    const PanelBody = (
+        <Panel isActive={active} data-grokness-panel className="flex-1 w-full h-full pl-4 pb-32">
+            <SettingsTabsView hideSingleBar />
         </Panel>
     );
 

@@ -7,6 +7,7 @@
 import { grokApi, type RateLimitData } from "@api/index";
 import { Button } from "@components/Button";
 import { Lucide } from "@components/Lucide";
+import { Text } from "@components/Text";
 import styles from "@plugins/rateLimitDisplay/styles.css?raw";
 import { Devs } from "@utils/constants";
 import { findElement, MutationObserverManager, selectOne } from "@utils/dom";
@@ -459,15 +460,15 @@ function RateLimitDisplay({ rootElement }: InjectedComponentProps) {
     const isLimited = (isBoth ? highRemaining === 0 && (lowRemaining ?? 0) === 0 : highRemaining === 0) && waitTimeSeconds > 0;
 
     const content = isLimited ? (
-        formatCountdown(countdown ?? waitTimeSeconds)
+        <Text as="span" size="2">{formatCountdown(countdown ?? waitTimeSeconds)}</Text>
     ) : isBoth ? (
         <span className={clsx("flex items-center justify-center")}>
-            <span className={clsx(animate && "rate-limit-animate")}>{highRemaining}</span>
+            <Text as="span" size="2" className={clsx(animate && "rate-limit-animate")}>{highRemaining}</Text>
             <Lucide name="Dot" size={16} className="rate-limit-separator mx-px" />
-            <span className={clsx(animate && "rate-limit-animate")}>{lowRemaining ?? 0}</span>
+            <Text as="span" size="2" className={clsx(animate && "rate-limit-animate")}>{lowRemaining ?? 0}</Text>
         </span>
     ) : (
-        <span className={clsx(animate && "rate-limit-animate")}>{highRemaining}</span>
+        <Text as="span" size="2" className={clsx(animate && "rate-limit-animate")}>{highRemaining}</Text>
     );
 
     const tooltip = isLoading
@@ -489,6 +490,7 @@ function RateLimitDisplay({ rootElement }: InjectedComponentProps) {
             color={isLimited ? "danger" : "default"}
             isActive={isLimited}
             disableIconHover
+            iconClassName="stroke-2"
             rounded
             className="rate-limit-display-button"
         >
