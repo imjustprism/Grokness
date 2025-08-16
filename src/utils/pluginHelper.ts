@@ -24,28 +24,84 @@ type ActiveUIMountCollection = {
 
 export class PluginHelper {
     private readonly styleIds = new Set<string>();
+    private readonly styleObjectUrls = new Map<string, string>();
+    private readonly adoptedSheets = new Map<string, CSSStyleSheet>();
     private readonly activeUIPatchesByPlugin = new Map<string, Set<ActiveUIMountCollection>>();
 
     applyStyles(pluginId: string, css: string): void {
         const id = `grokness-style-${pluginId}`;
-        document.getElementById(id)?.remove();
+        const existing = document.getElementById(id);
+        if (existing) {
+            existing.remove();
+        }
+        const prevUrl = this.styleObjectUrls.get(pluginId);
+        if (prevUrl) {
+            try {
+                URL.revokeObjectURL(prevUrl);
+            } catch { /* ignore */ } this.styleObjectUrls.delete(pluginId);
+        }
+        const prevSheet = this.adoptedSheets.get(pluginId);
+        if (prevSheet && Array.isArray((document as unknown as { adoptedStyleSheets?: unknown; }).adoptedStyleSheets)) {
+            const sheets = (document as unknown as { adoptedStyleSheets: CSSStyleSheet[]; }).adoptedStyleSheets;
+            (document as unknown as { adoptedStyleSheets: CSSStyleSheet[]; }).adoptedStyleSheets = sheets.filter(s => s !== prevSheet);
+            this.adoptedSheets.delete(pluginId);
+        }
 
         if (this.styleIds.has(id)) {
             return;
         }
-        const tag = document.createElement("style");
-        tag.id = id;
-        tag.textContent = css;
-        document.head.appendChild(tag);
-        this.styleIds.add(id);
+        const supportsConstructable = typeof (window as unknown as { CSSStyleSheet?: unknown; }).CSSStyleSheet !== "undefined"
+            && Array.isArray((document as unknown as { adoptedStyleSheets?: unknown; }).adoptedStyleSheets);
+        if (supportsConstructable) {
+            try {
+                const sheet = new CSSStyleSheet();
+                sheet.replaceSync(css);
+                const current = (document as unknown as { adoptedStyleSheets: CSSStyleSheet[]; }).adoptedStyleSheets;
+                (document as unknown as { adoptedStyleSheets: CSSStyleSheet[]; }).adoptedStyleSheets = [...current, sheet];
+                this.adoptedSheets.set(pluginId, sheet);
+                this.styleIds.add(id);
+                return;
+            } catch {
+                // fallback to blob link below
+            }
+        }
+
+        try {
+            const blob = new Blob([css], { type: "text/css" });
+            const href = URL.createObjectURL(blob);
+            const link = document.createElement("link");
+            link.id = id;
+            link.rel = "stylesheet";
+            link.href = href;
+            document.head.appendChild(link);
+            this.styleObjectUrls.set(pluginId, href);
+            this.styleIds.add(id);
+        } catch {
+            const tag = document.createElement("style");
+            tag.id = id;
+            tag.textContent = css;
+            document.head.appendChild(tag);
+            this.styleIds.add(id);
+        }
     }
 
     removeStyles(pluginId: string): void {
         const id = `grokness-style-${pluginId}`;
         const tag = document.getElementById(id);
         if (tag) {
-            tag.remove();
-            this.styleIds.delete(id);
+            tag.remove(); this.styleIds.delete(id);
+        }
+        const prevUrl = this.styleObjectUrls.get(pluginId);
+        if (prevUrl) {
+            try {
+                URL.revokeObjectURL(prevUrl);
+            } catch { /* ignore */ } this.styleObjectUrls.delete(pluginId);
+        }
+        const prevSheet = this.adoptedSheets.get(pluginId);
+        if (prevSheet && Array.isArray((document as unknown as { adoptedStyleSheets?: unknown; }).adoptedStyleSheets)) {
+            const sheets = (document as unknown as { adoptedStyleSheets: CSSStyleSheet[]; }).adoptedStyleSheets;
+            (document as unknown as { adoptedStyleSheets: CSSStyleSheet[]; }).adoptedStyleSheets = sheets.filter(s => s !== prevSheet);
+            this.adoptedSheets.delete(pluginId);
         }
     }
 
