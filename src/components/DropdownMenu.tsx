@@ -103,8 +103,10 @@ export const DropdownMenu = <V extends string = string>({
                 <div
                     className={clsx(
                         "absolute top-full right-0 mt-2 z-50",
-                        "rounded-2xl bg-surface-l4 border border-border-l1 p-1 shadow-sm shadow-black/5"
+                        "rounded-2xl border border-border-l1 p-1 shadow-sm shadow-black/5 bg-surface-l4 text-primary"
                     )}
+                    role="menu"
+                    aria-orientation="vertical"
                 >
                     <div className="flex flex-col gap-px">
                         {options.map(option => (
@@ -118,9 +120,10 @@ export const DropdownMenu = <V extends string = string>({
                                     "w-full text-left px-3 py-2",
                                     "focus:outline-none whitespace-nowrap",
                                     "text-sm rounded-xl flex items-center justify-between",
-                                    "text-white hover:bg-button-ghost-hover",
+                                    "text-fg-primary hover:bg-button-ghost-hover",
                                     option.value === value && "bg-button-ghost-hover"
                                 )}
+                                role="menuitem"
                             >
                                 <span>{option.label}</span>
                                 <span className="w-4 h-4 flex-shrink-0 ml-2">

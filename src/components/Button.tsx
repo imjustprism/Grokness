@@ -7,6 +7,7 @@
 import { DropdownMenu } from "@components/DropdownMenu";
 import { Lucide, type LucideIconName } from "@components/Lucide";
 import { Tooltip } from "@components/Tooltip";
+import { Slot } from "@radix-ui/react-slot";
 import clsx from "clsx";
 import React, { type ElementType, useEffect, useRef, useState } from "react";
 
@@ -63,8 +64,8 @@ export interface DropdownMenuItem {
  * @property {boolean} [disableIconHover=false] - Prevent icon color change on hover when true.
  */
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    /** Render as a different element/component */
-    as?: ElementType;
+    /** Render as a different element/component. If set to "slot", uses Radix Slot for composition */
+    as?: ElementType | "slot";
     /** Button label/content */
     children?: React.ReactNode;
     /** Additional class names */
@@ -95,6 +96,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
     rotateIcon?: boolean;
     /** Prevent icon color change on hover when true */
     disableIconHover?: boolean;
+    /** Optional className override for icon element */
+    iconClassName?: string;
 }
 
 const composeRefs = <T extends HTMLElement>(...refs: Array<React.Ref<T> | null>) => (el: T | null) => {
@@ -130,6 +133,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             dropdownItems,
             rotateIcon = false,
             disableIconHover = false,
+            iconClassName,
             ...props
         },
         ref
@@ -207,17 +211,19 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             className
         );
 
-        let iconClasses = "";
-        if (variant === "solid" && color !== "default") {
-            iconClasses = "text-white";
-        } else if (color === "danger") {
-            iconClasses = "text-red-400 dark:text-red-200 group-hover:text-red-500";
-        } else if (color === "warning") {
-            iconClasses = "text-yellow-400 group-hover:text-yellow-500";
-        } else if (isActive) {
-            iconClasses = "text-primary";
-        } else {
-            iconClasses = clsx("text-secondary", !disableIconHover && "group-hover:text-primary");
+        let iconClasses = iconClassName || "";
+        if (!iconClasses) {
+            if (variant === "solid" && color !== "default") {
+                iconClasses = "text-white";
+            } else if (color === "danger") {
+                iconClasses = "text-red-400 dark:text-red-200 group-hover:text-red-500";
+            } else if (color === "warning") {
+                iconClasses = "text-yellow-400 group-hover:text-yellow-500";
+            } else if (isActive) {
+                iconClasses = "text-primary";
+            } else {
+                iconClasses = clsx("text-secondary", !disableIconHover && "group-hover:text-primary");
+            }
         }
 
         const iconNode = loading ? (
@@ -241,8 +247,10 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
             }
         }
 
+        const Comp = (Component === "slot" ? Slot : Component) as ElementType;
+
         const buttonNode = (
-            <Component
+            <Comp
                 ref={composeRefs(ref, dropdownItems ? buttonRef : null)}
                 className={finalClass}
                 disabled={disabled || loading}
@@ -253,7 +261,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
                 {leftIconNode}
                 {children}
                 {rightIconNode}
-            </Component>
+            </Comp>
         );
 
         const finalContent = dropdownItems ? (
