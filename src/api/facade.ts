@@ -72,7 +72,7 @@ export class GrokApi {
         const collected: Array<ListAssetsResponse["assets"][number]> = [];
         let pageToken: string | undefined = undefined;
         do {
-            const res = await this.services.assets.list({ ...query, pageToken }, signal);
+            const res: ListAssetsResponse = await this.services.assets.list({ ...query, pageToken }, signal);
             collected.push(...res.assets);
             pageToken = res.nextPageToken ?? undefined;
         } while (pageToken && !(signal?.aborted ?? false));

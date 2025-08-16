@@ -4,8 +4,5 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-export * from "./client";
-export * from "./enums";
-export { GrokApi, grokApi } from "./facade";
-export { type ApiServices, createApiServices } from "./services";
-export * from "./types";
+export { grokApi } from "./facade";
+export type { RateLimitData } from "./types";
