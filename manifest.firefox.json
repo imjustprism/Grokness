@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Grokness",
-    "version": "1.6.1",
+    "version": "1.6.5",
     "description": "A cute Grok extension",
     "icons": {
         "16": "assets/logo-16.png",
