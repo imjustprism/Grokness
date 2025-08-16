@@ -27,7 +27,7 @@ const settings = definePluginSettings({
         type: "boolean",
         displayName: "Blur Username",
         description: "Blur the username in the sidebar and settings.",
-        default: true,
+        default: false,
     },
     blurEmail: {
         type: "boolean",
@@ -39,25 +39,25 @@ const settings = definePluginSettings({
         type: "boolean",
         displayName: "Blur Project Titles",
         description: "Blur project titles in the sidebar.",
-        default: true,
+        default: false,
     },
     blurChatTitles: {
         type: "boolean",
         displayName: "Blur Chat Titles",
         description: "Blur pinned and historical chat titles in the sidebar.",
-        default: true,
+        default: false,
     },
     blurTaskTitles: {
         type: "boolean",
         displayName: "Blur Task Titles",
         description: "Blur task titles in the sidebar.",
-        default: true,
+        default: false,
     },
     blurFileNames: {
         type: "boolean",
         displayName: "Blur File Names",
         description: "Blur file names in the files section.",
-        default: true,
+        default: false,
     },
     blurUid: {
         type: "boolean",
