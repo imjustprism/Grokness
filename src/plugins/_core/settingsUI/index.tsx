@@ -565,50 +565,51 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
     }, []);
 
     const defaultPluginsContent = useMemo(() => (
-        <div className="flex flex-col w-full gap-4 min-h-full pr-4">
-            {Object.keys(logic.pendingChanges).length > 0 && (
-                <div className="w-full mb-6">
-                    <Callout color="amber" title="Restart Required!">
-                        <div className="flex items-center justify-between w-full">
-                            <span>Restart to apply new plugins and settings</span>
-                            <Button onClick={() => location.reload()} variant="outline" color="warning">Restart</Button>
-                        </div>
-                    </Callout>
-                </div>
-            )}
-            {filterSection && (
-                <div key={filterSection.title} className="w-full mb-4">
-                    <Subheader>{filterSection.title}</Subheader>
-                    <div className={clsx("flex items-center justify-start w-full gap-4", "rounded-lg py-2")}>
-                        <div className="flex-1">
-                            <InputField type="search" value={logic.filterText} onChange={v => logic.setFilterText(String(v))} placeholder="Search for a plugin..." variant="search" />
-                        </div>
-                        <div className="ml-auto">
-                            <DropdownMenu options={filterOptions} value={logic.filterOption} onChange={logic.setFilterOption} className="w-48" width="w-48" />
+        <div className="flex flex-col w-full gap-0">
+            <div className="px-3">
+                {Object.keys(logic.pendingChanges).length > 0 && (
+                    <div className="w-full mb-6">
+                        <Callout color="amber" title="Restart Required!">
+                            <div className="flex items-center justify-between w-full">
+                                <span>Restart to apply new plugins and settings</span>
+                                <Button onClick={() => location.reload()} variant="outline" color="warning">Restart</Button>
+                            </div>
+                        </Callout>
+                    </div>
+                )}
+                {filterSection && (
+                    <div key={filterSection.title} className="w-full mb-3">
+                        <Subheader>{filterSection.title}</Subheader>
+                        <div className={clsx("flex items-center justify-start w-full gap-4", "rounded-lg py-2")}
+                        >
+                            <div className="flex-1">
+                                <InputField type="search" value={logic.filterText} onChange={v => logic.setFilterText(String(v))} placeholder="Search for a plugin..." variant="search" />
+                            </div>
+                            <div className="ml-auto">
+                                <DropdownMenu options={filterOptions} value={logic.filterOption} onChange={logic.setFilterOption} className="w-48" width="w-48" />
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-            {pluginSections.map(({ title, items }) => (
-                <div key={title} className="w-full mb-4">
-                    <Subheader>{title}</Subheader>
-                    {items.length > 0 ? (
-                        <Grid cols={2} gap="md">
-                            {items.map(plugin => (
-                                <ErrorBoundary key={plugin.id} pluginId={plugin.id}>
-                                    <PluginCard plugin={plugin} onToggle={logic.handlePluginToggle} onRestartChange={logic.handleRestartChange} />
-                                </ErrorBoundary>
-                            ))}
-                        </Grid>
-                    ) : hasActiveFilter ? (
-                        <div className="text-sm text-secondary py-2">No plugins meet the search criteria.</div>
-                    ) : null}
-                </div>
-            ))}
-            <div className="w-full mb-4">
-                <div className="mb-6">
-                    <Separator />
-                </div>
+                )}
+                {pluginSections.map(({ title, items }, idx) => (
+                    <div key={title} className={clsx("w-full", idx < pluginSections.length - 1 ? "mb-3" : "mb-0")}>
+                        <Subheader>{title}</Subheader>
+                        {items.length > 0 ? (
+                            <Grid cols={2} gap="md">
+                                {items.map(plugin => (
+                                    <ErrorBoundary key={plugin.id} pluginId={plugin.id}>
+                                        <PluginCard plugin={plugin} onToggle={logic.handlePluginToggle} onRestartChange={logic.handleRestartChange} />
+                                    </ErrorBoundary>
+                                ))}
+                            </Grid>
+                        ) : hasActiveFilter ? (
+                            <div className="text-sm text-secondary py-2">No plugins meet the search criteria.</div>
+                        ) : null}
+                    </div>
+                ))}
+            </div>
+            <Separator fullBleed bleedRem={0.25} className="my-6" />
+            <div className="px-3">
                 <Subheader>Required Plugins</Subheader>
                 {requiredSection && requiredSection.items.length > 0 ? (
                     <Grid cols={2} gap="md">
@@ -631,7 +632,7 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
     }, [defaultPluginsContent]);
 
     const PanelBody = (
-        <Panel isActive={active} data-grokness-panel className="flex-1 w-full h-full pl-4 pb-32">
+        <Panel isActive={active} data-grokness-panel className="flex-1 w-full h-full">
             <SettingsTabsView hideSingleBar />
         </Panel>
     );

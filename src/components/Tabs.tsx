@@ -20,7 +20,7 @@ interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export const Panel: React.FC<PanelProps> = ({ isActive = true, className, style, children, ...rest }) => (
     <div
-        className={clsx("flex-1 w-full h-full overflow-y-auto focus:outline-none", className)}
+        className={clsx("flex-1 w-full h-full focus:outline-none", className)}
         style={{ display: isActive ? "flex" : "none", ...(style ?? {}) }}
         {...rest}
     >
@@ -239,10 +239,12 @@ export const SettingsTabsView: React.FC<SettingsTabsViewProps> = ({
                     </RTabs.List>
                 </div>
             )}
-            <div className={clsx("px-2", contentClassName)}>
+            <div className={clsx("flex-1 w-full h-full pl-4 pr-4 pb-10 md:pr-4 overflow-scroll focus:outline-none", contentClassName)}>
                 {tabs.map(t => (
                     <RTabs.Content key={t.id} value={t.id} className="outline-none" forceMount={Boolean(forceMountAll || t.forceMount) || undefined}>
-                        {t.render()}
+                        <div className="flex flex-col w-full gap-6">
+                            {t.render()}
+                        </div>
                     </RTabs.Content>
                 ))}
             </div>
