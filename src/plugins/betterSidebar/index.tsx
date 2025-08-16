@@ -5,6 +5,7 @@
  */
 
 import { grokApi } from "@api/index";
+import { Badge } from "@components/Badge";
 import { Toast, type ToastIntent, ToastProvider } from "@components/Toast";
 import styles from "@plugins/betterSidebar/styles.css?raw";
 import { Devs } from "@utils/constants";
@@ -98,12 +99,100 @@ function useCollapsed(root: HTMLElement | null): boolean {
 
 function SidebarUserInfo({ rootElement }: InjectedComponentProps) {
     const [data, setData] = useState<{ name: string; plan: string; } | null>(null);
+    const [remainingDays, setRemainingDays] = useState<number | null>(null);
+    const [showRemaining, setShowRemaining] = useState<boolean>(() => settings.store.showRemainingTime);
+    const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(() => settings.store.billingCycle as "monthly" | "annual");
     const collapsed = useCollapsed(rootElement ?? null);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         getUserPlan().then(setData);
     }, []);
+
+    useEffect(() => {
+        const off = onPluginSettingsUpdated("better-sidebar", ({ key, value }) => {
+            if (key === "showRemainingTime") {
+                setShowRemaining(Boolean(value));
+            }
+            if (key === "billingCycle") {
+                const v = String(value) === "annual" ? "annual" : "monthly";
+                setBillingCycle(v);
+            }
+        });
+        return off;
+    }, []);
+
+    useEffect(() => {
+        let aborted = false;
+        const ac = new AbortController();
+        const now = new Date();
+        const parseIso = (s?: unknown): Date | null => {
+            if (!s || typeof s !== "string") {
+                return null;
+            }
+            const d = new Date(s);
+            return isNaN(d.getTime()) ? null : d;
+        };
+        const addMonths = (d: Date, n: number): Date => {
+            const nd = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
+            nd.setUTCMonth(nd.getUTCMonth() + n);
+            return nd;
+        };
+        const addYears = (d: Date, n: number): Date => new Date(Date.UTC(d.getUTCFullYear() + n, d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
+        const diffDaysCeil = (a: Date, b: Date): number => Math.max(0, Math.ceil((a.getTime() - b.getTime()) / 86400000));
+        const compute = async () => {
+            try {
+                const subs = await grokApi.services.subscriptions.get({}, ac.signal);
+                const list = Array.isArray((subs as unknown as { subscriptions?: unknown; }).subscriptions)
+                    ? ((subs as unknown as { subscriptions: Array<Record<string, unknown>>; }).subscriptions)
+                    : [];
+                if (!list.length) {
+                    setRemainingDays(null);
+                    return;
+                }
+                const active = list
+                    .filter(x => String((x.status as string) ?? "").toUpperCase().includes("ACTIVE"))
+                    .sort((a, b) => {
+                        const am = parseIso(a.modTime)?.getTime() ?? 0;
+                        const bm = parseIso(b.modTime)?.getTime() ?? 0;
+                        return bm - am;
+                    })[0] ?? list.sort((a, b) => {
+                        const acT = parseIso(a.createTime)?.getTime() ?? 0;
+                        const bcT = parseIso(b.createTime)?.getTime() ?? 0;
+                        return bcT - acT;
+                    })[0];
+                const start = parseIso(active?.createTime) ?? parseIso(active?.modTime);
+                if (!start) {
+                    setRemainingDays(null);
+                    return;
+                }
+                let next: Date = start;
+                if (billingCycle === "annual") {
+                    while (next <= now) {
+                        next = addYears(next, 1);
+                    }
+                } else {
+                    while (next <= now) {
+                        next = addMonths(next, 1);
+                    }
+                }
+                if (aborted) {
+                    return;
+                }
+                setRemainingDays(diffDaysCeil(next, now));
+            } catch (e) {
+                if (!ac.signal.aborted) {
+                    logger.error("Failed to compute remaining subscription time:", e);
+                }
+                setRemainingDays(null);
+            }
+        };
+        compute();
+        return () => {
+            aborted = true;
+            ac.abort();
+        };
+    }, [billingCycle]);
 
     useEffect(() => {
         if (!data || !rootElement) {
@@ -157,7 +246,14 @@ function SidebarUserInfo({ rootElement }: InjectedComponentProps) {
     return (
         <div ref={containerRef} className={clsx("sidebar-user-info", collapsed && "is-collapsed")}>
             <div className="display-name">{data.name}</div>
-            <div className="plan text-secondary truncate">{data.plan}</div>
+            <div className="plan text-secondary truncate flex items-center gap-1.5">
+                <span className="truncate">{data.plan}</span>
+                {showRemaining && remainingDays != null && (
+                    <Badge title="Remaining days" className="ml-1">
+                        {remainingDays}d
+                    </Badge>
+                )}
+            </div>
         </div>
     );
 }
@@ -172,13 +268,29 @@ const settings = definePluginSettings({
         type: "boolean",
         displayName: "Drag chats into projects",
         description: "Enable drag-and-drop of chats onto projects to add them to a project.",
-        default: true,
+        default: false,
     },
     collapseOnLoad: {
         type: "boolean",
         displayName: "Start collapsed",
         description: "Always load the site with the sidebar collapsed.",
         default: false,
+    },
+    showRemainingTime: {
+        type: "boolean",
+        displayName: "Show remaining time",
+        description: "Display a badge with remaining days next to the plan.",
+        default: false,
+    },
+    billingCycle: {
+        type: "select",
+        displayName: "Billing cycle",
+        description: "Choose how to calculate remaining time (monthly or annual).",
+        default: "monthly",
+        options: [
+            { label: "Monthly", value: "monthly" },
+            { label: "Annual", value: "annual" },
+        ],
     },
 });
 
