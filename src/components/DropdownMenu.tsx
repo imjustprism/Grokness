@@ -102,7 +102,7 @@ export const DropdownMenu = <V extends string = string>({
             {isOpen ? (
                 <div
                     className={clsx(
-                        "absolute top-full left-0 mt-2 z-50",
+                        "absolute top-full right-0 mt-2 z-50",
                         "rounded-2xl bg-surface-l4 border border-border-l1 p-1 shadow-sm shadow-black/5"
                     )}
                 >
