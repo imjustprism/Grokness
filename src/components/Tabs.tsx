@@ -20,7 +20,7 @@ interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export const Panel: React.FC<PanelProps> = ({ isActive = true, className, style, children, ...rest }) => (
     <div
-        className={clsx("flex-1 w-full h-full focus:outline-none", className)}
+        className={clsx("flex-1 w-full h-full min-h-0 focus:outline-none", className)}
         style={{ display: isActive ? "flex" : "none", ...(style ?? {}) }}
         {...rest}
     >
@@ -209,7 +209,7 @@ export const SettingsTabsView: React.FC<SettingsTabsViewProps> = ({
             orientation={orientation}
             activationMode={activationMode}
             dir={dir}
-            className={clsx("flex flex-col w-full h-full", className)}
+            className={clsx("flex flex-col w-full h-full min-h-0", className)}
         >
             {showBar && (
                 <div className="px-2 pt-2">
@@ -239,7 +239,7 @@ export const SettingsTabsView: React.FC<SettingsTabsViewProps> = ({
                     </RTabs.List>
                 </div>
             )}
-            <div className={clsx("flex-1 w-full h-full pl-4 pr-4 pb-10 md:pr-4 overflow-scroll focus:outline-none", contentClassName)}>
+            <div className={clsx("flex-1 w-full h-full min-h-0 pb-4 overflow-y-auto overflow-x-hidden focus:outline-none", contentClassName)}>
                 {tabs.map(t => (
                     <RTabs.Content key={t.id} value={t.id} className="outline-none" forceMount={Boolean(forceMountAll || t.forceMount) || undefined}>
                         <div className="flex flex-col w-full gap-6">

@@ -471,29 +471,83 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
         const area = contentArea as HTMLElement;
         if (active) {
             if (area.dataset.groknessPrevPaddingRight == null) {
-                area.dataset.groknessPrevPaddingRight =
-                    area.style.paddingRight || "";
+                area.dataset.groknessPrevPaddingRight = area.style.paddingRight || "";
             }
             if (area.dataset.groknessPrevOverflowY == null) {
                 area.dataset.groknessPrevOverflowY = area.style.overflowY || "";
             }
+            if (area.dataset.groknessPrevPaddingBottom == null) {
+                area.dataset.groknessPrevPaddingBottom = area.style.paddingBottom || "";
+            }
+            if (area.dataset.groknessPrevDisplay == null) {
+                area.dataset.groknessPrevDisplay = area.style.display || "";
+            }
+            if (area.dataset.groknessPrevFlexDirection == null) {
+                area.dataset.groknessPrevFlexDirection = area.style.flexDirection || "";
+            }
+            if (area.dataset.groknessPrevHeight == null) {
+                area.dataset.groknessPrevHeight = area.style.height || "";
+            }
+            if (area.dataset.groknessPrevMinHeight == null) {
+                area.dataset.groknessPrevMinHeight = area.style.minHeight || "";
+            }
+
             area.style.paddingRight = "0px";
             area.style.overflowY = "hidden";
+            area.style.paddingBottom = "0px";
+            area.style.display = "flex";
+            area.style.flexDirection = "column";
+            area.style.height = "100%";
+            area.style.minHeight = "0";
         } else {
             const prevPR = area.dataset.groknessPrevPaddingRight ?? "";
             const prevOY = area.dataset.groknessPrevOverflowY ?? "";
+            const prevDisplay = area.dataset.groknessPrevDisplay ?? "";
+            const prevFlexDir = area.dataset.groknessPrevFlexDirection ?? "";
+            const prevHeight = area.dataset.groknessPrevHeight ?? "";
+            const prevMinH = area.dataset.groknessPrevMinHeight ?? "";
+            const prevPB = area.dataset.groknessPrevPaddingBottom ?? "";
+
             area.style.paddingRight = prevPR;
             area.style.overflowY = prevOY;
+            area.style.display = prevDisplay;
+            area.style.flexDirection = prevFlexDir;
+            area.style.height = prevHeight;
+            area.style.minHeight = prevMinH;
+            area.style.paddingBottom = prevPB;
+
             delete area.dataset.groknessPrevPaddingRight;
             delete area.dataset.groknessPrevOverflowY;
+            delete area.dataset.groknessPrevDisplay;
+            delete area.dataset.groknessPrevFlexDirection;
+            delete area.dataset.groknessPrevHeight;
+            delete area.dataset.groknessPrevMinHeight;
+            delete area.dataset.groknessPrevPaddingBottom;
         }
         return () => {
             const prevPR = area.dataset.groknessPrevPaddingRight ?? "";
             const prevOY = area.dataset.groknessPrevOverflowY ?? "";
+            const prevDisplay = area.dataset.groknessPrevDisplay ?? "";
+            const prevFlexDir = area.dataset.groknessPrevFlexDirection ?? "";
+            const prevHeight = area.dataset.groknessPrevHeight ?? "";
+            const prevMinH = area.dataset.groknessPrevMinHeight ?? "";
+            const prevPB = area.dataset.groknessPrevPaddingBottom ?? "";
+
             area.style.paddingRight = prevPR;
             area.style.overflowY = prevOY;
+            area.style.display = prevDisplay;
+            area.style.flexDirection = prevFlexDir;
+            area.style.height = prevHeight;
+            area.style.minHeight = prevMinH;
+            area.style.paddingBottom = prevPB;
+
             delete area.dataset.groknessPrevPaddingRight;
             delete area.dataset.groknessPrevOverflowY;
+            delete area.dataset.groknessPrevDisplay;
+            delete area.dataset.groknessPrevFlexDirection;
+            delete area.dataset.groknessPrevHeight;
+            delete area.dataset.groknessPrevMinHeight;
+            delete area.dataset.groknessPrevPaddingBottom;
         };
     }, [active, contentArea]);
 
