@@ -162,7 +162,7 @@ type ModalContextValue = { close: () => void; };
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
 
-const OVERLAY_BASE_CLASSES = "fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-[1000]";
+const OVERLAY_BASE_CLASSES = "fixed inset-0 bg-overlay backdrop-blur-[2px] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 flex items-center justify-center z-[1000]";
 const CONTENT_BASE_CLASSES = "fixed left-[50%] top-[50%] z-[1001] translate-x-[-50%] translate-y-[-50%] bg-surface-base dark:border dark:border-border-l1 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]";
 const CONTENT_LAYOUT_CLASSES = "w-full pl-4 pr-0 py-4 rounded-3xl border border-border-l1 flex flex-col gap-4 overflow-hidden h-[640px] max-h-[85vh]";
 

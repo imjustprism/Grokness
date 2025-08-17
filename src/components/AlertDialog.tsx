@@ -30,7 +30,7 @@ const AlertDialogContent = React.forwardRef<
     React.ComponentPropsWithoutRef<typeof RadixAlertDialog.Content>
 >(({ className, ...props }, ref) => (
     <RadixAlertDialog.Portal>
-        <RadixAlertDialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-[50000]" />
+        <RadixAlertDialog.Overlay className="fixed inset-0 bg-overlay backdrop-blur-[2px] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-[50000]" />
         <RadixAlertDialog.Content
             ref={ref}
             className={clsx(
