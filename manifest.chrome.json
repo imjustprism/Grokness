@@ -13,7 +13,7 @@
         {
             "matches": ["*://grok.com/*", "*://*.grok.com/*"],
             "js": ["loader.js"],
-            "run_at": "document_idle"
+            "run_at": "document_start"
         }
     ],
     "permissions": ["storage", "cookies"],
