@@ -5,7 +5,7 @@
  */
 
 import { Logger } from "@utils/logger";
-import { type IPlugin, type IPluginContext, plugins as staticPlugins } from "@utils/types";
+import { type IPlugin, type IPluginContext, type PluginOptions, plugins as staticPlugins } from "@utils/types";
 
 const DEFAULT_CONFIG = {
     loadDelayMs: 100,
@@ -79,7 +79,7 @@ interface MutableCircuitBreaker extends Omit<_CircuitBreaker, "state" | "failure
     lastFailureTime: number;
 }
 
-interface PluginLoadContext extends IPluginContext {
+interface PluginLoadContext extends IPluginContext<PluginOptions> {
     readonly loadStartTime: number;
     readonly retryCount: number;
     readonly maxRetries: number;
@@ -368,6 +368,10 @@ class PluginLoader {
         const key = STORAGE_KEYS.PLUGIN_ENABLED(plugin.id);
         const ctx: PluginLoadContext = {
             storageKey: key,
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            startTime: Date.now(),
+            settings: plugin.options,
             loadStartTime: Date.now(),
             retryCount,
             maxRetries: this.config.maxRetries,
@@ -418,7 +422,13 @@ class PluginLoader {
 
     public async unloadPlugin(plugin: IPlugin): Promise<Result<void>> {
         const key = STORAGE_KEYS.PLUGIN_ENABLED(plugin.id);
-        const ctx: IPluginContext = { storageKey: key };
+        const ctx: IPluginContext = {
+            storageKey: key,
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            startTime: Date.now(),
+            settings: plugin.options,
+        };
 
         try {
             if (plugin.stop) {

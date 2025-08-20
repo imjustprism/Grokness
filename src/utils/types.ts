@@ -1,13 +1,16 @@
 /*
- * Grokness, a grok.com browser extension mod
- * Copyright (c) 2025 Prism and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * Plugin System Types
+ * Clean, type-safe plugin system with auto-generated IDs
  */
 
 import { type IDeveloper } from "@utils/constants";
 import { type AnySelector, type ElementFinderConfig, selectOne } from "@utils/dom";
 import { PluginHelper } from "@utils/pluginHelper";
 import React from "react";
+
+// =============================================================================
+// PLUGIN CATEGORIES
+// =============================================================================
 
 export enum PluginCategory {
     Utility = "utility",
@@ -16,8 +19,14 @@ export enum PluginCategory {
     Moderation = "moderation",
     Integration = "integration",
     Experimental = "experimental",
+    Developer = "developer",
+    Accessibility = "accessibility",
     Other = "other",
 }
+
+// =============================================================================
+// PLUGIN OPTIONS
+// =============================================================================
 
 export type PluginOptionType =
     | "string"
@@ -27,22 +36,15 @@ export type PluginOptionType =
     | "select"
     | "custom";
 
-export enum OptionType {
-    STRING = "string",
-    NUMBER = "number",
-    SLIDER = "slider",
-    BOOLEAN = "boolean",
-    SELECT = "select",
-    CUSTOM = "custom",
-}
-
 export interface PluginOptionBase {
-    type: PluginOptionType;
-    description: string;
-    displayName?: string;
-    default?: unknown;
-    options?: readonly { label: string; value: unknown; }[];
-    [key: string]: unknown;
+    readonly type: PluginOptionType;
+    readonly description: string;
+    readonly displayName?: string;
+    readonly default?: unknown;
+    readonly required?: boolean;
+    readonly disabled?: boolean;
+    readonly hidden?: boolean;
+    readonly options?: readonly { label: string; value: unknown; }[];
 }
 
 export type PluginOptions = Record<string, PluginOptionBase>;
@@ -55,104 +57,164 @@ export type InferOptionType<O extends PluginOptionBase> =
     unknown;
 
 export interface ISettingsManager<T extends PluginOptions = PluginOptions> {
-    definition: T;
-    store: { [K in keyof T]: InferOptionType<T[K]> };
+    readonly definition: T;
+    readonly store: Record<string, unknown>;
 }
 
-export type InjectedComponentProps = {
-    rootElement?: HTMLElement;
-};
+// =============================================================================
+// PLUGIN CONTEXT
+// =============================================================================
+
+export interface IPluginContext<TSettings extends PluginOptions = PluginOptions> {
+    readonly storageKey: string;
+    readonly pluginId: string;
+    readonly pluginName: string;
+    readonly startTime: number;
+    readonly settings: { [K in keyof TSettings]: InferOptionType<TSettings[K]> };
+}
+
+// =============================================================================
+// PLUGIN DEFINITION
+// =============================================================================
+
+export interface IPluginDefinition<TSettings extends PluginOptions = PluginOptions> {
+    readonly name: string;
+    readonly description: string;
+    readonly authors: readonly IDeveloper[];
+    readonly category?: PluginCategory | string;
+    readonly tags?: readonly string[];
+    readonly styles?: string;
+    readonly dependencies?: readonly string[];
+
+    readonly visible?: boolean;
+    readonly enabledByDefault?: boolean;
+    readonly requiresRestart?: boolean;
+    readonly required?: boolean;
+    readonly hidden?: boolean;
+    readonly experimental?: boolean;
+
+    readonly options?: TSettings;
+    readonly settings?: ISettingsManager<TSettings>;
+
+    readonly patches?: readonly PluginPatch[];
+    readonly ui?: PluginUIPatch | readonly PluginUIPatch[];
+
+    start?(context: IPluginContext<TSettings>): void | Promise<void>;
+    stop?(context: IPluginContext<TSettings>): void | Promise<void>;
+    onLoad?(context: IPluginContext<TSettings>): void | Promise<void>;
+    onUnload?(context: IPluginContext<TSettings>): void | Promise<void>;
+    onError?(error: Error, context: IPluginContext<TSettings>): void;
+    onSettingsChange?(key: string, value: unknown, context: IPluginContext<TSettings>): void;
+}
+
+// =============================================================================
+// PLUGIN INTERFACE
+// =============================================================================
+
+export interface IPlugin<TSettings extends PluginOptions = PluginOptions> {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly authors: readonly IDeveloper[];
+    readonly category: PluginCategory | string;
+    readonly tags: readonly string[];
+    readonly styles?: string;
+    readonly dependencies: readonly string[];
+
+    readonly visible: boolean;
+    readonly enabledByDefault: boolean;
+    readonly requiresRestart: boolean;
+    readonly required: boolean;
+    readonly hidden: boolean;
+    readonly experimental: boolean;
+
+    readonly options: TSettings;
+    readonly patches: readonly PluginPatch[];
+
+    start(context: IPluginContext<TSettings>): void | Promise<void>;
+    stop(context: IPluginContext<TSettings>): void | Promise<void>;
+    onLoad?(context: IPluginContext<TSettings>): void | Promise<void>;
+    onUnload?(context: IPluginContext<TSettings>): void | Promise<void>;
+    onError?(error: Error, context: IPluginContext<TSettings>): void;
+    onSettingsChange?(key: string, value: unknown, context: IPluginContext<TSettings>): void;
+}
+
+// =============================================================================
+// PLUGIN PATCHES
+// =============================================================================
 
 export interface IPatch {
-    apply?(): void;
-    remove?(): void;
-    disconnect?: () => void;
+    readonly id?: string;
+    readonly description?: string;
+    readonly priority?: number;
+    readonly dependencies?: readonly string[];
+
+    apply?(): void | Promise<void>;
+    remove?(): void | Promise<void>;
+    disconnect?(): void | Promise<void>;
+    validate?(): boolean | Promise<boolean>;
 }
 
 export interface IPluginUIPatch extends IPatch {
-    /** React component to render; receives the matched root element */
-    component: React.ComponentType<InjectedComponentProps>;
-    /** Target to mount under: CSS selector string or strong DOM finder config */
-    target: string | ElementFinderConfig;
-    /** If true, inject for every match; otherwise only the first match */
-    forEach?: boolean;
-    /** Resolve the actual parent to mount into based on the found element */
-    getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
-    /** Resolve an insertion reference node to mount after, if provided */
-    referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
-    /** Debounce observation callbacks; false disables debounce */
-    observerDebounce?: boolean | number;
-    /** Optional predicate filter for target elements */
-    predicate?: (foundElement: HTMLElement) => boolean;
+    readonly target: string | ElementFinderConfig;
+    readonly component: React.ComponentType<InjectedComponentProps>;
+    readonly forEach?: boolean;
+    readonly getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
+    readonly referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
+    readonly observerDebounce?: boolean | number;
+    readonly predicate?: (foundElement: HTMLElement) => boolean;
+    readonly insertPosition?: "before" | "after" | "prepend" | "append";
 }
 
-export interface IPluginCodePatch {
-    find: string | RegExp;
-    replacement: {
-        match: RegExp;
-        replace: string | ((substring: string, ...args: unknown[]) => string);
+export interface IPluginCodePatch extends IPatch {
+    readonly find: string | RegExp;
+    readonly replacement: {
+        readonly match: RegExp;
+        readonly replace: string | ((substring: string, ...args: unknown[]) => string);
     };
-    /** Only apply if this returns true */
-    predicate?: () => boolean;
-    /** Apply to all matched modules if true; otherwise first match */
-    all?: boolean;
-    /** Treat replacements as a single group; if any fails, skip all */
-    group?: boolean;
-    /** Do not warn if no changes were made */
-    noWarn?: boolean;
+    readonly predicate?: () => boolean | Promise<boolean>;
+    readonly all?: boolean;
+    readonly group?: boolean;
+    readonly noWarn?: boolean;
+    readonly timeout?: number;
 }
 
-export interface IPluginContext {
-    readonly storageKey: string;
-}
+export type PluginPatch = IPatch | IPluginUIPatch | IPluginCodePatch;
 
-export interface IPluginDefinition {
-    id?: string;
-    name: string;
-    description: string;
-    authors: IDeveloper[];
-    category?: PluginCategory | string;
-    tags?: string[];
-    styles?: string;
-    dependencies?: string[];
-    visible?: boolean;
-    enabledByDefault?: boolean;
-    requiresRestart?: boolean;
-    required?: boolean;
-    hidden?: boolean;
-    options?: PluginOptions;
-    settings?: ISettingsManager;
-    patches?: (IPatch | IPluginUIPatch | IPluginCodePatch | SimpleUIPatch)[];
-    ui?: SimpleUIPatch | SimpleUIPatch[] | IPluginUIPatch | IPluginUIPatch[];
-    start?(context: IPluginContext): void;
-    stop?(context: IPluginContext): void;
-    onLoad?(context: IPluginContext): void;
-    onUnload?(context: IPluginContext): void;
-}
+export type InjectedComponentProps = {
+    readonly rootElement?: HTMLElement;
+    readonly context?: IPluginContext;
+};
 
-export interface IPlugin {
-    id: string;
-    name: string;
-    description: string;
-    authors: IDeveloper[];
-    category: PluginCategory | string;
-    tags: string[];
-    styles?: string;
-    dependencies: string[];
-    visible: boolean;
-    enabledByDefault: boolean;
-    requiresRestart: boolean;
-    required: boolean;
-    hidden: boolean;
-    options: PluginOptions;
-    patches: (IPatch | IPluginUIPatch | IPluginCodePatch)[];
-    start(context: IPluginContext): void;
-    stop(context: IPluginContext): void;
-}
+// =============================================================================
+// UI PATCH SYSTEM
+// =============================================================================
 
-export const plugins: IPlugin[] = [];
+export type ParentSpec = AnySelector | ((foundElement: HTMLElement) => HTMLElement | null) | undefined;
 
-const pluginHelper = new PluginHelper();
+export type InsertSpec =
+    | { append: true; prepend: true; }
+    | { after: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null); }
+    | { before: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null); };
+
+export type SimpleUIPatch = {
+    readonly id?: string;
+    readonly target: AnySelector;
+    readonly component: React.ComponentType<InjectedComponentProps> | (() => React.ReactElement | null);
+    readonly each?: boolean;
+    readonly parent?: ParentSpec;
+    readonly insert?: InsertSpec;
+    readonly predicate?: (el: HTMLElement) => boolean;
+    readonly observerDebounce?: boolean | number;
+    readonly once?: boolean;
+    readonly replaceExisting?: boolean;
+};
+
+export type PluginUIPatch = SimpleUIPatch | IPluginUIPatch;
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
 
 function toKebabCase(str: string): string {
     return str
@@ -163,6 +225,11 @@ function toKebabCase(str: string): string {
 }
 
 const settingsStore = new Map<string, Record<string, unknown>>();
+const pluginHelper = new PluginHelper();
+
+// =============================================================================
+// SETTINGS MANAGEMENT
+// =============================================================================
 
 export function definePluginSettings<T extends PluginOptions>(definition: T): ISettingsManager<T> {
     return {
@@ -170,74 +237,6 @@ export function definePluginSettings<T extends PluginOptions>(definition: T): IS
         store: {} as { [K in keyof T]: InferOptionType<T[K]> },
     };
 }
-
-type ParentSpec = AnySelector | ((foundElement: HTMLElement) => HTMLElement | null) | undefined;
-
-type InsertSpec =
-    | { append: true; }
-    | { after: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null); };
-
-export type SimpleUIPatch = {
-    target: AnySelector;
-    component: React.ComponentType<{ rootElement?: HTMLElement; }> | (() => React.ReactElement | null);
-    each?: boolean;
-    parent?: ParentSpec;
-    insert?: InsertSpec;
-    predicate?: (el: HTMLElement) => boolean;
-    observerDebounce?: boolean | number;
-};
-
-function resolveParent(parent: ParentSpec, found: HTMLElement): HTMLElement | null {
-    if (!parent) {
-        return found.parentElement;
-    }
-    if (typeof parent === "string" || typeof parent === "object") {
-        return selectOne(parent as AnySelector, found) ?? found;
-    }
-    return parent(found);
-}
-
-function resolveReference(
-    insert: InsertSpec | undefined,
-    parent: HTMLElement,
-    found: HTMLElement
-): Node | null {
-    if (!insert) {
-        return null;
-    }
-    if ("append" in insert && insert.append) {
-        return parent.lastChild;
-    }
-    if ("after" in insert) {
-        const ref = insert.after;
-        if (typeof ref === "string" || typeof ref === "object") {
-            const el = selectOne(ref as AnySelector, parent);
-            return el ?? null;
-        }
-        return ref(parent, found);
-    }
-    return null;
-}
-
-export function ui(def: SimpleUIPatch): IPluginUIPatch {
-    return {
-        component: def.component as React.ComponentType<InjectedComponentProps>,
-        target: def.target as unknown as string | ElementFinderConfig,
-        forEach: !!def.each,
-        getTargetParent: (found: HTMLElement) => resolveParent(def.parent, found),
-        referenceNode: (parent: HTMLElement, found: HTMLElement) => {
-            const ref = resolveReference(def.insert, parent, found);
-            if (!ref) {
-                return null;
-            }
-            return ref;
-        },
-        predicate: def.predicate,
-        observerDebounce: def.observerDebounce,
-    } as IPluginUIPatch;
-}
-
-export default definePlugin;
 
 export function getPluginSettings(pluginId: string): Record<string, unknown> {
     if (!settingsStore.has(pluginId)) {
@@ -266,21 +265,6 @@ export function setPluginSetting(pluginId: string, key: string, value: unknown):
             detail: { pluginId, key, value },
         })
     );
-}
-
-export type SettingsUpdatedDetail = { pluginId: string; key: string; value: unknown; };
-
-export function onPluginSettingsUpdated(
-    pluginId: string,
-    handler: (detail: SettingsUpdatedDetail) => void
-): () => void {
-    const listener = (e: CustomEvent<SettingsUpdatedDetail>) => {
-        if (e.detail.pluginId === pluginId) {
-            handler(e.detail);
-        }
-    };
-    window.addEventListener("grok-settings-updated", listener as unknown as EventListener);
-    return () => window.removeEventListener("grok-settings-updated", listener as unknown as EventListener);
 }
 
 export function getPluginSetting<T extends PluginOptions, K extends keyof T & string>(
@@ -346,25 +330,181 @@ export function useSetting<T extends PluginOptions, K extends keyof T & string>(
                 setValue(e.detail.value as InferOptionType<T[K]>);
             }
         };
-        window.addEventListener("grok-settings-updated", listener as unknown as EventListener);
-        return () => window.removeEventListener("grok-settings-updated", listener as unknown as EventListener);
+        window.addEventListener("grok-settings-updated", listener as EventListener);
+        return () => window.removeEventListener("grok-settings-updated", listener as EventListener);
     }, [pluginId, key]);
     const setter = (newValue: InferOptionType<T[K]>) => setPluginSetting(pluginId, key, newValue);
     return [value, setter];
 }
 
+// =============================================================================
+// UI PATCH BUILDER
+// =============================================================================
+
+function resolveParent(parent: ParentSpec, found: HTMLElement): HTMLElement | null {
+    if (!parent) {
+        return found.parentElement;
+    }
+    if (typeof parent === "string" || typeof parent === "object") {
+        return selectOne(parent as AnySelector, found) ?? found;
+    }
+    return parent(found);
+}
+
+function resolveReference(
+    insert: InsertSpec | undefined,
+    parent: HTMLElement,
+    found: HTMLElement
+): Node | null {
+    if (!insert) {
+        return null;
+    }
+    if ("append" in insert && insert.append) {
+        return parent.lastChild;
+    }
+    if ("prepend" in insert && insert.prepend) {
+        return parent.firstChild;
+    }
+    if ("after" in insert) {
+        const ref = insert.after;
+        if (typeof ref === "string" || typeof ref === "object") {
+            const el = selectOne(ref as AnySelector, parent);
+            return el ?? null;
+        }
+        return ref(parent, found);
+    }
+    if ("before" in insert) {
+        const ref = insert.before;
+        if (typeof ref === "string" || typeof ref === "object") {
+            const el = selectOne(ref as AnySelector, parent);
+            return el ?? null;
+        }
+        return ref(parent, found);
+    }
+    return null;
+}
+
+export function ui(def: SimpleUIPatch): IPluginUIPatch {
+    return {
+        component: def.component as React.ComponentType<InjectedComponentProps>,
+        target: def.target as unknown as string | ElementFinderConfig,
+        forEach: !!def.each,
+        getTargetParent: (found: HTMLElement) => resolveParent(def.parent, found),
+        referenceNode: (parent: HTMLElement, found: HTMLElement) => {
+            const ref = resolveReference(def.insert, parent, found);
+            if (!ref) {
+                return null;
+            }
+            return ref;
+        },
+        predicate: def.predicate,
+        observerDebounce: def.observerDebounce,
+    };
+}
+
+export class UIPatchBuilder {
+    private spec: {
+        component?: React.ComponentType<InjectedComponentProps>;
+        target?: string | ElementFinderConfig;
+        forEach?: boolean;
+        getTargetParent?: (foundElement: HTMLElement) => HTMLElement | null;
+        referenceNode?: (parentElement: HTMLElement, foundElement: HTMLElement) => Node | null;
+        observerDebounce?: boolean | number;
+        predicate?: (foundElement: HTMLElement) => boolean;
+    };
+
+    private constructor(target: string | ElementFinderConfig) {
+        this.spec = {
+            component: (() => null) as React.ComponentType<InjectedComponentProps>,
+            target,
+        };
+    }
+
+    static target(target: string | ElementFinderConfig): UIPatchBuilder {
+        return new UIPatchBuilder(target);
+    }
+
+    component(c: React.ComponentType<InjectedComponentProps>): UIPatchBuilder {
+        this.spec.component = c;
+        return this;
+    }
+
+    forEach(): UIPatchBuilder {
+        this.spec.forEach = true;
+        return this;
+    }
+
+    parent(resolver: (found: HTMLElement) => HTMLElement | null): UIPatchBuilder {
+        this.spec.getTargetParent = resolver;
+        return this;
+    }
+
+    after(ref: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null)): UIPatchBuilder {
+        this.spec.referenceNode = (parent, found) => {
+            if (typeof ref === "function") {
+                return (ref as (p: HTMLElement, f: HTMLElement) => Node | null)(parent, found);
+            }
+            const el = document.querySelector(ref as string) as Node | null;
+            return el;
+        };
+        return this;
+    }
+
+    when(predicate: (found: HTMLElement) => boolean): UIPatchBuilder {
+        this.spec.predicate = predicate;
+        return this;
+    }
+
+    debounce(ms: number): UIPatchBuilder {
+        this.spec.observerDebounce = ms;
+        return this;
+    }
+
+    build(): IPluginUIPatch {
+        return {
+            target: this.spec.target!,
+            component: this.spec.component!,
+            forEach: this.spec.forEach,
+            getTargetParent: this.spec.getTargetParent,
+            referenceNode: this.spec.referenceNode,
+            observerDebounce: this.spec.observerDebounce,
+            predicate: this.spec.predicate,
+        };
+    }
+}
+
+export namespace Patch {
+    export function ui(target: string | ElementFinderConfig): UIPatchBuilder {
+        return UIPatchBuilder.target(target);
+    }
+
+    export function codeReplace(find: string | RegExp, match: RegExp, replace: string | ((substring: string, ...args: unknown[]) => string), opts?: Omit<IPluginCodePatch, "find" | "replacement">): IPluginCodePatch {
+        return { find, replacement: { match, replace }, ...opts };
+    }
+}
+
+// =============================================================================
+// PLUGIN REGISTRY
+// =============================================================================
+
+export const plugins: IPlugin[] = [];
+
+// =============================================================================
+// PLUGIN FACTORY
+// =============================================================================
+
 export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
-    const id = def.id || toKebabCase(def.name);
+    const id = toKebabCase(def.name);
 
     if (def.settings) {
         const options = def.settings.definition;
         initializePluginSettings(id, options);
         type StoreType = { [K in keyof typeof options]: InferOptionType<(typeof options)[K]> };
-        def.settings.store = new Proxy({}, {
+        (def.settings as { store: Record<string, unknown>; }).store = new Proxy({}, {
             get(_, key: string) {
                 return getPluginSetting(id, key, options);
             },
-        }) as StoreType;
+        });
     }
 
     const toArray = <T,>(v?: T | T[]): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
@@ -376,14 +516,14 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
         return ui(p as SimpleUIPatch);
     };
 
-    const uiPatches = toArray(def.ui).map(convertToUIPatch);
-    const normalizedPatches = toArray(def.patches).map(p => {
-        if (p && typeof (p as any) === "object" && (p as any).component) {
-            return convertToUIPatch(p as unknown as SimpleUIPatch | IPluginUIPatch);
+    const uiPatches = [...toArray(def.ui as IPluginUIPatch | IPluginUIPatch[])].map(convertToUIPatch);
+    const normalizedPatches = [...toArray(def.patches as PluginPatch | PluginPatch[])].map(p => {
+        if (p && typeof p === "object" && "component" in p) {
+            return convertToUIPatch(p as SimpleUIPatch | IPluginUIPatch);
         }
         return p as IPluginCodePatch | IPatch;
     });
-    const allPatches = [...normalizedPatches, ...uiPatches];
+    const allPatches: PluginPatch[] = [...normalizedPatches, ...uiPatches];
 
     const plugin: IPlugin = {
         id,
@@ -398,6 +538,7 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
         requiresRestart: !!def.requiresRestart,
         required: !!def.required,
         hidden: !!def.hidden,
+        experimental: !!def.experimental,
         options: def.settings?.definition || def.options || {},
         styles: def.styles,
         patches: allPatches,
@@ -446,71 +587,19 @@ export function definePlugin<Def extends IPluginDefinition>(def: Def): IPlugin {
     return plugin;
 }
 
-export class UIPatchBuilder {
-    private spec: IPluginUIPatch;
+export default definePlugin;
 
-    private constructor(target: string | ElementFinderConfig) {
-        this.spec = {
-            component: (() => null) as unknown as React.ComponentType<InjectedComponentProps>,
-            target,
-        };
-    }
+export type SettingsUpdatedDetail = { pluginId: string; key: string; value: unknown; };
 
-    static target(target: string | ElementFinderConfig): UIPatchBuilder {
-        return new UIPatchBuilder(target);
-    }
-
-    component(c: React.ComponentType<InjectedComponentProps>): UIPatchBuilder {
-        this.spec.component = c;
-        return this;
-    }
-
-    forEach(): UIPatchBuilder {
-        this.spec.forEach = true;
-        return this;
-    }
-
-    parent(resolver: (found: HTMLElement) => HTMLElement | null): UIPatchBuilder {
-        this.spec.getTargetParent = resolver;
-        return this;
-    }
-
-    append(): UIPatchBuilder {
-        return this;
-    }
-
-    after(ref: AnySelector | ((parent: HTMLElement, found: HTMLElement) => Node | null)): UIPatchBuilder {
-        this.spec.referenceNode = (parent, found) => {
-            if (typeof ref === "function") {
-                return (ref as (p: HTMLElement, f: HTMLElement) => Node | null)(parent, found);
-            }
-            const el = document.querySelector((ref as string)) as Node | null;
-            return el;
-        };
-        return this;
-    }
-
-    when(predicate: (found: HTMLElement) => boolean): UIPatchBuilder {
-        this.spec.predicate = predicate;
-        return this;
-    }
-
-    debounce(ms: number): UIPatchBuilder {
-        this.spec.observerDebounce = ms;
-        return this;
-    }
-
-    build(): IPluginUIPatch {
-        return { ...this.spec };
-    }
-}
-
-export namespace Patch {
-    export function ui(target: string | ElementFinderConfig): UIPatchBuilder {
-        return UIPatchBuilder.target(target);
-    }
-
-    export function codeReplace(find: string | RegExp, match: RegExp, replace: string | ((substring: string, ...args: unknown[]) => string), opts?: Omit<IPluginCodePatch, "find" | "replacement">): IPluginCodePatch {
-        return { find, replacement: { match, replace }, ...opts };
-    }
+export function onPluginSettingsUpdated(
+    pluginId: string,
+    handler: (detail: SettingsUpdatedDetail) => void
+): () => void {
+    const listener = (e: CustomEvent<SettingsUpdatedDetail>) => {
+        if (e.detail.pluginId === pluginId) {
+            handler(e.detail);
+        }
+    };
+    window.addEventListener("grok-settings-updated", listener as unknown as EventListener);
+    return () => window.removeEventListener("grok-settings-updated", listener as unknown as EventListener);
 }
