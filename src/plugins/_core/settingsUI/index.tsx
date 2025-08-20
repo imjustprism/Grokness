@@ -98,10 +98,22 @@ const PluginCard: React.FC<PluginCardProps> = ({
                 try {
                     if (checked) {
                         localStorage.setItem(pluginStorageKey, "1");
-                        plugin.start?.({ storageKey: pluginStorageKey });
+                        plugin.start?.({
+                            storageKey: pluginStorageKey,
+                            pluginId: plugin.id,
+                            pluginName: plugin.name,
+                            startTime: Date.now(),
+                            settings: plugin.options,
+                        });
                     } else {
                         localStorage.removeItem(pluginStorageKey);
-                        plugin.stop?.({ storageKey: pluginStorageKey });
+                        plugin.stop?.({
+                            storageKey: pluginStorageKey,
+                            pluginId: plugin.id,
+                            pluginName: plugin.name,
+                            startTime: Date.now(),
+                            settings: plugin.options,
+                        });
                     }
                 } catch (error) {
                     pluginCardLogger.error(

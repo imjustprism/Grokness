@@ -26,7 +26,7 @@ const ScreenCleaner: React.FC = () => {
             {
                 selector: LOCATORS.EFFECTS.idleSparklesContainer.selector,
                 description: "Idle sparkle effects",
-                condition: () => settings.store.hideScreensaver,
+                condition: () => Boolean(settings.store.hideScreensaver),
             },
         ]);
 

@@ -75,13 +75,13 @@ const StreamerMode: React.FC = () => {
                 const html = document.documentElement;
                 html.style.setProperty("--grokness-blur-amount", `${cfg.blurAmount}px`);
                 html.classList.toggle("streamer-mode-active", true);
-                html.classList.toggle("blur-username", cfg.blurUsername);
-                html.classList.toggle("blur-email", cfg.blurEmail);
-                html.classList.toggle("blur-project-titles", cfg.blurProjectTitles);
-                html.classList.toggle("blur-chat-titles", cfg.blurChatTitles);
-                html.classList.toggle("blur-task-titles", cfg.blurTaskTitles);
-                html.classList.toggle("blur-file-names", cfg.blurFileNames);
-                html.classList.toggle("blur-uid", cfg.blurUid);
+                html.classList.toggle("blur-username", Boolean(cfg.blurUsername));
+                html.classList.toggle("blur-email", Boolean(cfg.blurEmail));
+                html.classList.toggle("blur-project-titles", Boolean(cfg.blurProjectTitles));
+                html.classList.toggle("blur-chat-titles", Boolean(cfg.blurChatTitles));
+                html.classList.toggle("blur-task-titles", Boolean(cfg.blurTaskTitles));
+                html.classList.toggle("blur-file-names", Boolean(cfg.blurFileNames));
+                html.classList.toggle("blur-uid", Boolean(cfg.blurUid));
             } catch (e) {
                 logger.error("update failed:", e);
             }

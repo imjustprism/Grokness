@@ -97,7 +97,7 @@ const DeleteAllAssetsButton: React.FC = () => {
         abortRef.current = null;
     }, []);
 
-    const runDelete = async () => {
+    const runDelete = async (retryCount = 0) => {
         if (loading) {
             return;
         }
@@ -141,12 +141,33 @@ const DeleteAllAssetsButton: React.FC = () => {
                 logger.log("Asset deletion aborted by user.");
             } else {
                 logger.error("Failed to delete assets:", err);
-                showToast("An error occurred during deletion.", "error");
+
+                const isServerError = err instanceof Response && err.status >= 500;
+                const maxRetries = 2;
+
+                if (isServerError && retryCount < maxRetries) {
+                    logger.log(`Retrying deletion due to server error (${retryCount + 1}/${maxRetries})`);
+                    showToast(`Server error occurred, retrying... (${retryCount + 1}/${maxRetries})`, "warning");
+
+                    setTimeout(() => {
+                        runDelete(retryCount + 1);
+                    }, 1000 * (retryCount + 1));
+
+                    return;
+                }
+
+                const errorMessage = isServerError
+                    ? "Server error occurred. The deletion API might be temporarily unavailable."
+                    : "An error occurred during deletion.";
+
+                showToast(errorMessage, "error");
             }
         } finally {
-            setLoading(false);
-            setIsOpen(false);
-            abortRef.current = null;
+            if (!ac.signal.aborted) {
+                setLoading(false);
+                setIsOpen(false);
+                abortRef.current = null;
+            }
         }
     };
 
@@ -176,7 +197,7 @@ const DeleteAllAssetsButton: React.FC = () => {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction color="danger" onClick={runDelete} disabled={loading}>
+                        <AlertDialogAction color="danger" onClick={() => runDelete()} disabled={loading}>
                             {loading ? "Deleting..." : "Delete All"}
                         </AlertDialogAction>
                     </AlertDialogFooter>

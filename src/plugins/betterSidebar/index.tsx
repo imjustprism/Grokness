@@ -101,8 +101,8 @@ function useCollapsed(root: HTMLElement | null): boolean {
 function SidebarUserInfo({ rootElement }: InjectedComponentProps) {
     const [data, setData] = useState<{ name: string; plan: string; } | null>(null);
     const [remainingDays, setRemainingDays] = useState<number | null>(null);
-    const [showRemaining, setShowRemaining] = useState<boolean>(() => settings.store.showRemainingTime);
-    const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(() => settings.store.billingCycle as "monthly" | "annual");
+    const [showRemaining, setShowRemaining] = useState<boolean>(() => Boolean(settings.store.showRemainingTime));
+    const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(() => (settings.store.billingCycle as "monthly" | "annual") || "monthly");
     const collapsed = useCollapsed(rootElement ?? null);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
