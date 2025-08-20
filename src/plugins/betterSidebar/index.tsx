@@ -15,12 +15,12 @@ import { liveElements, selectOne, waitFor, wrapElement } from "@utils/dom";
 import { createEventGuard } from "@utils/guard";
 import { LOCATORS } from "@utils/locators";
 import { Logger } from "@utils/logger";
+import { Patch } from "@utils/patchBuilder";
 import { session } from "@utils/storage";
 import definePlugin, {
     definePluginSettings,
     type InjectedComponentProps,
     onPluginSettingsUpdated,
-    Patch,
 } from "@utils/types";
 import clsx from "clsx";
 import React, { useEffect, useRef, useState } from "react";
@@ -89,10 +89,16 @@ function useCollapsed(root: HTMLElement | null): boolean {
         if (!icon) {
             return;
         }
-        const update = () => set(!icon.classList.contains("rotate-180"));
+        const update = () => {
+            if (icon.success && icon.data) {
+                set(!icon.data.classList.contains("rotate-180"));
+            }
+        };
         update();
         const mo = new MutationObserver(update);
-        mo.observe(icon, { attributes: true, attributeFilter: ["class"] });
+        if (icon.success && icon.data) {
+            mo.observe(icon.data, { attributes: true, attributeFilter: ["class"] });
+        }
         return () => mo.disconnect();
     }, [root]);
     return isCollapsed;
@@ -204,7 +210,11 @@ function SidebarUserInfo({ rootElement }: InjectedComponentProps) {
             return;
         }
 
-        const avatarBtn = selectOne<HTMLButtonElement>(AVATAR_BUTTON_SELECTOR, rootElement);
+        const avatarBtnResult = selectOne(AVATAR_BUTTON_SELECTOR, rootElement);
+        if (!avatarBtnResult.success) {
+            return;
+        }
+        const avatarBtn = avatarBtnResult.data as HTMLButtonElement;
         if (!avatarBtn) {
             return;
         }
@@ -407,7 +417,7 @@ const BetterSidebar: React.FC<InjectedComponentProps> = ({ rootElement }) => {
             if (dndBindings.has(el)) {
                 return;
             }
-            const binding = makeDraggable(el, {
+            const dragResult = makeDraggable(el, {
                 getPayload: () => {
                     const id = extractConversationIdFromURL(el.href);
                     return id ? { "application/grokness-conversation": id } : null;
@@ -415,14 +425,16 @@ const BetterSidebar: React.FC<InjectedComponentProps> = ({ rootElement }) => {
                 onDragStart: () => el.classList.add("grokness-chat-dragging"),
                 onDragEnd: () => el.classList.remove("grokness-chat-dragging"),
             });
-            dndBindings.set(el, binding);
+            if (dragResult.success) {
+                dndBindings.set(el, dragResult.data);
+            }
         };
 
         const attachDrop = (el: HTMLAnchorElement) => {
             if (dndBindings.has(el)) {
                 return;
             }
-            const binding = makeDropTarget<{ conversationId: string; }>(el, {
+            const dropResult = makeDropTarget<{ conversationId: string; }>(el, {
                 canAccept: types => types.has("application/grokness-conversation"),
                 extract: data => {
                     const id = data.getData("application/grokness-conversation");
@@ -444,7 +456,9 @@ const BetterSidebar: React.FC<InjectedComponentProps> = ({ rootElement }) => {
                     }
                 },
             });
-            dndBindings.set(el, binding);
+            if (dropResult.success) {
+                dndBindings.set(el, dropResult.data);
+            }
         };
 
         const detach = (el: HTMLElement) => dndBindings.get(el)?.destroy();
@@ -475,7 +489,10 @@ const BetterSidebar: React.FC<InjectedComponentProps> = ({ rootElement }) => {
             try {
                 await waitFor(TOGGLE_ICON_SELECTOR, { root: sidebar });
                 if (!useCollapsed(sidebar)) {
-                    selectOne<HTMLButtonElement>(TOGGLE_BUTTON_SELECTOR, sidebar)?.click();
+                    const toggleBtnResult = selectOne(TOGGLE_BUTTON_SELECTOR, sidebar);
+                    if (toggleBtnResult.success && toggleBtnResult.data) {
+                        toggleBtnResult.data.click();
+                    }
                 }
             } finally {
                 didForce = true;
@@ -495,15 +512,15 @@ export default definePlugin({
     settings,
     styles,
     patches: [
-        Patch.ui("body")
-            .component(ToastHost)
-            .when(body => !body.querySelector("[data-grokness-toast-host]"))
+        Patch.ui(ToastHost)
+            .target("body")
+            .when((body: HTMLElement) => !body.querySelector("[data-grokness-toast-host]"))
             .build(),
-        Patch.ui(SIDEBAR_FOOTER_SELECTOR)
-            .component(SidebarUserInfo)
+        Patch.ui(SidebarUserInfo)
+            .target(SIDEBAR_FOOTER_SELECTOR)
             .build(),
-        Patch.ui(SIDEBAR_CONTAINER_SELECTOR)
-            .component(BetterSidebar)
+        Patch.ui(BetterSidebar)
+            .target(SIDEBAR_CONTAINER_SELECTOR)
             .build(),
     ],
 });

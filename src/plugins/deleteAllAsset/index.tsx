@@ -247,13 +247,13 @@ export default definePlugin({
             .component(DeleteAllAssetsButton)
             .parent(el => el)
             .after(parent => {
-                const searchBtn = findElement({
+                const searchBtnResult = findElement({
                     selector: "button",
                     root: parent as HTMLElement,
                     svgPartialD: SEARCH_ICON_D,
                 });
-                if (searchBtn) {
-                    return searchBtn;
+                if (searchBtnResult.success && searchBtnResult.data) {
+                    return searchBtnResult.data;
                 }
                 const buttons = parent.querySelectorAll("button");
                 return buttons[buttons.length - 1] ?? null;

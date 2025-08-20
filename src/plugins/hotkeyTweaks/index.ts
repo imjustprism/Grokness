@@ -5,9 +5,13 @@
  */
 
 import { Devs } from "@utils/constants";
-import definePlugin, { definePluginSettings, type InjectedComponentProps, Patch } from "@utils/types";
+import { Logger } from "@utils/logger";
+import { Patch } from "@utils/patchBuilder";
+import definePlugin, { definePluginSettings, type InjectedComponentProps } from "@utils/types";
 import type React from "react";
 import { useEffect } from "react";
+
+const logger = new Logger("HotkeyTweaks", "#ff9500");
 
 const settings = definePluginSettings({
     enterBehavior: {
@@ -31,41 +35,67 @@ const HotkeyTweaks: React.FC<InjectedComponentProps> = ({ rootElement: editor })
             return;
         }
 
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== "Enter" || settings.store.enterBehavior === "default") {
-                return;
-            }
+        logger.debug("Attaching hotkey tweaks to editor");
 
-            const send = () => editor.closest("form")?.requestSubmit();
-            const newline = () => {
-                editor.focus();
-                const sel = document.getSelection();
-                if (!sel?.rangeCount) {
+        const onKeyDown = (e: KeyboardEvent) => {
+            try {
+                if (e.key !== "Enter" || settings.store.enterBehavior === "default") {
                     return;
                 }
-                const range = sel.getRangeAt(0);
-                range.deleteContents();
-                const br = document.createElement("br");
-                range.insertNode(br);
-                const newRange = document.createRange();
-                newRange.setStartAfter(br);
-                sel.removeAllRanges();
-                sel.addRange(newRange);
-            };
 
-            if (settings.store.enterBehavior === "swap") {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                e.shiftKey ? send() : newline();
-            } else if (settings.store.enterBehavior === "ctrlEnter") {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                e.ctrlKey ? send() : newline();
+                const send = () => {
+                    const form = editor.closest("form");
+                    if (form) {
+                        form.requestSubmit();
+                        logger.debug("Message sent via hotkey");
+                    } else {
+                        logger.warn("No form found to submit");
+                    }
+                };
+
+                const newline = () => {
+                    try {
+                        editor.focus();
+                        const sel = document.getSelection();
+                        if (!sel?.rangeCount) {
+                            logger.warn("No selection range available for newline");
+                            return;
+                        }
+                        const range = sel.getRangeAt(0);
+                        range.deleteContents();
+                        const br = document.createElement("br");
+                        range.insertNode(br);
+                        const newRange = document.createRange();
+                        newRange.setStartAfter(br);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                        logger.debug("Newline inserted via hotkey");
+                    } catch (error) {
+                        logger.error("Failed to insert newline:", error);
+                    }
+                };
+
+                if (settings.store.enterBehavior === "swap") {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    e.shiftKey ? send() : newline();
+                } else if (settings.store.enterBehavior === "ctrlEnter") {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    e.ctrlKey ? send() : newline();
+                }
+            } catch (error) {
+                logger.error("Error handling hotkey:", error);
             }
         };
 
         editor.addEventListener("keydown", onKeyDown, true);
-        return () => editor.removeEventListener("keydown", onKeyDown, true);
+        logger.debug("Hotkey listener attached");
+
+        return () => {
+            editor.removeEventListener("keydown", onKeyDown, true);
+            logger.debug("Hotkey listener removed");
+        };
     }, [editor]);
 
     return null;
@@ -79,9 +109,8 @@ export default definePlugin({
     tags: ["input", "enter", "send", "chat", "quality of life"],
     settings,
     patches: [
-        Patch.ui(EDITOR_SELECTOR)
-            .component(HotkeyTweaks)
-            .forEach()
+        Patch.ui(HotkeyTweaks)
+            .target(EDITOR_SELECTOR)
             .build(),
     ],
 });

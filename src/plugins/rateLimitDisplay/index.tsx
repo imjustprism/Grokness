@@ -77,7 +77,8 @@ function getCurrentModelFromUI(queryBar: HTMLElement | null): string {
         return DEFAULT_MODEL;
     }
 
-    const selectElement = selectOne(LOCATORS.QUERY_BAR.hiddenModelSelect, queryBar) as HTMLSelectElement | null;
+    const selectResult = selectOne(LOCATORS.QUERY_BAR.hiddenModelSelect, queryBar);
+    const selectElement = selectResult.success ? selectResult.data as HTMLSelectElement : null;
     if (selectElement?.value) {
         const modelValue = selectElement.value;
         if (modelValue.startsWith("grok-")) {
@@ -89,9 +90,10 @@ function getCurrentModelFromUI(queryBar: HTMLElement | null): string {
         }
     }
 
-    const modelButton = selectOne(LOCATORS.QUERY_BAR.modelButton, queryBar);
-    if (modelButton) {
-        const modelNameSpan = selectOne(LOCATORS.QUERY_BAR.modelNameSpan, modelButton);
+    const modelButtonResult = selectOne(LOCATORS.QUERY_BAR.modelButton, queryBar);
+    if (modelButtonResult.success && modelButtonResult.data) {
+        const modelNameSpanResult = selectOne(LOCATORS.QUERY_BAR.modelNameSpan, modelButtonResult.data);
+        const modelNameSpan = modelNameSpanResult.success ? modelNameSpanResult.data : null;
         const rawName = modelNameSpan?.textContent?.trim() ?? "";
         if (MODEL_MAP[rawName]) {
             return MODEL_MAP[rawName];
@@ -127,11 +129,13 @@ function useCurrentRequestKind(currentModel: string, queryBar: HTMLElement | nul
         if (currentModel !== "grok-3" || !queryBar) {
             return DEFAULT_KIND;
         }
-        const thinkBtn = findElement({ ...LOCATORS.QUERY_BAR.buttonByAria("Think"), root: queryBar });
+        const thinkBtnResult = findElement({ ...LOCATORS.QUERY_BAR.buttonByAria("Think"), root: queryBar });
+        const thinkBtn = thinkBtnResult.success ? thinkBtnResult.data : null;
         if (thinkBtn && thinkBtn.getAttribute("aria-pressed") === "true") {
             return "REASONING";
         }
-        const deepSearchBtn = findElement({ ...LOCATORS.QUERY_BAR.buttonByAria(/Deep(er)?Search/i), root: queryBar });
+        const deepSearchBtnResult = findElement({ ...LOCATORS.QUERY_BAR.buttonByAria(/Deep(er)?Search/i), root: queryBar });
+        const deepSearchBtn = deepSearchBtnResult.success ? deepSearchBtnResult.data : null;
         if (deepSearchBtn && deepSearchBtn.getAttribute("aria-pressed") === "true") {
             const aria = deepSearchBtn.getAttribute("aria-label") || "";
             if (/deeper/i.test(aria)) {
@@ -524,19 +528,23 @@ export default definePlugin({
         Patch.ui(QUERY_BAR_SELECTOR)
             .component(RateLimitDisplay)
             .parent(queryBar => {
-                const projectButton = findElement({ ...projectButtonSelector, root: queryBar });
+                const projectButtonResult = findElement({ ...projectButtonSelector, root: queryBar });
+                const projectButton = projectButtonResult.success ? projectButtonResult.data : null;
                 if (projectButton) {
                     return projectButton.parentElement;
                 }
-                const attachButton = findElement({ ...attachButtonSelector, root: queryBar });
+                const attachButtonResult = findElement({ ...attachButtonSelector, root: queryBar });
+                const attachButton = attachButtonResult.success ? attachButtonResult.data : null;
                 return attachButton?.parentElement ?? null;
             })
             .after(parent => {
-                const projectButton = findElement({ ...projectButtonSelector, root: parent });
+                const projectButtonResult = findElement({ ...projectButtonSelector, root: parent });
+                const projectButton = projectButtonResult.success ? projectButtonResult.data : null;
                 if (projectButton) {
                     return projectButton;
                 }
-                return findElement({ ...attachButtonSelector, root: parent });
+                const attachButtonResult = findElement({ ...attachButtonSelector, root: parent });
+                return attachButtonResult.success ? attachButtonResult.data : null;
             })
             .build(),
     ],

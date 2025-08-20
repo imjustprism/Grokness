@@ -6,9 +6,13 @@
 
 import { Devs } from "@utils/constants";
 import { LOCATORS } from "@utils/locators";
-import definePlugin, { type InjectedComponentProps, Patch } from "@utils/types";
+import { Logger } from "@utils/logger";
+import { Patch } from "@utils/patchBuilder";
+import definePlugin, { type InjectedComponentProps } from "@utils/types";
 import type React from "react";
 import { useEffect } from "react";
+
+const logger = new Logger("ClickActions", "#ff6b6b");
 
 const BUBBLE_SELECTOR = LOCATORS.CHAT.messageBubble.selector;
 const ACTIONS_CONTAINER_SELECTOR = ".action-buttons" as const;
@@ -56,23 +60,43 @@ const ClickActions: React.FC<InjectedComponentProps> = ({ rootElement: bubble })
         if (!bubble) {
             return;
         }
+
         const onDoubleClick = (e: MouseEvent) => {
-            if (bubble.querySelector("textarea")) {
-                return;
+            try {
+                if (bubble.querySelector("textarea")) {
+                    return;
+                }
+
+                const target = e.target as HTMLElement | null;
+                if (target?.closest(INTERACTIVE_SELECTOR)) {
+                    return;
+                }
+
+                const container = bubble.closest<HTMLElement>(LOCATORS.CHAT.messageContainer.selector);
+                if (!container) {
+                    logger.debug("No message container found for double-click");
+                    return;
+                }
+
+                const editButton = findEditButton(container);
+                if (editButton) {
+                    logger.debug("Triggering edit via double-click");
+                    editButton.click();
+                } else {
+                    logger.debug("No edit button found");
+                }
+            } catch (error) {
+                logger.error("Error handling double-click:", error);
             }
-            const t = e.target as HTMLElement | null;
-            if (t?.closest(INTERACTIVE_SELECTOR)) {
-                return;
-            }
-            const container = bubble.closest<HTMLElement>(LOCATORS.CHAT.messageContainer.selector);
-            if (!container) {
-                return;
-            }
-            findEditButton(container)?.click();
         };
 
         bubble.addEventListener("dblclick", onDoubleClick);
-        return () => bubble.removeEventListener("dblclick", onDoubleClick);
+        logger.debug("Double-click listener attached");
+
+        return () => {
+            bubble.removeEventListener("dblclick", onDoubleClick);
+            logger.debug("Double-click listener removed");
+        };
     }, [bubble]);
 
     return null;
@@ -85,9 +109,8 @@ export default definePlugin({
     category: "chat",
     tags: ["edit", "double-click", "chat", "quality of life"],
     patches: [
-        Patch.ui(BUBBLE_SELECTOR)
-            .component(ClickActions)
-            .forEach()
+        Patch.ui(ClickActions)
+            .target(BUBBLE_SELECTOR)
             .build(),
     ],
 });

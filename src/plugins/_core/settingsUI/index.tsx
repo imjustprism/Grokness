@@ -411,16 +411,20 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
         return null;
     }
 
-    const dialogRoot =
-        selectOne(LOCATORS.SETTINGS_MODAL.dialog, rootElement) ?? rootElement;
-    const contentArea = selectOne(
+    const dialogResult = selectOne(LOCATORS.SETTINGS_MODAL.dialog, rootElement);
+    const dialogRoot = dialogResult.success && dialogResult.data ? dialogResult.data : rootElement;
+
+    const contentAreaResult = selectOne(
         LOCATORS.SETTINGS_MODAL.contentArea,
         dialogRoot
     );
-    const sidebarArea = selectOne(
+    const contentArea = contentAreaResult.success ? contentAreaResult.data : null;
+
+    const sidebarAreaResult = selectOne(
         LOCATORS.SETTINGS_MODAL.leftNavContainer,
         dialogRoot
     );
+    const sidebarArea = sidebarAreaResult.success ? sidebarAreaResult.data : null;
 
     useEffect(() => {
         if (!sidebarArea) {
@@ -458,8 +462,11 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
             });
         };
         sidebarArea.addEventListener("click", onClick as EventListener);
-        return () =>
-            sidebarArea.removeEventListener("click", onClick as EventListener);
+        return () => {
+            if (sidebarArea) {
+                sidebarArea.removeEventListener("click", onClick as EventListener);
+            }
+        };
     }, [sidebarArea]);
 
     useEffect(() => {
@@ -594,7 +601,8 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
             return null;
         }
 
-        sidebarArea.querySelectorAll<HTMLElement>("[data-grokness-settings-tab]").forEach(el => {
+        const tabs = sidebarArea.querySelectorAll<HTMLElement>("[data-grokness-settings-tab]");
+        tabs.forEach(el => {
             if (el !== tabMountRef.current) {
                 el.remove();
             }
@@ -606,10 +614,11 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
         if (!mount) {
             mount = document.createElement("div");
             mount.setAttribute("data-grokness-settings-tab", "true");
-            const devToolsBtn = selectOne(
+            const devToolsBtnResult = selectOne(
                 LOCATORS.SETTINGS_MODAL.navButtonByText("Dev Tools"),
                 dialogRoot
             );
+            const devToolsBtn = devToolsBtnResult.success ? devToolsBtnResult.data : null;
             if (devToolsBtn && devToolsBtn.parentElement === sidebarArea) {
                 sidebarArea.insertBefore(mount, devToolsBtn.nextSibling);
             } else if (devToolsBtn) {
@@ -725,7 +734,7 @@ const SettingsUIComponent: React.FC<{ rootElement?: HTMLElement; }> = ({
                     )
                     : null;
             })()}
-            {createPortal(PanelBody, contentArea)}
+            {contentArea ? createPortal(PanelBody, contentArea) : null}
         </>
     );
 };
