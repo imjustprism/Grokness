@@ -4,13 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Logger } from "@utils/logger";
+
+const logger = new Logger("DOM", "#3b82f6");
+
 /**
  * A union of DOM node roots that support query selection.
  */
 export type NodeRoot = ParentNode | Document | DocumentFragment | Element | null;
 
 /**
- * A structured selector configuration used by DOM helpers to find elements robustly.
+ * Enhanced selector configuration with better type safety and validation.
  */
 export type ElementFinderConfig = {
     readonly selector: string;
@@ -22,28 +26,104 @@ export type ElementFinderConfig = {
     readonly role?: string;
     readonly textIncludes?: string;
     readonly textMatches?: RegExp;
+    readonly timeout?: number;
+    readonly waitFor?: boolean;
 };
 
 /**
- * Safe wrapper around querySelector with explicit typing and sensible defaults.
+ * Result type for operations that can succeed or fail.
+ */
+export type Result<T, E = Error> =
+    | { readonly success: true; readonly data: T; }
+    | { readonly success: false; readonly error: E; };
+
+/**
+ * Type guard to check if an element is an HTMLElement.
+ */
+export function isHTMLElement(element: Element | EventTarget | null | undefined): element is HTMLElement {
+    return element instanceof HTMLElement;
+}
+
+/**
+ * Type guard to check if a node is a valid parent node for queries.
+ */
+export function isNodeRoot(node: unknown): node is NodeRoot {
+    return node instanceof Document ||
+        node instanceof DocumentFragment ||
+        node instanceof Element ||
+        node === null;
+}
+
+/**
+ * Enhanced querySelector with better error handling and validation.
  */
 export function querySelector<T extends Element = HTMLElement>(
     selector: string,
     root?: NodeRoot
-): T | null {
-    const r = (root ?? document) as ParentNode;
-    return (r.querySelector(selector) as T | null) ?? null;
+): Result<T | null> {
+    try {
+        if (!selector?.trim()) {
+            return { success: false, error: new Error("Selector cannot be empty") };
+        }
+
+        const r = (root ?? document) as ParentNode;
+        const element = r.querySelector(selector);
+
+        if (!element) {
+            return { success: true, data: null };
+        }
+
+        return { success: true, data: element as T };
+    } catch (error) {
+        logger.error(`querySelector failed for "${selector}":`, error);
+        return { success: false, error: error as Error };
+    }
 }
 
 /**
- * Safe wrapper around querySelectorAll with explicit typing.
+ * Enhanced querySelectorAll with better error handling and validation.
  */
 export function querySelectorAll<T extends Element = HTMLElement>(
     selector: string,
     root?: NodeRoot
+): Result<T[]> {
+    try {
+        if (!selector?.trim()) {
+            return { success: false, error: new Error("Selector cannot be empty") };
+        }
+
+        const r = (root ?? document) as ParentNode;
+        const elements = Array.from(r.querySelectorAll(selector));
+
+        return { success: true, data: elements as T[] };
+    } catch (error) {
+        logger.error(`querySelectorAll failed for "${selector}":`, error);
+        return { success: false, error: error as Error };
+    }
+}
+
+/**
+ * Legacy wrappers for backward compatibility (deprecated - use Result versions).
+ * @deprecated Use querySelector/querySelectorAll that return Result<T> instead
+ */
+export function querySelectorUnsafe<T extends Element = HTMLElement>(
+    selector: string,
+    root?: NodeRoot
+): T | null {
+    const result = querySelector<T>(selector, root);
+    return result.success ? result.data : null;
+}
+
+/**
+ * Legacy wrapper for backward compatibility.
+ * @deprecated Use querySelectorAll that returns Result<T> instead
+ */
+export function querySelectorAllUnsafe<T extends Element = HTMLElement>(
+    selector: string,
+    root?: NodeRoot
 ): T[] {
-    const r = (root ?? document) as ParentNode;
-    return Array.from(r.querySelectorAll(selector)) as T[];
+    const result = querySelectorAll<T>(selector, root);
+    return result.success ? result.data : [];
 }
 
 /**
@@ -124,54 +204,117 @@ export function matchElementByConfig(el: HTMLElement, cfg: ElementFinderConfig):
 }
 
 /**
- * Finds all elements matching the given finder configuration.
+ * Enhanced version that returns Result type for better error handling.
  */
-export function findElementsByConfig(cfg: ElementFinderConfig): HTMLElement[] {
-    const root = (cfg.root ?? document) as ParentNode;
-    const candidates = querySelectorAll<HTMLElement>(cfg.selector, root);
-    return candidates.filter(el => matchElementByConfig(el, cfg));
+export function findElementsByConfig(cfg: ElementFinderConfig): Result<HTMLElement[]> {
+    try {
+        if (!cfg?.selector?.trim()) {
+            return { success: false, error: new Error("Selector cannot be empty") };
+        }
+
+        const root = (cfg.root ?? document) as ParentNode;
+        const candidatesResult = querySelectorAll<HTMLElement>(cfg.selector, root);
+
+        if (!candidatesResult.success) {
+            return candidatesResult;
+        }
+
+        const matching = candidatesResult.data.filter(el => matchElementByConfig(el, cfg));
+        return { success: true, data: matching };
+    } catch (error) {
+        logger.error("findElementsByConfig failed:", error);
+        return { success: false, error: error as Error };
+    }
 }
 
 /**
- * Finds the first element matching the finder configuration.
+ * Enhanced version that returns Result type for better error handling.
  */
-export function findElement(cfg: ElementFinderConfig): HTMLElement | null {
-    const all = findElementsByConfig(cfg);
-    return all.length ? all[0]! : null;
+export function findElement(cfg: ElementFinderConfig): Result<HTMLElement | null> {
+    try {
+        const allResult = findElementsByConfig(cfg);
+        if (!allResult.success) {
+            return allResult;
+        }
+        return { success: true, data: allResult.data.length ? allResult.data[0]! : null };
+    } catch (error) {
+        logger.error("findElement failed:", error);
+        return { success: false, error: error as Error };
+    }
 }
 
 /**
- * Waits for an element matching the configuration to appear under the configured root.
+ * Legacy wrappers for backward compatibility.
+ * @deprecated Use findElementsByConfig/findElement that return Result<T> instead
+ */
+export function findElementsByConfigUnsafe(cfg: ElementFinderConfig): HTMLElement[] {
+    const result = findElementsByConfig(cfg);
+    return result.success ? result.data : [];
+}
+
+export function findElementUnsafe(cfg: ElementFinderConfig): HTMLElement | null {
+    const result = findElement(cfg);
+    return result.success ? result.data : null;
+}
+
+/**
+ * Enhanced wait function with better error handling and timeout management.
  */
 export async function waitForElementByConfig(
     cfg: ElementFinderConfig & { timeoutMs?: number; }
-): Promise<HTMLElement> {
-    const { timeoutMs = 10_000 } = cfg;
+): Promise<Result<HTMLElement>> {
+    try {
+        const { timeoutMs = 10_000 } = cfg;
 
-    const immediate = findElement(cfg);
-    if (immediate) {
-        return immediate;
-    }
+        const immediate = findElement(cfg);
+        if (immediate.success && immediate.data) {
+            return { success: true, data: immediate.data };
+        }
 
-    let observer: MutationObserver | null = null;
-    return new Promise<HTMLElement>((resolve, reject) => {
-        const timer = window.setTimeout(() => {
-            observer?.disconnect();
-            reject(new Error(`Timeout waiting for selector: ${cfg.selector}`));
-        }, timeoutMs);
-
-        observer = new MutationObserver(() => {
-            const found = findElement(cfg);
-            if (found) {
-                clearTimeout(timer);
+        let observer: MutationObserver | null = null;
+        return new Promise<Result<HTMLElement>>(resolve => {
+            const timer = window.setTimeout(() => {
                 observer?.disconnect();
-                resolve(found);
-            }
-        });
+                resolve({
+                    success: false,
+                    error: new Error(`Timeout waiting for selector: ${cfg.selector} (waited ${timeoutMs}ms)`)
+                });
+            }, timeoutMs);
 
-        const rootNode = (cfg.root ?? document) as Node;
-        observer.observe(rootNode, { childList: true, subtree: true, attributes: true, characterData: false });
-    });
+            observer = new MutationObserver(() => {
+                const found = findElement(cfg);
+                if (found.success && found.data) {
+                    clearTimeout(timer);
+                    observer?.disconnect();
+                    resolve({ success: true, data: found.data });
+                } else if (!found.success) {
+                    clearTimeout(timer);
+                    observer?.disconnect();
+                    resolve(found);
+                }
+            });
+
+            const rootNode = (cfg.root ?? document) as Node;
+            observer.observe(rootNode, { childList: true, subtree: true, attributes: true, characterData: false });
+        });
+    } catch (error) {
+        logger.error("waitForElementByConfig failed:", error);
+        return { success: false, error: error as Error };
+    }
+}
+
+/**
+ * Legacy wrapper for backward compatibility.
+ * @deprecated Use waitForElementByConfig that returns Result<T> instead
+ */
+export async function waitForElementByConfigUnsafe(
+    cfg: ElementFinderConfig & { timeoutMs?: number; }
+): Promise<HTMLElement> {
+    const result = await waitForElementByConfig(cfg);
+    if (!result.success) {
+        throw result.error;
+    }
+    return result.data;
 }
 
 /**
@@ -180,35 +323,95 @@ export async function waitForElementByConfig(
 export type AnySelector = string | ElementFinderConfig;
 
 /**
- * Finds all elements for the given selector under an optional root.
+ * Enhanced selectAll with Result-based error handling.
  */
-export function selectAll<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T[] {
-    if (typeof sel === "string") {
-        return querySelectorAll<T>(sel, root);
+export function selectAll<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): Result<T[]> {
+    try {
+        if (typeof sel === "string") {
+            return querySelectorAll<T>(sel, root);
+        }
+
+        const cfg = { ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root };
+        const result = findElementsByConfig(cfg);
+        return result.success ? { success: true, data: result.data as T[] } : result;
+    } catch (error) {
+        logger.error("selectAll failed:", error);
+        return { success: false, error: error as Error };
     }
-    return findElementsByConfig({ ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root }) as unknown as T[];
 }
 
 /**
- * Finds the first element for the given selector under an optional root.
+ * Enhanced selectOne with Result-based error handling.
  */
-export function selectOne<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T | null {
-    if (typeof sel === "string") {
-        return querySelector<T>(sel, root);
+export function selectOne<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): Result<T | null> {
+    try {
+        if (typeof sel === "string") {
+            return querySelector<T>(sel, root);
+        }
+
+        const cfg = { ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root };
+        const result = findElement(cfg);
+        return result.success ? { success: true, data: result.data as T | null } : result;
+    } catch (error) {
+        logger.error("selectOne failed:", error);
+        return { success: false, error: error as Error };
     }
-    return findElement({ ...(sel as ElementFinderConfig), root: (sel as ElementFinderConfig).root ?? root }) as unknown as T | null;
 }
 
 /**
- * Waits for the first element matching the selector under an optional root.
+ * Enhanced waitFor with Result-based error handling.
  */
-export async function waitFor<T extends HTMLElement = HTMLElement>(sel: AnySelector, opts?: { timeoutMs?: number; root?: NodeRoot; }): Promise<T> {
-    if (typeof sel === "string") {
-        const cfg: ElementFinderConfig = { selector: sel, root: opts?.root };
-        return waitForElementByConfig(cfg) as Promise<T>;
+export async function waitFor<T extends HTMLElement = HTMLElement>(
+    sel: AnySelector,
+    opts?: { timeoutMs?: number; root?: NodeRoot; }
+): Promise<Result<T>> {
+    try {
+        if (typeof sel === "string") {
+            const cfg: ElementFinderConfig & { timeoutMs?: number; } = {
+                selector: sel,
+                root: opts?.root,
+                timeoutMs: opts?.timeoutMs
+            };
+            const result = await waitForElementByConfig(cfg);
+            return result.success ? { success: true, data: result.data as T } : result;
+        }
+
+        const cfg: ElementFinderConfig & { timeoutMs?: number; } = {
+            ...sel,
+            root: sel.root ?? opts?.root,
+            timeoutMs: opts?.timeoutMs
+        };
+        const result = await waitForElementByConfig(cfg);
+        return result.success ? { success: true, data: result.data as T } : result;
+    } catch (error) {
+        logger.error("waitFor failed:", error);
+        return { success: false, error: error as Error };
     }
-    const cfg = { ...sel, root: sel.root ?? opts?.root } as ElementFinderConfig & { timeoutMs?: number; };
-    return waitForElementByConfig(cfg) as Promise<T>;
+}
+
+/**
+ * Legacy wrappers for backward compatibility.
+ * @deprecated Use selectAll/selectOne/waitFor that return Result<T> instead
+ */
+export function selectAllUnsafe<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T[] {
+    const result = selectAll<T>(sel, root);
+    return result.success ? result.data : [];
+}
+
+export function selectOneUnsafe<T extends HTMLElement = HTMLElement>(sel: AnySelector, root?: NodeRoot): T | null {
+    const result = selectOne<T>(sel, root);
+    return result.success ? result.data : null;
+}
+
+export async function waitForUnsafe<T extends HTMLElement = HTMLElement>(
+    sel: AnySelector,
+    opts?: { timeoutMs?: number; root?: NodeRoot; }
+): Promise<T> {
+    const result = await waitFor<T>(sel, opts);
+    if (!result.success) {
+        throw result.error;
+    }
+    return result.data;
 }
 
 /**
@@ -306,40 +509,53 @@ export class DomSelectorBuilder {
 
     async waitForOne<T extends HTMLElement = HTMLElement>(timeoutMs?: number): Promise<T> {
         const cfg = { ...this.config, timeoutMs } as ElementFinderConfig & { timeoutMs?: number; };
-        return waitForElementByConfig(cfg) as Promise<T>;
+        const result = await waitForElementByConfig(cfg);
+        if (result.success) {
+            return result.data as T;
+        }
+        throw result.error;
     }
 }
 
 /**
- * Preferred modern names for selection helpers (aliases for existing functions)
+ * Enhanced utility functions with modern error handling.
  */
-export const selectFirst = selectOne;
-export const selectMany = selectAll;
-export const waitForFirst = waitFor;
 
-export type ElementHideConfig = {
-    selector: string;
-    description?: string;
-    condition?: (el: HTMLElement) => boolean;
-};
-
+/**
+ * Enhanced DOM element hider with better error handling.
+ */
 export function createDomElementHider(
     root: Node,
     configs: ElementHideConfig[],
     options?: { debounce?: number; useRequestAnimationFrame?: boolean; }
-) {
+): {
+    hideImmediately: () => void;
+    startObserving: () => void;
+    stopObserving: () => void;
+    isObserving: () => boolean;
+} {
     const { debounce = 100, useRequestAnimationFrame = false } = options ?? {};
     let rafId: number | null = null;
     let debounceId: number | null = null;
+    let isObserving = false;
 
     const hide = () => {
         for (const cfg of configs) {
-            const nodes = querySelectorAll<HTMLElement>(cfg.selector, root as ParentNode);
-            for (const el of nodes) {
-                if (cfg.condition && !cfg.condition(el)) {
+            try {
+                const elementsResult = querySelectorAll<HTMLElement>(cfg.selector, root as ParentNode);
+                if (!elementsResult.success) {
+                    logger.warn(`Failed to query elements for selector "${cfg.selector}":`, elementsResult.error);
                     continue;
                 }
-                el.style.setProperty("display", "none", "important");
+
+                for (const el of elementsResult.data) {
+                    if (cfg.condition && !cfg.condition(el)) {
+                        continue;
+                    }
+                    el.style.setProperty("display", "none", "important");
+                }
+            } catch (error) {
+                logger.error(`Error hiding elements for selector "${cfg.selector}":`, error);
             }
         }
     };
@@ -364,25 +580,121 @@ export function createDomElementHider(
         }
     };
 
-    const observer = new MutationObserver(scheduleHide);
+    const mutationObserver = new MutationObserver(scheduleHide);
 
     return {
         hideImmediately: hide,
         startObserving: () => {
-            observer.observe(root, { childList: true, subtree: true, attributes: true });
-            scheduleHide();
+            if (isObserving) {
+                return;
+            }
+            isObserving = true;
+            try {
+                mutationObserver.observe(root, { childList: true, subtree: true, attributes: true });
+                scheduleHide();
+            } catch (error) {
+                logger.error("Failed to start observing:", error);
+                isObserving = false;
+            }
         },
         stopObserving: () => {
+            if (!isObserving) {
+                return;
+            }
+            isObserving = false;
             if (rafId !== null) {
                 cancelAnimationFrame(rafId);
             }
             if (debounceId !== null) {
                 clearTimeout(debounceId);
             }
-            observer.disconnect();
+            mutationObserver.disconnect();
         },
+        isObserving: () => isObserving,
     };
 }
+
+/**
+ * Modern, fluent API for DOM manipulation.
+ */
+export class DomHelper {
+    private readonly logger = logger;
+
+    /**
+     * Safely query elements with Result-based error handling.
+     */
+    query<T extends Element = HTMLElement>(selector: string, root?: NodeRoot): Result<T | null> {
+        return querySelector<T>(selector, root);
+    }
+
+    /**
+     * Safely query all elements with Result-based error handling.
+     */
+    queryAll<T extends Element = HTMLElement>(selector: string, root?: NodeRoot): Result<T[]> {
+        return querySelectorAll<T>(selector, root);
+    }
+
+    /**
+     * Wait for an element to appear with timeout.
+     */
+    async waitFor<T extends HTMLElement = HTMLElement>(
+        selector: string,
+        options?: { timeoutMs?: number; root?: NodeRoot; }
+    ): Promise<Result<T>> {
+        return waitFor<T>(selector, options);
+    }
+
+    /**
+     * Check if an element exists.
+     */
+    exists(selector: string, root?: NodeRoot): boolean {
+        const result = querySelector(selector, root);
+        return result.success && result.data !== null;
+    }
+
+    /**
+     * Get element text content safely.
+     */
+    getText(element: Element): string {
+        return element.textContent?.trim() ?? "";
+    }
+
+    /**
+     * Set element text content safely.
+     */
+    setText(element: Element, text: string): Result<void> {
+        try {
+            element.textContent = text;
+            return { success: true, data: undefined };
+        } catch (error) {
+            return { success: false, error: error as Error };
+        }
+    }
+}
+
+// Create a singleton instance for convenience
+export const dom = new DomHelper();
+
+/**
+ * Preferred modern names for selection helpers with Result-based error handling.
+ */
+export const selectFirst = selectOne;
+export const selectMany = selectAll;
+export const waitForFirst = waitFor;
+
+/**
+ * Legacy aliases for backward compatibility (deprecated).
+ * @deprecated Use the new Result-based functions instead
+ */
+export const $ = querySelectorUnsafe;
+export const $$ = querySelectorAllUnsafe;
+export const wait = waitForUnsafe;
+
+export type ElementHideConfig = {
+    selector: string;
+    description?: string;
+    condition?: (el: HTMLElement) => boolean;
+};
 
 export function insertAfter(newNode: Node, referenceNode: Node) {
     const parent = referenceNode.parentNode;
@@ -434,8 +746,11 @@ export function liveElements<T extends HTMLElement = HTMLElement>(
     let timeout: number | null = null;
 
     const scanAdded = () => {
-        const nodes = querySelectorAll<T>(selector, root);
-        for (const el of nodes) {
+        const nodesResult = querySelectorAll<T>(selector, root);
+        if (!nodesResult.success) {
+            return;
+        }
+        for (const el of nodesResult.data) {
             if (!tracked.has(el)) {
                 tracked.add(el);
                 onEnter(el);

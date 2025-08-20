@@ -346,7 +346,8 @@ function resolveParent(parent: ParentSpec, found: HTMLElement): HTMLElement | nu
         return found.parentElement;
     }
     if (typeof parent === "string" || typeof parent === "object") {
-        return selectOne(parent as AnySelector, found) ?? found;
+        const result = selectOne(parent as AnySelector, found);
+        return result.success && result.data ? result.data : found;
     }
     return parent(found);
 }
@@ -368,16 +369,16 @@ function resolveReference(
     if ("after" in insert) {
         const ref = insert.after;
         if (typeof ref === "string" || typeof ref === "object") {
-            const el = selectOne(ref as AnySelector, parent);
-            return el ?? null;
+            const result = selectOne(ref as AnySelector, parent);
+            return result.success ? result.data : null;
         }
         return ref(parent, found);
     }
     if ("before" in insert) {
         const ref = insert.before;
         if (typeof ref === "string" || typeof ref === "object") {
-            const el = selectOne(ref as AnySelector, parent);
-            return el ?? null;
+            const result = selectOne(ref as AnySelector, parent);
+            return result.success ? result.data : null;
         }
         return ref(parent, found);
     }
